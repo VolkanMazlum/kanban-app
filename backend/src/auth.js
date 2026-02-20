@@ -14,8 +14,8 @@ const authenticate = (req, res, next) => {
   }
   
   // Use environment variables for credentials
-  const validUsername = process.env.AUTH_USERNAME || 'admin';
-  const validPassword = process.env.AUTH_PASSWORD || 'password';
+  const validUsername = process.env.AUTH_USERNAME;
+  const validPassword = process.env.AUTH_PASSWORD ;
   
   // Check if credentials are valid
   if (credentials.name === validUsername && credentials.pass === validPassword) {

@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS employees (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Tasks Table (DİKKAT: Artık assignee_id veya assignee_ids YOK!)
+-- 2. Tasks Table (Çalışan ataması yok, sadece görev detayları)
 CREATE TABLE IF NOT EXISTS tasks (
   id SERIAL PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. Junction Table (Ara Tablo - Profesyonel Çözüm)
+-- 3. Junction Table (Ara Tablo)- Çoklu çalışan ataması için
 CREATE TABLE IF NOT EXISTS task_assignees (
   task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
   employee_id INTEGER REFERENCES employees(id) ON DELETE CASCADE,
