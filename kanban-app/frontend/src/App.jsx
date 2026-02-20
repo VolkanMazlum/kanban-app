@@ -221,8 +221,7 @@ function KPIDashboard({ kpi, employees }) {
   const maxTrend = Math.max(...trend.map(t=>t.completed), 1);
   
   // KAPASİTEYİ BURADAN 15 OLARAK SABİTLİYORUZ
-  const MAX_CAPACITY = 15;
-
+  const MAX_CAPACITY = parseInt(import.meta.env.VITE_MAX_CAPACITY) || 15;
   const cards = [
     { icon:"📋", label:"Total Tasks",        val: summary.total,                color:"#2563EB", bg:"#EFF6FF" },
     { icon:"✅", label:"Done This Month",     val: summary.completed_month,      color:"#059669", bg:"#ECFDF5" },
