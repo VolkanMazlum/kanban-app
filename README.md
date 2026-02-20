@@ -12,11 +12,20 @@ kanban-app/
 │   │   ├── App.jsx             # Ana uygulama & Kanban board
 │   │   └── api.js              # Backend API istemcisi
 │   ├── nginx.conf              # Nginx + API proxy ayarları
+│   ├── docker-entrypoint.sh    # Container başlangıç scripti
 │   └── Dockerfile              # Multi-stage: build → nginx
 ├── backend/                    # Node.js + Express REST API
-│   ├── src/index.js            # Tüm API route'ları
-│   ├── db/init.sql             # PostgreSQL şema + seed data
-│   └── Dockerfile
+│   ├── src/
+│   │   ├── index.js            # Tüm API route'ları
+│   │   ├── auth.js             # JWT tabanlı kimlik doğrulama
+│   │   ├── validation.js       # Zod ile giriş doğrulama
+│   │   ├── tasks.js            # Görev CRUD işlemleri
+│   │   ├── employees.js        # Çalışan CRUD işlemleri
+│   │   └── kpi.js              # KPI hesaplama fonksiyonları
+│   ├── db/
+│   │   └── init.sql            # PostgreSQL şema + seed data
+│   ├── Dockerfile              # Node.js runtime
+│   └── package.json            # Bağımlılıklar ve scriptler
 └── README.md
 ```
 
@@ -86,6 +95,7 @@ docker compose restart backend
 |--------|------------------------|-----------------------------|
 | GET    | `/api/tasks`           | Tüm görevleri listele       |
 | GET    | `/api/tasks?assignee_id=2` | Kişiye göre filtrele   |
+| GET    | `/api/tasks?status=process` | Duruma göre filtrele |
 | GET    | `/api/tasks/:id`       | Tek görev                   |
 | POST   | `/api/tasks`           | Yeni görev oluştur          |
 | PUT    | `/api/tasks/:id`       | Görevi güncelle             |
@@ -99,15 +109,28 @@ docker compose restart backend
 | POST   | `/api/employees`       | Yeni çalışan ekle           |
 | DELETE | `/api/employees/:id`   | Çalışanı sil                |
 
+### KPI (Performans Göstergeleri)
+| Method | Endpoint               | Açıklama                    |
+|--------|------------------------|-----------------------------|
+| GET    | `/api/kpi`             | Tüm KPI verilerini getir    |
+
 ### POST /api/tasks — Body Örneği
 ```json
 {
   "title": "Yeni özellik geliştir",
   "description": "Kullanıcı profil sayfası",
   "topic": "Frontend",
-  "assignee_id": 2,
+  "assignee_ids": [2, 3],
   "deadline": "2026-04-01",
-  "status": "new"
+  "status": "new",
+  "position": 1
+}
+```
+
+### PUT /api/tasks/:id — Body Örneği (kısmi güncelleme)
+```json
+{
+  "status": "process"
 }
 ```
 
