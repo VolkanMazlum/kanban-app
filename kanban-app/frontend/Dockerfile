@@ -19,6 +19,11 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Copy built app
 COPY --from=builder /app/dist /usr/share/nginx/html
 
+# Copy entrypoint script and make it executable
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 EXPOSE 80
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]

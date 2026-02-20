@@ -1,6 +1,9 @@
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
+const { taskSchema, taskUpdateSchema } = require("./validation");
+const { z } = require("zod");
+const { authenticate } = require("./auth");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -20,7 +23,11 @@ pool.connect()
 
 const query = (text, params) => pool.query(text, params);
 
+// Health check endpoint (no authentication required)
 app.get("/health", (req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
+
+// Apply authentication middleware to all API routes
+app.use('/api', authenticate);
 
 // ── Employees ──────────────────────────────────────────────────
 app.get("/api/employees", async (req, res) => {
@@ -32,11 +39,24 @@ app.get("/api/employees", async (req, res) => {
 
 app.post("/api/employees", async (req, res) => {
   const { name } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: "Name is required" });
+  
+  // Validate input using Zod schema
   try {
-    const result = await query("INSERT INTO employees (name) VALUES ($1) RETURNING *", [name.trim()]);
-    res.status(201).json(result.rows[0]);
-  } catch (err) { res.status(500).json({ error: "Database error" }); }
+    const validatedData = employeeSchema.parse({ name });
+    const validatedName = validatedData.name;
+    
+    try {
+      const result = await query("INSERT INTO employees (name) VALUES ($1) RETURNING *", [validatedName]);
+      res.status(201).json(result.rows[0]);
+    } catch (err) { res.status(500).json({ error: "Database error" }); }
+  } catch (validationError) {
+    // Handle validation errors
+    if (validationError.errors) {
+      const errorMessage = validationError.errors.map(err => `${err.path.join('.')}: ${err.message}`).join(', ');
+      return res.status(400).json({ error: errorMessage });
+    }
+    return res.status(400).json({ error: validationError.message });
+  }
 });
 
 app.delete("/api/employees/:id", async (req, res) => {
@@ -108,36 +128,66 @@ app.get("/api/tasks/:id", async (req, res) => {
 
 app.post("/api/tasks", async (req, res) => {
   const { title, description, topic, assignee_ids, deadline, status, position } = req.body;
-  if (!title?.trim()) return res.status(400).json({ error: "Title is required" });
   
+  // Validate input using Zod schema
   try {
-    // TRANSACTION BAŞLANGICI: Ya hepsi kaydedilir, ya da hiçbiri (Hata durumunda)
-    await query("BEGIN");
+    const validatedData = taskSchema.parse({
+      title,
+      description,
+      topic,
+      deadline,
+      status,
+      position,
+      assignee_ids
+    });
     
-    // 1. Görevi oluştur (artık assignee_ids veritabanı sütununda yok)
-    const taskResult = await query(
-      "INSERT INTO tasks (title, description, topic, deadline, status, position) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
-      [title.trim(), description || "", topic || null, deadline || null, status || "new", position || 0]
-    );
-    const newTask = taskResult.rows[0];
-    newTask.assignees = [];
-    
-    // 2. Kişileri ara tabloya (task_assignees) kaydet
-    if (assignee_ids && assignee_ids.length > 0) {
-      for (const empId of assignee_ids) {
-        await query("INSERT INTO task_assignees (task_id, employee_id) VALUES ($1, $2)", [newTask.id, empId]);
+    // Use validated data
+    const {
+      title: validatedTitle,
+      description: validatedDescription,
+      topic: validatedTopic,
+      deadline: validatedDeadline,
+      status: validatedStatus,
+      position: validatedPosition,
+      assignee_ids: validatedAssigneeIds
+    } = validatedData;
+  
+    try {
+      // TRANSACTION BAŞLANGICI: Ya hepsi kaydedilir, ya da hiçbiri (Hata durumunda)
+      await query("BEGIN");
+      
+      // 1. Görevi oluştur (artık assignee_ids veritabanı sütununda yok)
+      const taskResult = await query(
+        "INSERT INTO tasks (title, description, topic, deadline, status, position) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
+        [validatedTitle, validatedDescription || "", validatedTopic || null, validatedDeadline || null, validatedStatus, validatedPosition]
+      );
+      const newTask = taskResult.rows[0];
+      newTask.assignees = [];
+      
+      // 2. Kişileri ara tabloya (task_assignees) kaydet
+      if (validatedAssigneeIds && validatedAssigneeIds.length > 0) {
+        for (const empId of validatedAssigneeIds) {
+          await query("INSERT INTO task_assignees (task_id, employee_id) VALUES ($1, $2)", [newTask.id, empId]);
+        }
+        // Frontend için atanan kişilerin bilgilerini çek
+        const emps = await query("SELECT id, name FROM employees WHERE id = ANY($1)", [validatedAssigneeIds]);
+        newTask.assignees = emps.rows;
       }
-      // Frontend için atanan kişilerin bilgilerini çek
-      const emps = await query("SELECT id, name FROM employees WHERE id = ANY($1)", [assignee_ids]);
-      newTask.assignees = emps.rows;
+      
+      await query("COMMIT");
+      res.status(201).json(newTask);
+    } catch (err) {
+      await query("ROLLBACK");
+      console.error("POST /tasks Error:", err);
+      res.status(500).json({ error: "Database error" });
     }
-    
-    await query("COMMIT");
-    res.status(201).json(newTask);
-  } catch (err) { 
-    await query("ROLLBACK");
-    console.error("POST /tasks Error:", err);
-    res.status(500).json({ error: "Database error" }); 
+  } catch (validationError) {
+    // Handle validation errors
+    if (validationError.errors) {
+      const errorMessage = validationError.errors.map(err => `${err.path.join('.')}: ${err.message}`).join(', ');
+      return res.status(400).json({ error: errorMessage });
+    }
+    return res.status(400).json({ error: validationError.message });
   }
 });
 
@@ -145,67 +195,113 @@ app.put("/api/tasks/:id", async (req, res) => {
   const { id } = req.params;
   const { title, description, topic, assignee_ids, deadline, status, position } = req.body;
   
+  // Validate input using Zod schema
   try {
-    await query("BEGIN");
+    const validatedData = taskUpdateSchema.parse({
+      title,
+      description,
+      topic,
+      deadline,
+      status,
+      position,
+      assignee_ids
+    });
     
-    const existing = await query("SELECT * FROM tasks WHERE id = $1", [id]);
-    if (!existing.rows.length) {
-      await query("ROLLBACK");
-      return res.status(404).json({ error: "Task not found" });
-    }
-    const t = existing.rows[0];
-    
-    // 1. Ana görevi güncelle
-    const taskResult = await query(
-      "UPDATE tasks SET title=$1, description=$2, topic=$3, deadline=$4, status=$5, position=$6 WHERE id=$7 RETURNING *",
-      [title ?? t.title, description ?? t.description, topic ?? t.topic,
-       deadline !== undefined ? deadline : t.deadline,
-       status ?? t.status, position !== undefined ? position : t.position, id]
-    );
-    const updatedTask = taskResult.rows[0];
-    updatedTask.assignees = [];
-
-    // 2. Atamaları güncelle (Eğer frontend assignee_ids dizisi gönderdiyse)
-    if (assignee_ids !== undefined) {
-      // Eski atamaları sil
-      await query("DELETE FROM task_assignees WHERE task_id = $1", [id]);
+    // Use validated data
+    const {
+      title: validatedTitle,
+      description: validatedDescription,
+      topic: validatedTopic,
+      deadline: validatedDeadline,
+      status: validatedStatus,
+      position: validatedPosition,
+      assignee_ids: validatedAssigneeIds
+    } = validatedData;
+  
+    try {
+      await query("BEGIN");
       
-      // Yeni atamaları ekle
-      if (assignee_ids.length > 0) {
-        for (const empId of assignee_ids) {
-          await query("INSERT INTO task_assignees (task_id, employee_id) VALUES ($1, $2)", [id, empId]);
-        }
-        const emps = await query("SELECT id, name FROM employees WHERE id = ANY($1)", [assignee_ids]);
-        updatedTask.assignees = emps.rows;
+      const existing = await query("SELECT * FROM tasks WHERE id = $1", [id]);
+      if (!existing.rows.length) {
+        await query("ROLLBACK");
+        return res.status(404).json({ error: "Task not found" });
       }
-    } else {
-       // Frontend assignee göndermediyse (örneğin sadece status değiştiyse), mevcut assigneeleri getir
-       const existingEmps = await query(`
-         SELECT e.id, e.name FROM employees e
-         JOIN task_assignees ta ON e.id = ta.employee_id
-         WHERE ta.task_id = $1
-       `, [id]);
-       updatedTask.assignees = existingEmps.rows;
-    }
+      const t = existing.rows[0];
+      
+      // 1. Ana görevi güncelle
+      const taskResult = await query(
+        "UPDATE tasks SET title=$1, description=$2, topic=$3, deadline=$4, status=$5, position=$6 WHERE id=$7 RETURNING *",
+        [validatedTitle ?? t.title, validatedDescription ?? t.description, validatedTopic ?? t.topic,
+         validatedDeadline !== undefined ? validatedDeadline : t.deadline,
+         validatedStatus ?? t.status, validatedPosition !== undefined ? validatedPosition : t.position, id]
+      );
+      const updatedTask = taskResult.rows[0];
+      updatedTask.assignees = [];
 
-    await query("COMMIT");
-    res.json(updatedTask);
-  } catch (err) { 
-    await query("ROLLBACK");
-    console.error("PUT /tasks Error:", err);
-    res.status(500).json({ error: "Database error" }); 
+      // 2. Atamaları güncelle (Eğer frontend assignee_ids dizisi gönderdiyse)
+      if (validatedAssigneeIds !== undefined) {
+        // Eski atamaları sil
+        await query("DELETE FROM task_assignees WHERE task_id = $1", [id]);
+        
+        // Yeni atamaları ekle
+        if (validatedAssigneeIds.length > 0) {
+          for (const empId of validatedAssigneeIds) {
+            await query("INSERT INTO task_assignees (task_id, employee_id) VALUES ($1, $2)", [id, empId]);
+          }
+          const emps = await query("SELECT id, name FROM employees WHERE id = ANY($1)", [validatedAssigneeIds]);
+          updatedTask.assignees = emps.rows;
+        }
+      } else {
+         // Frontend assignee göndermediyse (örneğin sadece status değiştiyse), mevcut assigneeleri getir
+         const existingEmps = await query(`
+           SELECT e.id, e.name FROM employees e
+           JOIN task_assignees ta ON e.id = ta.employee_id
+           WHERE ta.task_id = $1
+         `, [id]);
+         updatedTask.assignees = existingEmps.rows;
+      }
+
+      await query("COMMIT");
+      res.json(updatedTask);
+    } catch (err) {
+      await query("ROLLBACK");
+      console.error("PUT /tasks Error:", err);
+      res.status(500).json({ error: "Database error" });
+    }
+  } catch (validationError) {
+    // Handle validation errors
+    if (validationError.errors) {
+      const errorMessage = validationError.errors.map(err => `${err.path.join('.')}: ${err.message}`).join(', ');
+      return res.status(400).json({ error: errorMessage });
+    }
+    return res.status(400).json({ error: validationError.message });
   }
 });
 
 app.patch("/api/tasks/:id/status", async (req, res) => {
   const { status } = req.body;
-  const valid = ["new", "process", "blocked", "done"];
-  if (!valid.includes(status)) return res.status(400).json({ error: "Invalid status" });
+  
+  // Validate status using Zod
   try {
-    const result = await query("UPDATE tasks SET status=$1 WHERE id=$2 RETURNING *", [status, req.params.id]);
-    if (!result.rows.length) return res.status(404).json({ error: "Task not found" });
-    res.json(result.rows[0]);
-  } catch (err) { res.status(500).json({ error: "Database error" }); }
+    const validatedData = z.object({
+      status: z.enum(['new', 'process', 'blocked', 'done'])
+    }).parse({ status });
+    
+    const validatedStatus = validatedData.status;
+    
+    try {
+      const result = await query("UPDATE tasks SET status=$1 WHERE id=$2 RETURNING *", [validatedStatus, req.params.id]);
+      if (!result.rows.length) return res.status(404).json({ error: "Task not found" });
+      res.json(result.rows[0]);
+    } catch (err) { res.status(500).json({ error: "Database error" }); }
+  } catch (validationError) {
+    // Handle validation errors
+    if (validationError.errors) {
+      const errorMessage = validationError.errors.map(err => `${err.path.join('.')}: ${err.message}`).join(', ');
+      return res.status(400).json({ error: errorMessage });
+    }
+    return res.status(400).json({ error: validationError.message });
+  }
 });
 
 app.delete("/api/tasks/:id", async (req, res) => {
@@ -230,13 +326,21 @@ app.get("/api/kpi", async (req, res) => {
 
     const overdueRes = await query("SELECT COUNT(*) as count FROM tasks WHERE deadline < CURRENT_DATE AND status != 'done'");
     const overdue = parseInt(overdueRes.rows[0].count, 10);
+    
 
+    const avg_days_to_complete = await query(`
+      SELECT AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 86400) as avg_days
+      FROM tasks WHERE status = 'done'
+    `);
+    const completed_month_avg  = await query(`
+      SELECT COUNT(*) as count FROM tasks 
+      WHERE status = 'done' AND EXTRACT(MONTH FROM updated_at) = EXTRACT(MONTH FROM CURRENT_DATE)
+    `);
     const summary = {
       total: totalTasks,
-      completed_month: by_status.done,
-      completed_week: by_status.done,
+      completed_month: totalTasks > 0 ? `${((completed_month_avg.rows[0].count / totalTasks) * 100).toFixed(2)}%` : "0%",// Yüzde olarak tamamlanma oranı
       overdue: overdue,
-      avg_days_to_complete: 0
+      avg_days_to_complete: parseFloat(avg_days_to_complete.rows[0].avg_days || 0).toFixed(2)
     };
 
     const topicRes = await query(`

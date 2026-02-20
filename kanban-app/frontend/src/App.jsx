@@ -225,7 +225,6 @@ function KPIDashboard({ kpi, employees }) {
   const cards = [
     { icon:"📋", label:"Total Tasks",        val: summary.total,                color:"#2563EB", bg:"#EFF6FF" },
     { icon:"✅", label:"Done This Month",     val: summary.completed_month,      color:"#059669", bg:"#ECFDF5" },
-    { icon:"🏆", label:"Done This Week",      val: summary.completed_week,       color:"#7C3AED", bg:"#F5F3FF" },
     { icon:"⚡", label:"In Progress",         val: by_status.process||0,         color:"#0891B2", bg:"#ECFEFF" },
     { icon:"🚫", label:"Blocked",             val: by_status.blocked||0,         color:"#DC2626", bg:"#FEF2F2" },
     { icon:"⏰", label:"Overdue",             val: summary.overdue,              color:"#EA580C", bg:"#FFF7ED" },

@@ -1,8 +1,20 @@
 const BASE = "/api";
 
+// Get credentials from environment variables (in production, these would be set on the server)
+const AUTH_USERNAME = import.meta.env.VITE_AUTH_USERNAME || 'admin';
+const AUTH_PASSWORD = import.meta.env.VITE_AUTH_PASSWORD || 'secure_password_123';
+
+// Encode credentials for Basic Auth
+const encodeCredentials = (username, password) => {
+  return btoa(`${username}:${password}`);
+};
+
 async function req(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Basic ${encodeCredentials(AUTH_USERNAME, AUTH_PASSWORD)}`
+    },
     ...options,
   });
   if (!res.ok) {
