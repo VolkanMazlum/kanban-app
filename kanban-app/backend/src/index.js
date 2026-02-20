@@ -166,11 +166,14 @@ app.post("/api/tasks", async (req, res) => {
       
       // 2. Kişileri ara tabloya (task_assignees) kaydet
       if (validatedAssigneeIds && validatedAssigneeIds.length > 0) {
-        for (const empId of validatedAssigneeIds) {
-          await query("INSERT INTO task_assignees (task_id, employee_id) VALUES ($1, $2)", [newTask.id, empId]);
-        }
-        // Frontend için atanan kişilerin bilgilerini çek
-        const emps = await query("SELECT id, name FROM employees WHERE id = ANY($1)", [validatedAssigneeIds]);
+        await query(
+          "INSERT INTO task_assignees (task_id, employee_id) SELECT $1, unnest($2::int[])",
+          [newTask.id, validatedAssigneeIds]
+        );
+        const emps = await query(
+          "SELECT id, name FROM employees WHERE id = ANY($1)",
+          [validatedAssigneeIds]
+        );
         newTask.assignees = emps.rows;
       }
       
