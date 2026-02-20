@@ -39,9 +39,19 @@ CREATE TRIGGER tasks_updated_at
 BEFORE UPDATE ON tasks
 FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
--- ==========================================
--- SEED DATA (Örnek Veriler)
--- ==========================================
+
+-- Index for querying tasks by status
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+
+-- Index for querying tasks by deadline
+CREATE INDEX IF NOT EXISTS idx_tasks_deadline ON tasks(deadline);
+
+-- Index for querying task_assignees by task_id (optimizes JOINs)
+CREATE INDEX IF NOT EXISTS idx_task_assignees_task_id ON task_assignees(task_id);
+
+-- Index for querying task_assignees by employee_id (optimizes employee-based queries)
+CREATE INDEX IF NOT EXISTS idx_task_assignees_employee_id ON task_assignees(employee_id);
+
 
 -- Seed Employees
 INSERT INTO employees (name) VALUES
