@@ -5,7 +5,8 @@ const { Pool } = require("pg");
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-app.use(cors({ origin: "*" }));
+//app.use(cors({ origin: "*" }));
+app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:3000" })); // Sadece frontend'in çalıştığı portu izin veriyoruz
 app.use(express.json());
 
 const pool = new Pool({
