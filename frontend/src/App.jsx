@@ -446,6 +446,11 @@ export default function App() {
   const loadAll = useCallback(async()=>{
     try {
       const [t,e,k] = await Promise.all([api.getTasks(),api.getEmployees(),api.getKPI()]);
+
+      console.log("1. Tasks from Backend:", t);
+      console.log("2. Employees from Backend:", e);
+      console.log("3. KPI Data from Backend:", k);
+
       setTasks(t); setEmployees(e); setKpi(k); setError(null);
     } catch(err){ setError(err.message); }
     finally { setLoading(false); }
