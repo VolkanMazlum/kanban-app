@@ -34,3 +34,4 @@ require('./kpi')(app, query);
 require('./timeLogs')(app, query);
 
 app.listen(PORT, () => console.log(` TEKSER API running on http://localhost:${PORT}`));
+app.get("/", (req, res) => res.send("Welcome to the TEKSER API!"));

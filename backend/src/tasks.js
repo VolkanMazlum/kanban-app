@@ -269,10 +269,13 @@ module.exports = (app, query) => {
           sql += ", actual_start=NOW() , actual_end=NULL";
         } else if (validatedStatus === 'done') {
           sql += ", actual_end=NOW()";
-        } else if (validatedStatus !== 'blocked') {
+        } else if (validatedStatus === 'new') {
           // Eğer görev done veya process durumundan başka bir duruma geçiyorsa
           // ve bu durumda actual_end doluysa sıfırla
           sql += ", actual_end=NULL , actual_start=NULL, estimated_hours=NULL";
+        }
+        else if (validatedStatus === 'blocked') {
+          sql += ", actual_end=NULL";
         }
         
         sql += " WHERE id=$" + (params.length + 1) + " RETURNING *";
