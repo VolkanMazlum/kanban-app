@@ -100,11 +100,13 @@ function AssigneePicker({ employees, selectedIds, onChange }) {
 }
 
 function TaskModal({ task, employees, onSave, onClose }) {
-  const blank = { title:"", description:"", topic:TOPICS[0], assignee_ids:[], deadline:"", status:"new" };
+  const blank = { title:"", description:"", topic:TOPICS[0], assignee_ids:[], deadline:"", status:"new", planned_start:"", planned_end:"" };
   const init = task ? {
     title:task.title, description:task.description||"",
     topic:task.topic||TOPICS[0], assignee_ids:(task.assignees||[]).map(a=>a.id),
     deadline:task.deadline?.slice(0,10)||"", status:task.status,
+    planned_start:task.planned_start?.slice(0,10)||"", planned_end:task.planned_end?.slice(0,10)||"",
+    estimated_hours: task?.estimated_hours || ""
   } : blank;
   const [form, setForm] = useState(init);
   const [saving, setSaving] = useState(false);
@@ -141,6 +143,16 @@ function TaskModal({ task, employees, onSave, onClose }) {
             <input type="date" value={form.deadline} onChange={e=>set("deadline",e.target.value)} style={inp} />
           </div>
         </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+          <div>
+            <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600,letterSpacing:"0.05em"}}>PLANNED START</label>
+            <input type="date" value={form.planned_start} onChange={e=>set("planned_start",e.target.value)} style={inp} />
+          </div>
+          <div>
+            <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600,letterSpacing:"0.05em"}}>PLANNED END</label>
+            <input type="date" value={form.planned_end} onChange={e=>set("planned_end",e.target.value)} style={inp} />
+          </div>
+        </div>
         <div style={{marginBottom:14}}>
           <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:8,fontWeight:600,letterSpacing:"0.05em"}}>STATUS</label>
           <div style={{display:"flex",gap:6}}>
@@ -154,6 +166,22 @@ function TaskModal({ task, employees, onSave, onClose }) {
               }}>{col.label}</button>
             ))}
           </div>
+        </div>
+        <div style={{marginBottom:14}}>
+          <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600,letterSpacing:"0.05em"}}>
+            ESTIMATED HOURS
+          </label>
+          <input
+            type="number" min="0" step="0.5"
+            value={form.estimated_hours}
+            onChange={e => set("estimated_hours", e.target.value ? parseFloat(e.target.value) : null)}
+            style={inp}
+            placeholder="e.g. 24"
+          />
+        </div>
+        <div style={{marginBottom:14}}>  
+          <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600,letterSpacing:"0.05em"}}>DESCRIPTION</label>
+          <textarea value={form.description} onChange={e=>set("description",e.target.value)} rows={2} style={{...inp,resize:"vertical",lineHeight:1.5}} placeholder="Brief description..." />
         </div>
         <div style={{marginBottom:24}}>
           <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:8,fontWeight:600,letterSpacing:"0.05em"}}>
@@ -169,8 +197,8 @@ function TaskModal({ task, employees, onSave, onClose }) {
           <button onClick={onClose} style={{flex:1,padding:11,background:"#F9FAFB",color:"#374151",border:"1.5px solid #E5E7EB",borderRadius:8,fontFamily:"'Inter',sans-serif",fontSize:13,cursor:"pointer"}}>Cancel</button>
         </div>
       </div>
-    </div>
-  );
+    </div>  
+  ); 
 }
 
 function EmployeeManager({ employees, onAdd, onDelete, onClose }) {
@@ -214,14 +242,250 @@ function EmployeeManager({ employees, onAdd, onDelete, onClose }) {
   );
 }
 
-function KPIDashboard({ kpi, employees }) {
+
+
+// ─── Gantt Chart ──────────────────────────────────────────────
+function GanttChart({ tasks, employees }) {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  const [empFilter,    setEmpFilter]    = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [rangeMonths,  setRangeMonths]  = useState(3);
+  const [anchor,       setAnchor]       = useState(0); // offset in months from current
+
+  // window boundaries
+  const windowStart = new Date(today.getFullYear(), today.getMonth() + anchor, 1);
+  const windowEnd   = new Date(windowStart.getFullYear(), windowStart.getMonth() + rangeMonths, 0);
+  const totalDays   = Math.round((windowEnd - windowStart) / 86400000) + 1;
+
+  // month header segments
+  const monthSegments = [];
+  let cur = new Date(windowStart);
+  while (cur <= windowEnd) {
+    const y = cur.getFullYear(), m = cur.getMonth();
+    const segEnd = new Date(Math.min(new Date(y, m+1, 0), windowEnd));
+    const days = Math.round((segEnd - new Date(Math.max(cur,windowStart))) / 86400000) + 1;
+    monthSegments.push({ label: cur.toLocaleString("en-US",{month:"short",year:"numeric"}), days });
+    cur = new Date(y, m+1, 1);
+  }
+
+  // filter tasks
+  const filtered = tasks.filter(t => {
+    if (!t.deadline) return false;
+    if (statusFilter !== "all" && t.status !== statusFilter) return false;
+    if (empFilter !== "all" && !(t.assignees||[]).some(a=>String(a.id)===empFilter)) return false;
+
+    // Başlangıç: actual_start → planned_start → deadline
+    const s = t.actual_start
+      ? new Date(t.actual_start)
+      : t.planned_start
+        ? new Date(t.planned_start)
+        : new Date(t.deadline);
+
+    // Bitiş: actual_end → planned_end → deadline
+    const e2 = t.actual_end
+      ? new Date(t.actual_end)
+      : t.planned_end
+        ? new Date(t.planned_end)
+        : new Date(t.deadline);
+
+    s.setHours(0,0,0,0); e2.setHours(0,0,0,0);
+    return s <= windowEnd && e2 >= windowStart;
+  }).sort((a,b) => new Date(a.deadline) - new Date(b.deadline));
+
+  function barProps(task) {
+    const startDate = task.actual_start
+      ? new Date(task.actual_start)
+      : task.planned_start
+        ? new Date(task.planned_start)
+        : new Date(task.created_at || task.deadline);
+
+    const endDate = task.actual_end
+      ? new Date(task.actual_end)
+      : task.planned_end
+        ? new Date(task.planned_end)
+        : new Date(task.deadline);
+
+    const s = new Date(Math.max(startDate, windowStart));
+    const e2 = new Date(Math.min(endDate, windowEnd));
+    s.setHours(0,0,0,0); e2.setHours(0,0,0,0);
+    const off = Math.round((s - windowStart)/86400000);
+    const span = Math.max(Math.round((e2-s)/86400000)+1,1);
+    return { left:`${(off/totalDays)*100}%`, width:`${Math.min((span/totalDays)*100, 100-(off/totalDays)*100)}%` };
+  }
+
+  const todayPct = today>=windowStart && today<=windowEnd
+    ? `${(Math.round((today-windowStart)/86400000)/totalDays)*100}%` : null;
+
+  const STATUS_COLOR = { new:"#2563EB", process:"#059669", blocked:"#DC2626", done:"#7C3AED" };
+  const ROW = 44;
+
+  const selBtn = (active) => ({
+    padding:"5px 12px", borderRadius:6, border:"none", cursor:"pointer",
+    fontSize:12, fontWeight:600, fontFamily:"Inter,sans-serif",
+    background: active?"#fff":"transparent", color: active?"#111827":"#6B7280",
+    boxShadow: active?"0 1px 3px rgba(0,0,0,0.08)":"none", transition:"all 0.15s",
+  });
+  const outBtn = { background:"#fff", border:"1.5px solid #E5E7EB", borderRadius:7,
+    padding:"6px 12px", cursor:"pointer", fontSize:12, color:"#374151",
+    fontFamily:"Inter,sans-serif", fontWeight:600 };
+
+  return (
+    <div style={{padding:"28px 32px",overflowY:"auto",height:"calc(100vh - 65px)",fontFamily:"Inter,sans-serif",background:"#F9FAFB"}}>
+      <div style={{marginBottom:20}}>
+        <h2 style={{fontSize:22,fontWeight:700,color:"#111827",margin:"0 0 4px"}}>Gantt Chart</h2>
+        <p style={{color:"#6B7280",margin:0,fontSize:14}}>Task timeline — creation date to deadline</p>
+      </div>
+
+      {/* Toolbar */}
+      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+        <select value={empFilter} onChange={e=>setEmpFilter(e.target.value)}
+          style={{background:"#fff",border:"1.5px solid #E5E7EB",borderRadius:8,padding:"7px 12px",color:"#374151",fontSize:12,fontFamily:"Inter,sans-serif",cursor:"pointer",fontWeight:500}}>
+          <option value="all">All Members</option>
+          {employees.map(e=><option key={e.id} value={String(e.id)}>{e.name}</option>)}
+        </select>
+        <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}
+          style={{background:"#fff",border:"1.5px solid #E5E7EB",borderRadius:8,padding:"7px 12px",color:"#374151",fontSize:12,fontFamily:"Inter,sans-serif",cursor:"pointer",fontWeight:500}}>
+          <option value="all">All Statuses</option>
+          <option value="new">New</option>
+          <option value="process">In Process</option>
+          <option value="blocked">Blocked</option>
+          <option value="done">Done</option>
+        </select>
+        <div style={{display:"flex",background:"#F3F4F6",borderRadius:8,padding:3}}>
+          {[1,2,3,6].map(m=>(
+            <button key={m} onClick={()=>setRangeMonths(m)} style={selBtn(rangeMonths===m)}>{m}M</button>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:6,marginLeft:"auto",alignItems:"center"}}>
+          <button onClick={()=>setAnchor(a=>a-rangeMonths)} style={outBtn}>← Prev</button>
+          <button onClick={()=>setAnchor(0)} style={{...outBtn,background:"#2563EB",color:"#fff",border:"none",boxShadow:"0 2px 6px rgba(37,99,235,0.3)"}}>Today</button>
+          <button onClick={()=>setAnchor(a=>a+rangeMonths)} style={outBtn}>Next →</button>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div style={{display:"flex",gap:16,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+        {Object.entries(STATUS_COLOR).map(([s,c])=>(
+          <div key={s} style={{display:"flex",alignItems:"center",gap:5}}>
+            <div style={{width:12,height:12,borderRadius:3,background:c}} />
+            <span style={{fontSize:11,color:"#6B7280",fontWeight:500,textTransform:"capitalize"}}>{s==="process"?"In Process":s.charAt(0).toUpperCase()+s.slice(1)}</span>
+          </div>
+        ))}
+        {todayPct&&<div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:2,height:12,background:"#F59E0B",borderRadius:1}}/><span style={{fontSize:11,color:"#6B7280",fontWeight:500}}>Today</span></div>}
+      </div>
+
+      {filtered.length===0 ? (
+        <div style={{background:"#fff",borderRadius:12,padding:"48px 0",textAlign:"center",border:"1px solid #E5E7EB",color:"#9CA3AF",fontSize:14}}>
+          No tasks with deadlines visible in this period
+        </div>
+      ) : (
+        <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",overflow:"hidden"}}>
+          <div style={{display:"flex"}}>
+            {/* Labels */}
+            <div style={{width:256,flexShrink:0,borderRight:"1px solid #E5E7EB"}}>
+              <div style={{height:36,borderBottom:"1px solid #F3F4F6",background:"#F9FAFB",display:"flex",alignItems:"center",padding:"0 14px"}}>
+                <span style={{fontSize:11,fontWeight:700,color:"#6B7280",letterSpacing:"0.05em"}}>TASK</span>
+              </div>
+              {filtered.map((task,ri)=>{
+                const ts2 = TOPIC_STYLE[task.topic]||{bg:"#F3F4F6",text:"#374151"};
+                const asgn = task.assignees||[];
+                return (
+                  <div key={task.id} style={{height:ROW,display:"flex",alignItems:"center",padding:"0 12px",gap:8,borderBottom:ri<filtered.length-1?"1px solid #F3F4F6":"none",background:ri%2===0?"#fff":"#FAFAFA"}}>
+                    <div style={{width:7,height:7,borderRadius:"50%",background:STATUS_COLOR[task.status]||"#9CA3AF",flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:600,color:"#111827",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.title}</div>
+                      {task.topic&&<span style={{fontSize:10,color:ts2.text,background:ts2.bg,padding:"1px 5px",borderRadius:3,fontWeight:600}}>{task.topic}</span>}
+                    </div>
+                    <div style={{display:"flex",flexShrink:0}}>
+                      {asgn.slice(0,3).map((a,ai)=>(
+                        <div key={a.id} style={{marginLeft:ai>0?-6:0}}><Avatar name={a.name} size={20} idx={ai}/></div>
+                      ))}
+                      {asgn.length>3&&<span style={{fontSize:10,color:"#9CA3AF",marginLeft:2,alignSelf:"center"}}>+{asgn.length-3}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Timeline */}
+            <div style={{flex:1,overflowX:"auto",position:"relative",minWidth:0}}>
+              {/* Month headers */}
+              <div style={{display:"flex",height:36,borderBottom:"1px solid #F3F4F6",background:"#F9FAFB"}}>
+                {monthSegments.map((seg,i)=>(
+                  <div key={i} style={{flex:`0 0 ${(seg.days/totalDays)*100}%`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#374151",borderRight:i<monthSegments.length-1?"1px solid #E5E7EB":"none",letterSpacing:"0.03em"}}>
+                    {seg.label}
+                  </div>
+                ))}
+              </div>
+
+              {/* Rows + bars */}
+              <div style={{position:"relative"}}>
+                {todayPct&&(
+                  <div style={{position:"absolute",left:todayPct,top:0,bottom:0,width:2,background:"#F59E0B",zIndex:5,pointerEvents:"none"}}>
+                    <div style={{position:"absolute",top:0,left:"50%",transform:"translateX(-50%)",width:8,height:8,borderRadius:"50%",background:"#F59E0B"}}/>
+                  </div>
+                )}
+                {filtered.map((task,ri)=>{
+                  const bp = barProps(task);
+                  const bc = STATUS_COLOR[task.status]||"#9CA3AF";
+                  const isDone = task.status==="done";
+                  const isBlocked = task.status==="blocked";
+                  const overdue = task.deadline && new Date(task.deadline)<today && task.status!=="done";
+                  return (
+                    <div key={task.id} style={{height:ROW,position:"relative",borderBottom:ri<filtered.length-1?"1px solid #F3F4F6":"none",background:ri%2===0?"#fff":"#FAFAFA"}}>
+                      {/* Month dividers */}
+                      {(()=>{let x=0;return monthSegments.slice(0,-1).map((seg,mi)=>{x+=(seg.days/totalDays)*100;return <div key={mi} style={{position:"absolute",left:`${x}%`,top:0,bottom:0,width:1,background:"#F3F4F6",pointerEvents:"none"}}/>;});})()}
+                      {/* Bar */}
+                      <div
+                        title={`${task.title}\nPlanned Start: ${task.planned_start?.slice(0,10)||"not set"}\nPlanned End: ${task.planned_end?.slice(0,10)||"not set"}\nActual Start: ${task.actual_start?.slice(0,10)||"not started"}\nActual End: ${task.actual_end?.slice(0,10)||"not finished"}\nDeadline: ${task.deadline?.slice(0,10)||"none"}\nStatus: ${task.status}\nAssignees: ${(task.assignees||[]).map(a=>a.name).join(", ")||"none"}`}
+                        style={{
+                          position:"absolute", left:bp.left, width:bp.width,
+                          top:"50%", transform:"translateY(-50%)",
+                          height:22, borderRadius:5,
+                          background: isDone
+                            ? `repeating-linear-gradient(45deg,${bc}cc,${bc}cc 5px,${bc}55 5px,${bc}55 10px)`
+                            : bc,
+                          border: isBlocked?"2px dashed #991B1B": overdue?"2px solid #EA580C":"none",
+                          display:"flex", alignItems:"center", paddingLeft:7,
+                          overflow:"hidden", cursor:"default",
+                          boxShadow:`0 1px 4px ${bc}44`,
+                          transition:"filter 0.15s, opacity 0.15s",
+                          opacity: isDone?0.8:1,
+                        }}
+                        onMouseEnter={e=>{e.currentTarget.style.filter="brightness(1.12)";}}
+                        onMouseLeave={e=>{e.currentTarget.style.filter="none";}}
+                      >
+                        <span style={{fontSize:10,fontWeight:600,color:"#fff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textShadow:"0 1px 2px rgba(0,0,0,0.25)"}}>
+                          {isDone?"✓ ":isBlocked?"⊘ ":overdue?"⚠ ":""}{task.title}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{marginTop:14,display:"flex",gap:20,fontSize:12,color:"#9CA3AF"}}>
+        <span>Showing <strong style={{color:"#374151"}}>{filtered.length}</strong> of <strong style={{color:"#374151"}}>{tasks.filter(t=>t.deadline).length}</strong> tasks with deadlines</span>
+        <span>Window: <strong style={{color:"#374151"}}>{windowStart.toLocaleDateString("en-GB")} – {windowEnd.toLocaleDateString("en-GB")}</strong></span>
+      </div>
+    </div>
+  );
+}
+
+
+function KPIDashboard({ kpi, employees , tasks}) {
   if (!kpi) return <div style={{padding:40,textAlign:"center",color:"#9CA3AF",fontFamily:"'Inter',sans-serif",fontSize:14}}>Loading KPIs...</div>;
 
   const { summary, by_status, by_topic, per_employee, trend } = kpi;
   const maxTrend = Math.max(...trend.map(t=>t.completed), 1);
   
-  // KAPASİTEYİ BURADAN 15 OLARAK SABİTLİYORUZ
-  const MAX_CAPACITY = parseInt(import.meta.env.VITE_MAX_CAPACITY) || 15;
+  const MAX_CAPACITY = parseInt(import.meta.env.VITE_MAX_CAPACITY || "250"); // max hours per employee per month for capacity utilization;
   const cards = [
     { icon:"📋", label:"Total Tasks",        val: summary.total,                color:"#2563EB", bg:"#EFF6FF" },
     { icon:"✅", label:"Done This Month",     val: summary.completed_month,      color:"#059669", bg:"#ECFDF5" },
@@ -229,6 +493,7 @@ function KPIDashboard({ kpi, employees }) {
     { icon:"🚫", label:"Blocked",             val: by_status.blocked||0,         color:"#DC2626", bg:"#FEF2F2" },
     { icon:"⏰", label:"Overdue",             val: summary.overdue,              color:"#EA580C", bg:"#FFF7ED" },
     { icon:"📅", label:"Avg. Days to Done",   val:`${summary.avg_days_to_complete||0}d`, color:"#0369A1", bg:"#E0F2FE" },
+    { icon:"⏱️", label:"Total Est. Hours",    val: per_employee.reduce((sum, emp) => sum + (emp.estimated_workload_hours || 0), 0).toFixed(0), color:"#7C3AED", bg:"#F5F3FF" },
     { icon:"👥", label:"Team Size",           val: employees.length,             color:"#374151", bg:"#F9FAFB" },
   ];
 
@@ -236,7 +501,7 @@ function KPIDashboard({ kpi, employees }) {
     <div style={{padding:"28px 32px",overflowY:"auto",height:"calc(100vh - 65px)",fontFamily:"'Inter',sans-serif",background:"#F9FAFB"}}>
       <div style={{marginBottom:24}}>
         <h2 style={{fontSize:22,fontWeight:700,color:"#111827",margin:"0 0 4px"}}>Performance Dashboard</h2>
-        <p style={{color:"#6B7280",margin:0,fontSize:14}}>Company-wide KPIs and team workload — TEKSER S.R.L.</p>
+        <p style={{color:"#6B7280",margin:0,fontSize:14}}>Company-wide KPIs and hourly workload — TEKSER S.R.L.</p>
       </div>
 
       {/* Stat cards */}
@@ -297,12 +562,12 @@ function KPIDashboard({ kpi, employees }) {
       <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",overflow:"hidden"}}>
         <div style={{padding:"18px 24px",borderBottom:"1px solid #F3F4F6",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <h3 style={{fontSize:14,fontWeight:700,color:"#111827",margin:0}}>Team Workload</h3>
-          <span style={{fontSize:12,color:"#9CA3AF"}}>{employees.length} members (Max {MAX_CAPACITY} tasks/person)</span>
+          <span style={{fontSize:12,color:"#9CA3AF"}}>{employees.length} members (Max {MAX_CAPACITY} hours/person)</span>
         </div>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead>
             <tr style={{background:"#F9FAFB"}}>
-              {["Team Member","Workload","New","In Progress","Blocked","Done","Total"].map(h=>(
+              {["Team Member","Workload (Hours)","New","In Progress","Blocked","Done","Total"].map(h=>(
                 <th key={h} style={{padding:"10px 16px",fontSize:11,fontWeight:700,color:"#6B7280",textAlign:h==="Team Member"?"left":"center",letterSpacing:"0.05em"}}>{h.toUpperCase()}</th>
               ))}
             </tr>
@@ -310,16 +575,11 @@ function KPIDashboard({ kpi, employees }) {
           <tbody>
             {per_employee.map((emp,i)=>{
               // 1. AKTİF İŞ YÜKÜNÜ HESAPLA: Biten görevleri saymıyoruz
-              const activeTasks = emp.total_assigned - emp.done_count;
-              
-              // 2. YÜZDEYİ 15 ÜZERİNDEN HESAPLA
-              let pct = (activeTasks / MAX_CAPACITY) * 100;
-              
-              // Ekranda yazacak sayı (örn: 110%)
-              const displayPct = Math.round(pct); 
-              
-              // Grafiksel çubuğun (bar) kutudan dışarı taşmasını engelle
-              if (pct > 100) pct = 100; 
+              //const activeTasks = emp.total_assigned - emp.done_count;
+              const estimatedHours = emp.estimated_workload_hours ; 
+              const capacityPct = Math.round((estimatedHours / MAX_CAPACITY) * 100);
+              const displayPct = capacityPct > 100 ? "100+" : capacityPct;
+              const pct = Math.min(capacityPct, 100);
 
               const barColor = pct>75?"#DC2626":pct>40?"#D97706":"#059669";
               const statusVals = [emp.new_count,emp.in_process,emp.blocked,emp.done_count,emp.total_assigned];
@@ -343,6 +603,7 @@ function KPIDashboard({ kpi, employees }) {
                       </div>
                       <span style={{fontSize:11,color:barColor,fontWeight:700,width:32}}>{displayPct}%</span>
                     </div>
+                    <div style={{fontSize:10,color:"#6B7280",marginTop:2}}>{Math.round(estimatedHours)}h</div>
                   </td>
                   {statusVals.map((v,ci)=>(
                     <td key={ci} style={{padding:"12px 16px",textAlign:"center"}}>
@@ -358,67 +619,142 @@ function KPIDashboard({ kpi, employees }) {
     </div>
   );
 }
-
 function TaskCard({ task, onDragStart, onEdit, onDelete }) {
   const [hovered, setHovered] = useState(false);
-  const isOverdue = task.deadline && new Date(task.deadline)<new Date() && task.status!=="done";
-  const ts = TOPIC_STYLE[task.topic]||{bg:"#F3F4F6",text:"#374151",border:"#E5E7EB"};
-  const assignees = task.assignees||[];
+  const isOverdue = task.deadline && new Date(task.deadline) < new Date() && task.status !== "done";
+  const ts = TOPIC_STYLE[task.topic] || { bg: "#F3F4F6", text: "#374151", border: "#E5E7EB" };
+  const assignees = task.assignees || [];
+  const col = COLUMNS.find(c => c.id === task.status) || COLUMNS[0];
+
+  const plannedStart = task.planned_start?.slice(0, 10);
+  const plannedEnd   = task.planned_end?.slice(0, 10);
+  const actualStart  = task.actual_start?.slice(0, 10);
+  const actualEnd    = task.actual_end?.slice(0, 10);
 
   return (
     <div
       draggable
-      onDragStart={e=>onDragStart(e,task.id)}
-      onMouseEnter={()=>setHovered(true)}
-      onMouseLeave={()=>setHovered(false)}
+      onDragStart={e => onDragStart(e, task.id)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
-        background:"#fff",
-        border:`1.5px solid ${hovered?"#D1D5DB":"#E5E7EB"}`,
-        borderRadius:10, padding:14, marginBottom:10, cursor:"grab",
-        boxShadow:hovered?"0 4px 16px rgba(0,0,0,0.08)":"0 1px 3px rgba(0,0,0,0.04)",
-        transform:hovered?"translateY(-1px)":"none",
-        transition:"all 0.15s ease", fontFamily:"'Inter',sans-serif",
+        background: "#fff",
+        border: `1.5px solid ${hovered ? col.color + "55" : "#E5E7EB"}`,
+        borderRadius: 12,
+        marginBottom: 10,
+        cursor: "grab",
+        boxShadow: hovered
+          ? `0 8px 28px rgba(0,0,0,0.10), 0 0 0 3px ${col.color}18`
+          : "0 1px 3px rgba(0,0,0,0.04)",
+        transform: hovered ? "translateY(-2px) scale(1.01)" : "none",
+        transition: "all 0.2s cubic-bezier(.4,0,.2,1)",
+        fontFamily: "'Inter',sans-serif",
+        overflow: "hidden",
       }}
     >
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-        {task.topic
-          ? <span style={{fontSize:11,fontWeight:600,color:ts.text,background:ts.bg,border:`1px solid ${ts.border}`,padding:"2px 8px",borderRadius:5}}>{task.topic}</span>
-          : <span/>}
-        <div style={{display:"flex",gap:4,opacity:hovered?1:0,transition:"opacity 0.15s"}}>
-          <button onClick={()=>onEdit(task)} style={{background:"#F3F4F6",border:"none",borderRadius:5,padding:"3px 8px",color:"#374151",cursor:"pointer",fontSize:11,fontWeight:500}}>Edit</button>
-          <button onClick={()=>onDelete(task.id)} style={{background:"#FEF2F2",border:"none",borderRadius:5,padding:"3px 8px",color:"#DC2626",cursor:"pointer",fontSize:11,fontWeight:500}}>✕</button>
+      {/* Status accent line */}
+      <div style={{
+        height: 3,
+        background: col.color,
+        opacity: hovered ? 1 : 0,
+        transition: "opacity 0.2s",
+      }} />
+
+      <div style={{ padding: 14 }}>
+        {/* Header row */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+          {task.topic
+            ? <span style={{ fontSize: 11, fontWeight: 600, color: ts.text, background: ts.bg, border: `1px solid ${ts.border}`, padding: "2px 8px", borderRadius: 5 }}>{task.topic}</span>
+            : <span />}
+          <div style={{ display: "flex", gap: 4, opacity: hovered ? 1 : 0, transition: "opacity 0.15s" }}>
+            <button onClick={() => onEdit(task)} style={{ background: "#F3F4F6", border: "none", borderRadius: 5, padding: "3px 8px", color: "#374151", cursor: "pointer", fontSize: 11, fontWeight: 500 }}>Edit</button>
+            <button onClick={() => onDelete(task.id)} style={{ background: "#FEF2F2", border: "none", borderRadius: 5, padding: "3px 8px", color: "#DC2626", cursor: "pointer", fontSize: 11, fontWeight: 500 }}>✕</button>
+          </div>
         </div>
-      </div>
 
-      <div style={{fontSize:13,fontWeight:600,color:"#111827",marginBottom:4,lineHeight:1.4}}>{task.title}</div>
-      {task.description&&<div style={{fontSize:12,color:"#9CA3AF",marginBottom:12,lineHeight:1.5}}>{task.description}</div>}
+        {/* Title */}
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", marginBottom: 4, lineHeight: 1.4 }}>{task.title}</div>
 
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
-        {assignees.length===0
-          ? <span style={{fontSize:11,color:"#D1D5DB"}}>Unassigned</span>
-          : (
-            <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <div style={{display:"flex"}}>
-                {assignees.slice(0,4).map((a,i)=>(
-                  <div key={a.id} style={{marginLeft:i>0?-8:0}}>
-                    <Avatar name={a.name} size={22} idx={i} />
-                  </div>
-                ))}
-              </div>
-              {assignees.length===1
-                ? <span style={{fontSize:11,color:"#6B7280"}}>{assignees[0].name}</span>
-                : assignees.length>4
-                  ? <span style={{fontSize:11,color:"#6B7280"}}>+{assignees.length-4} more</span>
-                  : <span style={{fontSize:11,color:"#6B7280"}}>{assignees.length} members</span>
-              }
-            </div>
-          )
-        }
-        {task.deadline&&(
-          <span style={{fontSize:11,fontWeight:isOverdue?600:400,color:isOverdue?"#DC2626":"#9CA3AF",background:isOverdue?"#FEF2F2":"transparent",padding:isOverdue?"1px 6px":"0",borderRadius:4}}>
-            {isOverdue?"⚠ ":""}{task.deadline.slice(0,10)}
-          </span>
+        {/* Description — always visible if exists */}
+        {task.description && (
+          <div style={{ fontSize: 12, color: "#9CA3AF", lineHeight: 1.5, marginBottom: 8 }}>{task.description}</div>
         )}
+
+        {/* ── Expanded detail panel ── */}
+        <div style={{
+          maxHeight: hovered ? 200 : 0,
+          opacity: hovered ? 1 : 0,
+          overflow: "hidden",
+          transition: "max-height 0.25s cubic-bezier(.4,0,.2,1), opacity 0.2s",
+        }}>
+          <div style={{
+            borderTop: "1px solid #F3F4F6",
+            marginTop: 8,
+            paddingTop: 10,
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "6px 12px",
+          }}>
+            {[
+              { label: "📅 Planned Start", val: plannedStart },
+              { label: "🏁 Planned End",   val: plannedEnd   },
+              { label: "▶ Actual Start",  val: actualStart  },
+              { label: "✅ Actual End",    val: actualEnd    },
+            ].map(({ label, val }) => (
+              <div key={label}>
+                <div style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 600, marginBottom: 1 }}>{label}</div>
+                <div style={{ fontSize: 11, color: val ? "#111827" : "#D1D5DB", fontWeight: val ? 500 : 400 }}>
+                  {val || "—"}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Status badge */}
+          <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 7, height: 7, borderRadius: "50%", background: col.color }} />
+            <span style={{ fontSize: 11, color: col.color, fontWeight: 600 }}>{col.label}</span>
+            {isOverdue && (
+              <span style={{ fontSize: 10, background: "#FEF2F2", color: "#DC2626", padding: "1px 6px", borderRadius: 4, fontWeight: 600, marginLeft: "auto" }}>
+                ⚠ OVERDUE
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+          {assignees.length === 0
+            ? <span style={{ fontSize: 11, color: "#D1D5DB" }}>Unassigned</span>
+            : (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ display: "flex" }}>
+                  {assignees.slice(0, 4).map((a, i) => (
+                    <div key={a.id} style={{ marginLeft: i > 0 ? -8 : 0 }}>
+                      <Avatar name={a.name} size={22} idx={i} />
+                    </div>
+                  ))}
+                </div>
+                {assignees.length === 1
+                  ? <span style={{ fontSize: 11, color: "#6B7280" }}>{assignees[0].name}</span>
+                  : assignees.length > 4
+                    ? <span style={{ fontSize: 11, color: "#6B7280" }}>+{assignees.length - 4} more</span>
+                    : <span style={{ fontSize: 11, color: "#6B7280" }}>{assignees.length} members</span>
+                }
+              </div>
+            )
+          }
+          {task.deadline && (
+            <span style={{
+              fontSize: 11, fontWeight: isOverdue ? 600 : 400,
+              color: isOverdue ? "#DC2626" : "#9CA3AF",
+              background: isOverdue ? "#FEF2F2" : "transparent",
+              padding: isOverdue ? "1px 6px" : "0", borderRadius: 4,
+            }}>
+              {isOverdue ? "⚠ " : ""}{task.deadline.slice(0, 10)}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -447,9 +783,9 @@ export default function App() {
     try {
       const [t,e,k] = await Promise.all([api.getTasks(),api.getEmployees(),api.getKPI()]);
 
-      console.log("1. Tasks from Backend:", t);
-      console.log("2. Employees from Backend:", e);
-      console.log("3. KPI Data from Backend:", k);
+      console.log("1. Backend'den Gelen Görevler (Tasks):", t);
+      console.log("2. Backend'den Gelen Çalişanlar (Employees):", e);
+      console.log("3. Backend'den Gelen KPI Verisi:", k);
 
       setTasks(t); setEmployees(e); setKpi(k); setError(null);
     } catch(err){ setError(err.message); }
@@ -497,6 +833,8 @@ export default function App() {
     try {
       const e=await api.createEmployee(name,role);
       setEmployees(p=>[...p,e]); toast(`${e.name} added`);
+      const k = await api.getKPI();  // ← ekle
+      setKpi(k);
     } catch(err){ toast(err.message,"error"); }
   };
 
@@ -518,7 +856,7 @@ export default function App() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
-        body{overflow:hidden;}
+        body{overflow-y:auto;overflow-x:hidden;}
         ::-webkit-scrollbar{width:5px;height:5px;}
         ::-webkit-scrollbar-thumb{background:#D1D5DB;border-radius:4px;}
         select option{background:#fff;color:#111827;}
@@ -536,7 +874,7 @@ export default function App() {
             <div style={{fontSize:10,color:"#9CA3AF",fontWeight:600,letterSpacing:"0.06em"}}>S.R.L. — PROJECT MANAGEMENT</div>
           </div>
           <div style={{display:"flex",background:"#F3F4F6",borderRadius:8,padding:3,marginLeft:20}}>
-            {[{id:"board",label:"📋  Board"},{id:"kpi",label:"📊  KPIs"}].map(tab=>(
+            {[{id:"board",label:"📋  Board"},{id:"kpi",label:"📊  KPIs"},{id:"gantt",label:"📅  Gantt"}].map(tab=>(
               <button key={tab.id} onClick={()=>setView(tab.id)} style={{
                 padding:"6px 16px",borderRadius:6,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,
                 fontFamily:"'Inter',sans-serif",
@@ -586,10 +924,12 @@ export default function App() {
           <div style={{color:"#DC2626",fontSize:14}}>⚠ {error}</div>
           <button onClick={loadAll} style={{background:"#2563EB",color:"#fff",border:"none",borderRadius:8,padding:"8px 20px",fontFamily:"'Inter',sans-serif",fontSize:13,cursor:"pointer"}}>Retry</button>
         </div>
+      ) : view==="gantt" ? (
+        <GanttChart tasks={tasks} employees={employees} />
       ) : view==="kpi" ? (
-        <KPIDashboard kpi={kpi} employees={employees} />
+        <KPIDashboard kpi={kpi} employees={employees} tasks={tasks} />
       ) : (
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",height:"calc(100vh - 65px)"}}>
+        <div style={{display:"flex", height:"calc(100vh - 65px)", overflow: "hidden"}}>
           {COLUMNS.map((col,i)=>{
             const colTasks = filtered.filter(t=>t.status===col.id);
             const isDrop = dragOver===col.id;
@@ -598,7 +938,7 @@ export default function App() {
                 onDragOver={e=>{e.preventDefault();setDragOver(col.id);}}
                 onDragLeave={()=>setDragOver(null)}
                 onDrop={e=>handleDrop(e,col.id)}
-                style={{borderRight:i<3?"1px solid #E5E7EB":"none",display:"flex",flexDirection:"column",background:isDrop?col.light:"#F9FAFB",transition:"background 0.15s"}}
+                style={{borderRight:i<3?"1px solid #E5E7EB":"none",display:"flex",flexDirection:"column",background:isDrop?col.light:"#F9FAFB",transition:"background 0.15s",flex:1}}
               >
                 <div style={{padding:"14px 16px 12px",borderBottom:`2px solid ${col.color}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -607,7 +947,7 @@ export default function App() {
                   </div>
                   <span style={{fontSize:12,color:col.color,background:col.light,border:`1px solid ${col.dot}`,padding:"1px 9px",borderRadius:10,fontWeight:700}}>{colTasks.length}</span>
                 </div>
-                <div style={{flex:1,overflowY:"auto",padding:14}}>
+                <div style={{flex:1,overflowY:"auto",padding:14, minHeight: 0}}>
                   {colTasks.length===0&&(
                     <div style={{border:`2px dashed ${isDrop?col.color:"#E5E7EB"}`,borderRadius:10,padding:"28px 16px",textAlign:"center",color:isDrop?col.color:"#D1D5DB",fontSize:12,fontWeight:500,transition:"all 0.2s"}}>
                       {isDrop?"Drop here ↓":"Drag tasks here"}

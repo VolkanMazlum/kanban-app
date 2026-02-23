@@ -16,8 +16,8 @@ const pool = new Pool({
 });
 
 pool.connect()
-  .then(client => { console.log("✅ PostgreSQL connected"); client.release(); })
-  .catch(err => console.error("❌ PostgreSQL error:", err.message));
+  .then(client => { console.log(" PostgreSQL connected"); client.release(); })
+  .catch(err => console.error(" PostgreSQL error:", err.message));
 
 const query = (text, params) => pool.query(text, params);
 
@@ -31,5 +31,6 @@ app.use('/api', authenticate);
 require('./tasks')(app, query);
 require('./employees')(app, query);
 require('./kpi')(app, query);
+require('./timeLogs')(app, query);
 
-app.listen(PORT, () => console.log(`🚀 TEKSER API running on http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(` TEKSER API running on http://localhost:${PORT}`));

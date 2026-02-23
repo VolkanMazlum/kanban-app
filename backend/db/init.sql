@@ -53,6 +53,50 @@ CREATE INDEX IF NOT EXISTS idx_task_assignees_task_id ON task_assignees(task_id)
 CREATE INDEX IF NOT EXISTS idx_task_assignees_employee_id ON task_assignees(employee_id);
 
 
+ALTER TABLE tasks
+  ADD COLUMN planned_start TIMESTAMPTZ,
+  ADD COLUMN planned_end TIMESTAMPTZ,
+  ADD COLUMN actual_start TIMESTAMPTZ,
+  ADD COLUMN actual_end TIMESTAMPTZ;
+ALTER TABLE tasks
+  ADD CONSTRAINT chk_timeframes CHECK (
+    (planned_start IS NULL OR planned_end IS NULL OR planned_start <= planned_end) AND
+    (actual_start IS NULL OR actual_end IS NULL OR actual_start <= actual_end)
+  );
+ALTER TABLE tasks ADD COLUMN estimated_hours NUMERIC(5,1);
+CREATE TABLE IF NOT EXISTS task_time_logs (
+  id SERIAL PRIMARY KEY,
+  task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  started_at TIMESTAMPTZ NOT NULL,
+  ended_at TIMESTAMPTZ,
+  note TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT chk_time_log CHECK (ended_at IS NULL OR started_at <= ended_at)
+);
+CREATE INDEX IF NOT EXISTS idx_task_time_logs_task_id ON task_time_logs(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_time_logs_employee_id ON task_time_logs(employee_id);
+CREATE INDEX IF NOT EXISTS idx_task_time_logs_started_at ON task_time_logs(started_at);
+CREATE INDEX IF NOT EXISTS idx_task_time_logs_ended_at ON task_time_logs(ended_at);
+
+CREATE OR REPLACE FUNCTION update_task_timeframes()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Güncellenen veya eklenen zaman kaydına göre görev zamanlarını güncelle
+  IF NEW.status = 'process' AND OLD.status != 'process' AND NEW.actual_start IS NULL THEN
+    NEW.actual_start = NOW();
+  END IF;
+  IF NEW.status = 'done' AND OLD.status != 'done' AND NEW.actual_end IS NULL THEN
+    NEW.actual_end = NOW();
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS tasks_timeframe_update ON tasks;
+CREATE TRIGGER tasks_timeframe_update
+BEFORE UPDATE ON tasks
+FOR EACH ROW EXECUTE FUNCTION update_task_timeframes();
+
 -- Seed Employees
 INSERT INTO employees (name) VALUES
   ('Marco R.'),
@@ -93,6 +137,12 @@ INSERT INTO task_assignees (task_id, employee_id) VALUES
   (10, 1), (10, 5), -- Görev 10, Marco ve Andrea'ya
   (11, 1),
   (12, 2)
+ON CONFLICT DO NOTHING;
+-- Seed Task Time Logs (process statusundaki görevler için)
+INSERT INTO task_time_logs (task_id, employee_id, started_at) VALUES
+  (1, 1, NOW()),   -- MV Panel Installation, Marco
+  (5, 5, NOW()),   -- Project Schedule Update, Andrea
+  (9, 4, NOW())    -- Cable Tray Installation, Giulia
 ON CONFLICT DO NOTHING;
 
 -- Sequence (Otomatik artan ID) ayarını güncelle

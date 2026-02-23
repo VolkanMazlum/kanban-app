@@ -15,8 +15,8 @@ module.exports = (app, query) => {
       
 
       const avg_days_to_complete = await query(`
-        SELECT AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 86400) as avg_days
-        FROM tasks WHERE status = 'done'
+        SELECT AVG(EXTRACT(EPOCH FROM (actual_end - actual_start)) / 86400) as avg_days
+        FROM tasks WHERE status = 'done' AND actual_start IS NOT NULL AND actual_end IS NOT NULL
       `);
       const completed_month_avg  = await query(`
         SELECT COUNT(*) as count FROM tasks 
@@ -39,15 +39,31 @@ module.exports = (app, query) => {
 
       // YENİ KPI SORGUSU: employees -> task_assignees -> tasks
       const empRes = await query(`
-        SELECT e.id, e.name, 
+        SELECT e.id, e.name,
                COUNT(t.id) as total_assigned,
                SUM(CASE WHEN t.status = 'new' THEN 1 ELSE 0 END) as new_count,
                SUM(CASE WHEN t.status = 'process' THEN 1 ELSE 0 END) as in_process,
                SUM(CASE WHEN t.status = 'blocked' THEN 1 ELSE 0 END) as blocked,
-               SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as done_count
+               SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as done_count,
+               AVG(EXTRACT(EPOCH FROM (t.actual_end - t.actual_start)) / 3600) as avg_completion_hours,
+               COALESCE((
+                SELECT SUM(t2.estimated_hours)
+                FROM tasks t2
+                JOIN task_assignees ta2 ON ta2.task_id = t2.id
+                WHERE ta2.employee_id = e.id
+                AND t2.status != 'done'
+                AND t2.status != 'new'
+                AND t2.estimated_hours IS NOT NULL
+              ), 0) AS estimated_workload_hours
         FROM employees e
         LEFT JOIN task_assignees ta ON e.id = ta.employee_id
         LEFT JOIN tasks t ON ta.task_id = t.id
+        LEFT JOIN task_time_logs tl ON tl.employee_id = e.id AND tl.task_id = t.id
+        LEFT JOIN (
+          SELECT task_id, MAX(started_at) as actual_start, MAX(ended_at) as actual_end
+          FROM task_time_logs
+          GROUP BY task_id
+        ) ttl ON ttl.task_id = t.id
         GROUP BY e.id, e.name
       `);
       const per_employee = empRes.rows.map(r => ({
@@ -56,7 +72,9 @@ module.exports = (app, query) => {
         new_count: parseInt(r.new_count || 0, 10),
         in_process: parseInt(r.in_process || 0, 10),
         blocked: parseInt(r.blocked || 0, 10),
-        done_count: parseInt(r.done_count || 0, 10)
+        done_count: parseInt(r.done_count || 0, 10),
+        avg_completion_hours: parseFloat(r.avg_completion_hours || 0).toFixed(2),
+        estimated_workload_hours: parseFloat(r.estimated_workload_hours || 0)
       }));
 
       const trend = [{ month: "Recent", completed: by_status.done }];
