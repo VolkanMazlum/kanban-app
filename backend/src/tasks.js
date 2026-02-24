@@ -9,16 +9,28 @@ module.exports = (app, query) => {
       
       // YENİ MANTIK: tasks -> task_assignees -> employees şeklinde JOIN yapıyoruz
       let sql = `
-        SELECT t.id, t.title, t.description, t.topic, t.deadline, t.planned_start, t.planned_end, t.actual_start, t.actual_end, t.status, t.position, t.created_at, t.updated_at, t.estimated_hours,
-               COALESCE(
-                 json_agg(json_build_object('id', e.id, 'name', e.name)) FILTER (WHERE e.id IS NOT NULL),
-                 '[]'
-               ) AS assignees
-        FROM tasks t
-        LEFT JOIN task_assignees ta ON t.id = ta.task_id
-        LEFT JOIN employees e ON ta.employee_id = e.id
-        WHERE 1=1
-      `;
+      SELECT t.id, t.title, t.description, t.topic, t.deadline, t.planned_start, t.planned_end, t.actual_start, t.actual_end, t.status, t.position, t.created_at, t.updated_at, t.estimated_hours,
+            COALESCE(
+              json_agg(json_build_object('id', e.id, 'name', e.name)) FILTER (WHERE e.id IS NOT NULL),
+              '[]'
+            ) AS assignees,
+            (
+              SELECT COALESCE(json_agg(json_build_object(
+                'id', tp.id,
+                'name', tp.name,
+                'position', tp.position,
+                'start_date', tp.start_date::TEXT,
+                'end_date', tp.end_date::TEXT,
+                'status', tp.status
+              ) ORDER BY tp.position), '[]')
+              FROM task_phases tp
+              WHERE tp.task_id = t.id
+            ) AS phases
+      FROM tasks t
+      LEFT JOIN task_assignees ta ON t.id = ta.task_id
+      LEFT JOIN employees e ON ta.employee_id = e.id
+      WHERE 1=1
+    `;
       const params = [];
       
       if (assignee_id) { 

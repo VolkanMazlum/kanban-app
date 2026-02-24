@@ -25,6 +25,7 @@ async function req(path, options = {}) {
 }
 
 export const getTasks        = (params = {}) => req(`/tasks${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""}`);
+export const getTask         = (id) => req(`/tasks/${id}`);
 export const createTask      = (data) => req("/tasks",       { method: "POST",   body: JSON.stringify(data) });
 export const updateTask      = (id, data) => req(`/tasks/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const patchTaskStatus = (id, status) => req(`/tasks/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
@@ -35,3 +36,16 @@ export const createEmployee  = (name, role) => req("/employees", { method: "POST
 export const deleteEmployee  = (id)    => req(`/employees/${id}`, { method: "DELETE" });
 
 export const getKPI          = ()       => req("/kpi");
+export const getTimeLogs     = (params = {}) => req(`/time-logs${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""}`);
+export const logTime         = (data) => req("/time-logs", { method: "POST", body: JSON.stringify(data) });
+
+export const getPhaseTemplates  = () => req("/phase-templates");
+export const getTaskPhases      = (taskId) => req(`/tasks/${taskId}/phases`);
+export const saveTaskPhases     = (taskId, phases) => req(`/tasks/${taskId}/phases`, {
+  method: "POST",
+  body: JSON.stringify({ phases })
+});
+export const updatePhase        = (taskId, id, data) => req(`/tasks/${taskId}/phases/${id}`, {
+  method: "PATCH",
+  body: JSON.stringify(data)
+});
