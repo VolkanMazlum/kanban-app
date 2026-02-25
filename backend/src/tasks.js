@@ -276,16 +276,42 @@ module.exports = (app, query) => {
         
         const result = await query(sql, params);
         if (!result.rows.length) return res.status(404).json({ error: "Task not found" });
-        res.json(result.rows[0]);
 
         if (validatedStatus === 'done') {
           // İlgili phase'i de done yap
           await query(`
             UPDATE task_phases 
             SET status = 'done', end_date = CURRENT_DATE
-            WHERE task_id = $1 AND status != 'done' AND start_date IS NOT NULL AND end_date IS NULL
+            WHERE task_id = $1 AND status != 'done' 
           `, [req.params.id]);
         }
+        else if (validatedStatus === 'process') {
+          // Eğer process yapılıyorsa ve actual_start yoksa set et
+          await query(`
+            UPDATE task_phases 
+            SET status = 'active', start_date = COALESCE(start_date, CURRENT_DATE)
+            WHERE task_id = $1 
+          `, [req.params.id]);
+        }
+        else if (validatedStatus === 'blocked') {
+          // Eğer process yapılıyorsa ve actual_start yoksa set et
+          await query(`
+            UPDATE task_phases 
+            SET status = 'pending'
+            WHERE task_id = $1 
+          `, [req.params.id]);
+        }
+        else if (validatedStatus === 'new') {
+          // Eğer process yapılıyorsa ve actual_start yoksa set et
+          await query(`
+            UPDATE task_phases 
+            SET status = 'pending', start_date = NULL, end_date = COALESCE(end_date, CURRENT_DATE)
+            WHERE task_id = $1 
+          `, [req.params.id]);
+        }
+        
+        res.json(result.rows[0]);
+
       } catch (err) { res.status(500).json({ error: "Database error" }); }
     } catch (validationError) {
       if (validationError.errors) {
