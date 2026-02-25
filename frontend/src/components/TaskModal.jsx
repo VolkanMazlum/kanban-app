@@ -181,7 +181,7 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
                 
                 const topicPhases = phases
                   .map((ph, i) => ({ ph, idx: i }))
-                  .filter(item => expectedNames.includes(item.ph.name) || item.ph.topic_source === topicName);
+                  .filter(item => item.ph.topic_source === topicName);
 
                 if (topicPhases.length === 0) return null;
 

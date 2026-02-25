@@ -45,7 +45,7 @@ module.exports = (app, query) => {
         done: parseInt(r.done || 0, 10)
       }));
 
-      // Çalışan (Employee) Performans Sorgusu (Aynı bırakıldı)
+      // Çalışan (Employee) Performans Sorgusu
       const empRes = await query(`
         SELECT e.id, e.name,
                COUNT(t.id) as total_assigned,

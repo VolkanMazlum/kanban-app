@@ -44,7 +44,7 @@ export default function GanttChart({ tasks, employees }) {
     const end   = endDateStr ? new Date(endDateStr) : new Date(fallbackDateStr);
     const s = new Date(Math.max(start, windowStart));
     const e2 = new Date(Math.min(end, windowEnd));
-    s.setHours(0,0,0,0); e2.setHours(0,0,0,0);
+    //s.setHours(0,0,0,0); e2.setHours(0,0,0,0);
     if (s > e2) return null; 
     const off  = Math.round((s - windowStart) / 86400000);
     const span = Math.max(Math.round((e2 - s) / 86400000) + 1, 1);

@@ -281,7 +281,7 @@ module.exports = (app, query) => {
           // İlgili phase'i de done yap
           await query(`
             UPDATE task_phases 
-            SET status = 'done', end_date = CURRENT_DATE
+            SET status = 'done'
             WHERE task_id = $1 AND status != 'done' 
           `, [req.params.id]);
         }
@@ -289,7 +289,7 @@ module.exports = (app, query) => {
           // Eğer process yapılıyorsa ve actual_start yoksa set et
           await query(`
             UPDATE task_phases 
-            SET status = 'active', start_date = COALESCE(start_date, CURRENT_DATE)
+            SET status = 'active'
             WHERE task_id = $1 
           `, [req.params.id]);
         }
@@ -305,7 +305,7 @@ module.exports = (app, query) => {
           // Eğer process yapılıyorsa ve actual_start yoksa set et
           await query(`
             UPDATE task_phases 
-            SET status = 'pending', start_date = NULL, end_date = COALESCE(end_date, CURRENT_DATE)
+            SET status = 'pending'
             WHERE task_id = $1 
           `, [req.params.id]);
         }

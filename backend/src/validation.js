@@ -28,7 +28,10 @@ const taskSchema = z.object({
   status: z.enum(['new', 'process', 'blocked', 'done']).default('new'),
   position: z.number().int().optional().default(0),
   assignee_ids: z.array(z.number().int().positive()).optional().default([]),
-  estimated_hours: z.number().min(0).nullable().optional(),
+  estimated_hours: z.preprocess(
+    v => (v === "" || v === null || v === undefined) ? null : Number(v),
+    z.number().nullable().optional()
+  )
 });
 
 // Validation schema for task updates
@@ -53,7 +56,10 @@ const taskUpdateSchema = z.object({
   status: z.enum(['new', 'process', 'blocked', 'done']).optional(),
   position: z.number().int().optional(),
   assignee_ids: z.array(z.number().int().positive()).optional(),
-  estimated_hours: z.number().min(0).nullable().optional(),
+  estimated_hours: z.preprocess(
+    v => (v === "" || v === null || v === undefined) ? null : Number(v),
+    z.number().nullable().optional()
+  )
 }).partial();
 
 // Validation schema for employee creation
