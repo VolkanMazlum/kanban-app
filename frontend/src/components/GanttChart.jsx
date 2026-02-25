@@ -213,7 +213,7 @@ export default function GanttChart({ tasks, employees }) {
                             const phColor = ph.status==="done"?"#059669":ph.status==="active"?"#F59E0B":"#6B7280";
                             
                             return (
-                              <div key={ph.id} title={`${ph.name}\n${ph.start_date} - ${ph.end_date}`} style={{
+                              <div key={ph.id} title={`${ph.name}\n${ph.start_date} - ${ph.end_date} ${ph.note ? `\n📝 Note: ${ph.note}`: ""}`} style={{
                                 position:"absolute", left:phBp.left, width:phBp.width, top:"50%", transform:"translateY(-50%)",
                                 height: 22, borderRadius: 4, background: phColor, opacity: 0.9,
                                 display: "flex", alignItems: "center", padding: "0 6px",

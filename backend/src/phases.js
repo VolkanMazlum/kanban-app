@@ -46,12 +46,13 @@ module.exports = (app, query) => {
       // Yenilerini ekle
       for (const phase of phases) {
         await query(
-          `INSERT INTO task_phases (task_id, name, position, start_date, end_date, status, topic_source)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          `INSERT INTO task_phases (task_id, name, position, note, start_date, end_date, status, topic_source)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
           [
             req.params.taskId,
             phase.name,
             phase.position ?? 0,
+            phase.note || null,
             phase.start_date || null,
             phase.end_date || null,
             phase.status || 'pending',

@@ -7,8 +7,6 @@ module.exports = (app, query) => {
     try {
       const { assignee_id, status } = req.query;
       
-      // YENİ MANTIK: tasks -> task_assignees -> employees şeklinde JOIN yapıyoruz
-      // Ve topics ile phases için alt sorgular (subqueries) kullanıyoruz.
       let sql = `
       SELECT t.id, t.title, t.description, t.deadline, t.planned_start, t.planned_end, t.actual_start, t.actual_end, t.status, t.position, t.created_at, t.updated_at, t.estimated_hours, t.label,
             COALESCE(
@@ -28,7 +26,8 @@ module.exports = (app, query) => {
                 'start_date', tp.start_date::TEXT,
                 'end_date', tp.end_date::TEXT,
                 'status', tp.status,
-                'topic', tp.topic_source
+                'topic', tp.topic_source,
+                'note', tp.note
               ) ORDER BY tp.position), '[]')
               FROM task_phases tp
               WHERE tp.task_id = t.id
@@ -42,7 +41,6 @@ module.exports = (app, query) => {
       
       if (assignee_id) { 
         params.push(assignee_id); 
-        // Sadece belirli bir çalışanın görevlerini getirmek için EXISTS alt sorgusu
         sql += ` AND EXISTS (SELECT 1 FROM task_assignees sub_ta WHERE sub_ta.task_id = t.id AND sub_ta.employee_id = $${params.length})`; 
       }
       
@@ -81,7 +79,8 @@ module.exports = (app, query) => {
                    'start_date', tp.start_date::TEXT,
                    'end_date', tp.end_date::TEXT,
                    'status', tp.status,
-                   'topic',(SELECT pt.topic FROM phase_templates pt WHERE pt.name = tp.name LIMIT 1)
+                   'topic', tp.topic_source,
+                   'note', tp.note
                  ) ORDER BY tp.position), '[]')
                  FROM task_phases tp
                  WHERE tp.task_id = t.id
@@ -99,9 +98,9 @@ module.exports = (app, query) => {
   });
 
   app.post("/api/tasks", async (req, res) => {
-    // topic yerine topics dizisi alındı
+    // Note: React will need to pass 'phases' in the body now
     const { title, description, label, topics, assignee_ids, deadline, status, position,
-            planned_start, planned_end, actual_start, actual_end, estimated_hours } = req.body;
+            planned_start, planned_end, actual_start, actual_end, estimated_hours, phases } = req.body;
     
     try {
       const validatedData = taskSchema.parse({
@@ -118,7 +117,7 @@ module.exports = (app, query) => {
       try {
         await query("BEGIN");
         
-        // 1. Görevi oluştur (topic sütunu yok!)
+        // 1. Create main task (removed 'note' from here)
         const taskResult = await query(
           "INSERT INTO tasks (title, description, label, deadline, planned_start, planned_end, actual_start, actual_end, status, position, estimated_hours) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *",
           [validatedTitle, validatedDescription || "", validatedLabel || null, validatedDeadline || null,
@@ -128,8 +127,9 @@ module.exports = (app, query) => {
         const newTask = taskResult.rows[0];
         newTask.assignees = [];
         newTask.topics = [];
+        newTask.phases = [];
         
-        // 2. Kişileri ara tabloya (task_assignees) kaydet
+        // 2. Save assignees
         if (validatedAssigneeIds && validatedAssigneeIds.length > 0) {
           await query(
             "INSERT INTO task_assignees (task_id, employee_id) SELECT $1, unnest($2::int[])",
@@ -139,13 +139,34 @@ module.exports = (app, query) => {
           newTask.assignees = emps.rows;
         }
 
-        // 3. YENİ: Kategorileri ara tabloya (task_topics) kaydet
+        // 3. Save topics
         if (validatedTopics && validatedTopics.length > 0) {
           await query(
             "INSERT INTO task_topics (task_id, topic) SELECT $1, unnest($2::varchar[])",
             [newTask.id, validatedTopics]
           );
           newTask.topics = validatedTopics;
+        }
+
+        // 4. NEW: Save Phases (with note and topic_source)
+        if (phases && phases.length > 0) {
+          for (let i = 0; i < phases.length; i++) {
+            const ph = phases[i];
+            await query(
+              "INSERT INTO task_phases (task_id, name, position, start_date, end_date, status, topic_source, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+              [
+                newTask.id, 
+                ph.name, 
+                i, // Recalculate position based on array order
+                ph.start_date || null, 
+                ph.end_date || null, 
+                ph.status || 'pending', 
+                ph.topic_source || null, 
+                ph.note || null
+              ]
+            );
+          }
+          newTask.phases = phases;
         }
         
         await query("COMMIT");
@@ -166,9 +187,8 @@ module.exports = (app, query) => {
 
   app.put("/api/tasks/:id", async (req, res) => {
     const { id } = req.params;
-    // topic yerine topics dizisi alındı
     const { title, description, label, topics, assignee_ids, deadline, status, position,
-            planned_start, planned_end, actual_start, actual_end, estimated_hours } = req.body;
+            planned_start, planned_end, actual_start, actual_end, estimated_hours, phases } = req.body;
     
     try {
       const validatedData = taskUpdateSchema.parse({
@@ -192,7 +212,7 @@ module.exports = (app, query) => {
         }
         const t = existing.rows[0];
         
-        // 1. Ana görevi güncelle (topic sütunu yok!)
+        // 1. Update main task (removed 'note' from here)
         const taskResult = await query(
           "UPDATE tasks SET title=$1, description=$2, label=$3, deadline=$4, planned_start=$5, planned_end=$6, actual_start=$7, actual_end=$8, status=$9, position=$10, estimated_hours=$11 WHERE id=$12 RETURNING *",
           [validatedTitle ?? t.title, validatedDescription ?? t.description,
@@ -207,7 +227,7 @@ module.exports = (app, query) => {
         const updatedTask = taskResult.rows[0];
         updatedTask.assignees = [];
 
-        // 2. Atamaları güncelle
+        // 2. Update Assignees
         if (validatedAssigneeIds !== undefined) {
           await query("DELETE FROM task_assignees WHERE task_id = $1", [id]);
           if (validatedAssigneeIds.length > 0) {
@@ -220,7 +240,7 @@ module.exports = (app, query) => {
            updatedTask.assignees = existingEmps.rows;
         }
 
-        // 3. YENİ: Kategorileri (Topics) güncelle
+        // 3. Update Topics
         if (validatedTopics !== undefined) {
           await query("DELETE FROM task_topics WHERE task_id = $1", [id]);
           if (validatedTopics.length > 0) {
@@ -232,6 +252,30 @@ module.exports = (app, query) => {
         } else {
            const existingTopics = await query(`SELECT topic FROM task_topics WHERE task_id = $1`, [id]);
            updatedTask.topics = existingTopics.rows.map(row => row.topic);
+        }
+
+        // 4. NEW: Update Phases (Delete old, insert new)
+        if (phases !== undefined) {
+          await query("DELETE FROM task_phases WHERE task_id = $1", [id]);
+          
+          if (phases.length > 0) {
+            for (let i = 0; i < phases.length; i++) {
+              const ph = phases[i];
+              await query(
+                "INSERT INTO task_phases (task_id, name, position, start_date, end_date, status, topic_source, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                [
+                  id, 
+                  ph.name, 
+                  i, 
+                  ph.start_date || null, 
+                  ph.end_date || null, 
+                  ph.status || 'pending', 
+                  ph.topic_source || ph.topic || null, // ensure we catch the topic
+                  ph.note || null
+                ]
+              );
+            }
+          }
         }
 
         await query("COMMIT");
@@ -279,7 +323,6 @@ module.exports = (app, query) => {
         if (!result.rows.length) return res.status(404).json({ error: "Task not found" });
 
         if (validatedStatus === 'done') {
-          // İlgili phase'i de done yap
           await query(`
             UPDATE task_phases 
             SET status = 'done'
@@ -287,7 +330,6 @@ module.exports = (app, query) => {
           `, [req.params.id]);
         }
         else if (validatedStatus === 'blocked') {
-          // Eğer process yapılıyorsa ve actual_start yoksa set et
           await query(`
             UPDATE task_phases 
             SET status = 'pending'
@@ -295,7 +337,6 @@ module.exports = (app, query) => {
           `, [req.params.id]);
         }
         else if (validatedStatus === 'new') {
-          // Eğer process yapılıyorsa ve actual_start yoksa set et
           await query(`
             UPDATE task_phases 
             SET status = 'pending'
@@ -317,7 +358,6 @@ module.exports = (app, query) => {
 
   app.delete("/api/tasks/:id", async (req, res) => {
     try {
-      // ON DELETE CASCADE sayesinde task_assignees ve task_topics otomatik silinir
       const result = await query("DELETE FROM tasks WHERE id=$1 RETURNING id", [req.params.id]);
       if (!result.rows.length) return res.status(404).json({ error: "Task not found" });
       res.json({ success: true, id: result.rows[0].id });

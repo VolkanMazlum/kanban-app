@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS task_phases (
 );
 CREATE INDEX IF NOT EXISTS idx_task_phases_task_id ON task_phases(task_id);
 
-
+ALTER TABLE task_phases ADD COLUMN note TEXT;
 -- ── Phase Templates ──────────────────────────────────────────────
 INSERT INTO phase_templates (topic, name, position) VALUES
   -- MEP

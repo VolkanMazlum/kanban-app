@@ -228,6 +228,18 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
                               <label style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 600 }}>END</label>
                               <input type="date" value={ph.end_date} onChange={e => updatePhase(idx, "end_date", e.target.value)} style={{ ...inp, marginTop: 4, padding: "6px 10px" }} />
                             </div>
+
+                            {/* Faz Not Alanı */}
+                            <div style={{ marginTop: 8 }}>
+                              <input 
+                                type="text" 
+                                value={ph.note || ""} 
+                                onChange={e => updatePhase(idx, "note", e.target.value)} 
+                                style={{ ...inp, padding: "4px 8px", fontSize: 10, width: "100%", background: "#F3F4F6", border: "1px solid #E5E7EB" }} 
+                                placeholder="Add a note for this phase... (Optional)" 
+                              />
+                            </div>
+
                           </div>
                         </div>
                       ))}
