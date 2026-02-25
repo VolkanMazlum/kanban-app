@@ -10,7 +10,7 @@ module.exports = (app, query) => {
       // YENİ MANTIK: tasks -> task_assignees -> employees şeklinde JOIN yapıyoruz
       // Ve topics ile phases için alt sorgular (subqueries) kullanıyoruz.
       let sql = `
-      SELECT t.id, t.title, t.description, t.deadline, t.planned_start, t.planned_end, t.actual_start, t.actual_end, t.status, t.position, t.created_at, t.updated_at, t.estimated_hours,
+      SELECT t.id, t.title, t.description, t.deadline, t.planned_start, t.planned_end, t.actual_start, t.actual_end, t.status, t.position, t.created_at, t.updated_at, t.estimated_hours, t.label,
             COALESCE(
               json_agg(json_build_object('id', e.id, 'name', e.name)) FILTER (WHERE e.id IS NOT NULL),
               '[]'
@@ -63,7 +63,7 @@ module.exports = (app, query) => {
   app.get("/api/tasks/:id", async (req, res) => {
     try {
       const sql = `
-        SELECT t.id, t.title, t.description, t.deadline, t.planned_start, t.planned_end, t.actual_start, t.actual_end, t.status, t.position, t.created_at, t.updated_at, t.estimated_hours,
+        SELECT t.id, t.title, t.description, t.deadline, t.planned_start, t.planned_end, t.actual_start, t.actual_end, t.status, t.position, t.created_at, t.updated_at, t.estimated_hours, t.label,
                COALESCE(
                  json_agg(json_build_object('id', e.id, 'name', e.name)) FILTER (WHERE e.id IS NOT NULL),
                  '[]'
@@ -100,19 +100,19 @@ module.exports = (app, query) => {
 
   app.post("/api/tasks", async (req, res) => {
     // topic yerine topics dizisi alındı
-    const { title, description, topics, assignee_ids, deadline, status, position,
+    const { title, description, label, topics, assignee_ids, deadline, status, position,
             planned_start, planned_end, actual_start, actual_end, estimated_hours } = req.body;
     
     try {
       const validatedData = taskSchema.parse({
-        title, description, topics, deadline, planned_start, planned_end, actual_start, actual_end, status, position, assignee_ids, estimated_hours
+        title, description, label, topics, deadline, planned_start, planned_end, actual_start, actual_end, status, position, assignee_ids, estimated_hours
       });
       
       const {
         title: validatedTitle, description: validatedDescription, topics: validatedTopics, deadline: validatedDeadline,
         planned_start: validatedPlannedStart, planned_end: validatedPlannedEnd, actual_start: validatedActualStart,
         actual_end: validatedActualEnd, status: validatedStatus, position: validatedPosition,
-        assignee_ids: validatedAssigneeIds, estimated_hours: validatedEstimatedHours
+        assignee_ids: validatedAssigneeIds, estimated_hours: validatedEstimatedHours, label: validatedLabel
       } = validatedData;
     
       try {
@@ -120,8 +120,8 @@ module.exports = (app, query) => {
         
         // 1. Görevi oluştur (topic sütunu yok!)
         const taskResult = await query(
-          "INSERT INTO tasks (title, description, deadline, planned_start, planned_end, actual_start, actual_end, status, position, estimated_hours) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *",
-          [validatedTitle, validatedDescription || "", validatedDeadline || null,
+          "INSERT INTO tasks (title, description, label, deadline, planned_start, planned_end, actual_start, actual_end, status, position, estimated_hours) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *",
+          [validatedTitle, validatedDescription || "", validatedLabel || null, validatedDeadline || null,
            validatedPlannedStart || null, validatedPlannedEnd || null, validatedActualStart || null, validatedActualEnd || null,
            validatedStatus, validatedPosition, validatedEstimatedHours || null]
         );
@@ -167,16 +167,16 @@ module.exports = (app, query) => {
   app.put("/api/tasks/:id", async (req, res) => {
     const { id } = req.params;
     // topic yerine topics dizisi alındı
-    const { title, description, topics, assignee_ids, deadline, status, position,
+    const { title, description, label, topics, assignee_ids, deadline, status, position,
             planned_start, planned_end, actual_start, actual_end, estimated_hours } = req.body;
     
     try {
       const validatedData = taskUpdateSchema.parse({
-        title, description, topics, deadline, planned_start, planned_end, actual_start, actual_end, status, position, assignee_ids, estimated_hours
+        title, description, label, topics, deadline, planned_start, planned_end, actual_start, actual_end, status, position, assignee_ids, estimated_hours
       });
       
       const {
-        title: validatedTitle, description: validatedDescription, topics: validatedTopics, deadline: validatedDeadline,
+        title: validatedTitle, description: validatedDescription, label: validatedLabel, topics: validatedTopics, deadline: validatedDeadline,
         planned_start: validatedPlannedStart, planned_end: validatedPlannedEnd, actual_start: validatedActualStart,
         actual_end: validatedActualEnd, status: validatedStatus, position: validatedPosition,
         assignee_ids: validatedAssigneeIds, estimated_hours: validatedEstimatedHours
@@ -194,8 +194,9 @@ module.exports = (app, query) => {
         
         // 1. Ana görevi güncelle (topic sütunu yok!)
         const taskResult = await query(
-          "UPDATE tasks SET title=$1, description=$2, deadline=$3, planned_start=$4, planned_end=$5, actual_start=$6, actual_end=$7, status=$8, position=$9, estimated_hours=$10 WHERE id=$11 RETURNING *",
+          "UPDATE tasks SET title=$1, description=$2, label=$3, deadline=$4, planned_start=$5, planned_end=$6, actual_start=$7, actual_end=$8, status=$9, position=$10, estimated_hours=$11 WHERE id=$12 RETURNING *",
           [validatedTitle ?? t.title, validatedDescription ?? t.description,
+           validatedLabel ?? t.label,
            validatedDeadline !== undefined ? validatedDeadline : t.deadline,
            validatedPlannedStart !== undefined ? validatedPlannedStart : t.planned_start,
            validatedPlannedEnd !== undefined ? validatedPlannedEnd : t.planned_end,
@@ -283,14 +284,6 @@ module.exports = (app, query) => {
             UPDATE task_phases 
             SET status = 'done'
             WHERE task_id = $1 AND status != 'done' 
-          `, [req.params.id]);
-        }
-        else if (validatedStatus === 'process') {
-          // Eğer process yapılıyorsa ve actual_start yoksa set et
-          await query(`
-            UPDATE task_phases 
-            SET status = 'active'
-            WHERE task_id = $1 
           `, [req.params.id]);
         }
         else if (validatedStatus === 'blocked') {

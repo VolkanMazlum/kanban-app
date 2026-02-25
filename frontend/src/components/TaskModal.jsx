@@ -5,10 +5,10 @@ import Avatar from "./Avatar.jsx";
 import AssigneePicker from "./AssigneePicker.jsx";
 
 export default function TaskModal({ task, employees, onSave, onClose }) {
-  const blank = { title:"", description:"", topics:[], assignee_ids:[], deadline:"", status:"new", planned_start:"", planned_end:"", estimated_hours:"" };
+  const blank = { title:"", description:"", label:"", topics:[], assignee_ids:[], deadline:"", status:"new", planned_start:"", planned_end:"", estimated_hours:"" };
   const init = task ? {
     title:task.title, description:task.description||"",
-    topics:task.topics||[], assignee_ids:(task.assignees||[]).map(a=>a.id),
+    label: task.label || "", topics:task.topics||[], assignee_ids:(task.assignees||[]).map(a=>a.id),
     deadline:task.deadline?.slice(0,10)||"", status:task.status,
     planned_start:task.planned_start?.slice(0,10)||"", planned_end:task.planned_end?.slice(0,10)||"",
     estimated_hours: task?.estimated_hours || ""
@@ -97,6 +97,17 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
         <div style={{marginBottom:14}}>
           <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600,letterSpacing:"0.05em"}}>TITLE *</label>
           <input value={form.title} onChange={e=>set("title",e.target.value)} style={inp} placeholder="Task title..." />
+        </div>
+        {/* YENİ: Label (Project Type) Seçici */}
+        <div style={{marginBottom:14}}>
+          <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600,letterSpacing:"0.05em"}}>PROJECT TYPE</label>
+          <select value={form.label} onChange={e=>set("label", e.target.value)} style={{...inp, cursor:"pointer"}}>
+            <option value="">-- Select Type --</option>
+            <option value="Residential">🏠 Residential </option>
+            <option value="Commercial">🏢 Commercial </option>
+            <option value="Industrial">🏭 Industrial </option>
+            <option value="Public">🏛️ Public </option>
+          </select>
         </div>
         
         {/* Kategoriler Butonları */}

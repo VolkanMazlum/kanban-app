@@ -57,6 +57,9 @@ ALTER TABLE tasks
   );
 ALTER TABLE tasks ADD COLUMN estimated_hours NUMERIC(5,1);
 
+ALTER TABLE tasks ADD COLUMN label VARCHAR(100);
+CREATE INDEX IF NOT EXISTS idx_tasks_label ON tasks(label);
+
 
 -- Auto-update updated_at Trigger
 CREATE OR REPLACE FUNCTION update_updated_at()

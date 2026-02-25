@@ -43,6 +43,12 @@ export default function TaskCard({ task, onDragStart, onEdit, onDelete }) {
           
           {/* Çoklu Topic Badge Alanı */}
           <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+              {/* YENİ: Label Rozeti (Eğer seçildiyse göster) */}
+              {task.label && (
+                  <span style={{ fontSize:10, fontWeight:700, color:"#4F46E5", background:"#EEF2FF", border:"1px solid #C7D2FE", padding:"2px 6px", borderRadius:4 }}>
+                    {task.label}
+                  </span>
+              )}            
             {topics.map(t => {
               const ts = TOPIC_STYLE[t] || { bg: "#F3F4F6", text: "#374151", border: "#E5E7EB" };
               return (

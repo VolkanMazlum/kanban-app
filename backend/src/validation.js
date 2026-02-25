@@ -31,7 +31,8 @@ const taskSchema = z.object({
   estimated_hours: z.preprocess(
     v => (v === "" || v === null || v === undefined) ? null : Number(v),
     z.number().nullable().optional()
-  )
+  ),
+  label: z.string().optional().default(null)
 });
 
 // Validation schema for task updates
@@ -59,7 +60,8 @@ const taskUpdateSchema = z.object({
   estimated_hours: z.preprocess(
     v => (v === "" || v === null || v === undefined) ? null : Number(v),
     z.number().nullable().optional()
-  )
+  ),
+  label: z.string().optional().default(null)
 }).partial();
 
 // Validation schema for employee creation
