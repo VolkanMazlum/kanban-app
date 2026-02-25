@@ -25,7 +25,11 @@ CREATE TABLE IF NOT EXISTS task_assignees (
   PRIMARY KEY (task_id, employee_id)
 );
 
-
+CREATE TABLE IF NOT EXISTS task_topics (
+  task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+  topic VARCHAR(100) NOT NULL,
+  PRIMARY KEY (task_id, topic)
+);
 
 -- Index for querying tasks by status
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
@@ -39,6 +43,7 @@ CREATE INDEX IF NOT EXISTS idx_task_assignees_task_id ON task_assignees(task_id)
 -- Index for querying task_assignees by employee_id (optimizes employee-based queries)
 CREATE INDEX IF NOT EXISTS idx_task_assignees_employee_id ON task_assignees(employee_id);
 
+CREATE INDEX IF NOT EXISTS idx_task_topics_task_id ON task_topics(task_id); -- Yeni tablo için index
 
 ALTER TABLE tasks
   ADD COLUMN planned_start TIMESTAMPTZ,
@@ -99,49 +104,82 @@ CREATE TABLE IF NOT EXISTS task_phases (
   start_date DATE,
   end_date DATE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
+  topic_source VARCHAR(100), 
   status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'done'))
 );
 CREATE INDEX IF NOT EXISTS idx_task_phases_task_id ON task_phases(task_id);
 
 
+-- ── Phase Templates ──────────────────────────────────────────────
 INSERT INTO phase_templates (topic, name, position) VALUES
-  ('Electrical',          'Preliminary',    0),
-  ('Electrical',          'Design',         1),
-  ('Electrical',          'Final',          2),
-  ('Mechanical',          'Preliminary',    0),
-  ('Mechanical',          'Design',         1),
-  ('Mechanical',          'Final',          2),
-  ('Civil & Structural',  'Survey',         0),
-  ('Civil & Structural',  'Approval',       1),
-  ('Civil & Structural',  'Construction',   2),
-  ('Civil & Structural',  'Handover',       3),
-  ('HVAC',                'Design',         0),
-  ('HVAC',                'Installation',   1),
-  ('HVAC',                'Testing',        2),
-  ('HVAC',                'Commissioning',  3),
-  ('Fire & Safety',       'Assessment',     0),
-  ('Fire & Safety',       'Design',         1),
-  ('Fire & Safety',       'Installation',   2),
-  ('Fire & Safety',       'Inspection',     3),
-  ('BMS / Automation',    'Requirements',   0),
-  ('BMS / Automation',    'Configuration',  1),
-  ('BMS / Automation',    'Testing',        2),
-  ('BMS / Automation',    'Handover',       3),
-  ('Commissioning',       'Pre-Comm',       0),
-  ('Commissioning',       'Commissioning',  1),
-  ('Commissioning',       'Punch List',     2),
-  ('Commissioning',       'Final',          3),
-  ('Documentation',       'Draft',          0),
-  ('Documentation',       'Review',         1),
-  ('Documentation',       'Final',          2),
-  ('Site Supervision',    'Mobilization',   0),
-  ('Site Supervision',    'Execution',      1),
-  ('Site Supervision',    'Demobilization', 2),
-  ('Procurement',         'Inquiry',        0),
-  ('Procurement',         'Evaluation',     1),
-  ('Procurement',         'Order',          2),
-  ('Procurement',         'Delivery',       3)
+  -- MEP
+  ('MEP', 'Feasibility study', 0),
+  ('MEP', 'Due Diligence', 1),
+  ('MEP', 'Preliminary design', 2),
+  ('MEP', 'Final design', 3),
+  ('MEP', 'Executive design', 4),
+  ('MEP', 'BIM modelling', 5),
+  ('MEP', 'Work supervision', 6),
+  ('MEP', 'Functional tests', 7),
+
+  -- ENERGY
+  ('ENERGY', 'APE', 0),
+  ('ENERGY', 'Energy diagnosis', 1),
+
+  -- SUSTAINABILITY
+  ('SUSTAINABILITY', 'LEED', 0),
+  ('SUSTAINABILITY', 'BREEAM', 1),
+  ('SUSTAINABILITY', 'WELL', 2),
+  ('SUSTAINABILITY', 'WIREDSCORE', 3),
+  ('SUSTAINABILITY', 'CRREM', 4),
+  ('SUSTAINABILITY', 'EU Taxonomy', 5),
+  ('SUSTAINABILITY', 'CAM', 6),
+  ('SUSTAINABILITY', 'LCA', 7),
+  ('SUSTAINABILITY', 'GRESB', 8),
+  ('SUSTAINABILITY', 'FITWEL', 9),
+
+  -- ACUSTIC
+  ('ACUSTIC', 'Preliminary design', 0),
+  ('ACUSTIC', 'Final design', 1),
+  ('ACUSTIC', 'Executive design', 2),
+  ('ACUSTIC', 'Work supervision', 3),
+  ('ACUSTIC', 'Acustic Tests', 4),
+  ('ACUSTIC', 'Acustic Tests assistance', 5),
+
+  -- VVF (Fire Safety)
+  ('VVF', 'Preliminary design', 0),
+  ('VVF', 'Final design', 1),
+  ('VVF', 'Executive design', 2),
+  ('VVF', 'Work supervision', 3),
+  ('VVF', 'VVF Tests', 4),
+  ('VVF', 'VVF Tests assistance', 5),
+
+  -- STRUCTURE
+  ('STRUCTURE', 'Preliminary design', 0),
+  ('STRUCTURE', 'Final design', 1),
+  ('STRUCTURE', 'Executive design', 2),
+  ('STRUCTURE', 'Work supervision', 3),
+  ('STRUCTURE', 'Structural Tests', 4),
+  ('STRUCTURE', 'Structural Tests assistance', 5),
+
+  -- GEOTHERMAL
+  ('GEOTHERMAL', 'Preliminary design', 0),
+  ('GEOTHERMAL', 'Final design', 1),
+  ('GEOTHERMAL', 'Executive design', 2),
+  ('GEOTHERMAL', 'Work supervision', 3),
+  ('GEOTHERMAL', 'Geothermal Tests', 4),
+
+  -- HYDRAULIC INVARIANCE
+  ('HYDRAULIC INVARIANCE', 'Hydraulic invariance', 0),
+
+  -- CONTINUOUS COMMISSIONING
+  ('CONTINUOUS COMMISSIONING', 'Development of a virtual simulation of the plant building to train the algorithm', 0),
+  ('CONTINUOUS COMMISSIONING', 'Development and release of the AI-Eco algorithm adapted to the specific project', 1),
+  ('CONTINUOUS COMMISSIONING', 'Continuous Commissioning of the AI-Eco algorithm – Ongoing monitoring activities', 2)
 ON CONFLICT DO NOTHING;
+
+
+
 
 CREATE OR REPLACE FUNCTION update_task_timeframes()
 RETURNS TRIGGER AS $$
@@ -168,22 +206,6 @@ INSERT INTO employees (name) VALUES
   ('Luca M.'),
   ('Giulia F.'),
   ('Andrea C.')
-ON CONFLICT DO NOTHING;
-
--- Seed Tasks (Sadece görev detayları, kişi ataması yok!)
-INSERT INTO tasks (id, title, description, topic, deadline, status, position) VALUES
-  (1, 'MV Panel Installation', 'Medium voltage switchgear installation at Site A', 'Electrical Systems', '2026-03-10', 'process', 1),
-  (2, 'Pump Station Inspection', 'Quarterly inspection of main pump station units', 'Mechanical Engineering', '2026-03-05', 'done', 1),
-  (3, 'Foundation Approval Docs', 'Submit structural calculations for client approval', 'Civil & Structural', '2026-02-28', 'blocked', 1),
-  (4, 'HVAC Commissioning - Block C', 'Final commissioning of HVAC system, building C', 'HVAC & Plumbing', '2026-03-20', 'new', 1),
-  (5, 'Project Schedule Update', 'Update master Gantt chart for Q2 milestones', 'Project Management', '2026-03-01', 'process', 2),
-  (6, 'ISO 9001 Internal Audit', 'Conduct internal quality audit for ISO renewal', 'Quality Assurance', '2026-04-01', 'new', 2),
-  (7, 'Site Safety Walkthrough', 'Weekly HSE inspection - Site B', 'HSE', '2026-02-22', 'done', 2),
-  (8, 'Subcontractor Evaluation', 'Evaluate 3 new subcontractors for civil works', 'Procurement', '2026-03-15', 'new', 3),
-  (9, 'Cable Tray Installation', 'Install cable trays on floors 2-5', 'Electrical Systems', '2026-03-08', 'process', 3),
-  (10, 'As-Built Drawing Update', 'Update all as-built drawings after scope change', 'Documentation', '2026-03-12', 'blocked', 2),
-  (11, 'Generator Load Test', 'FAT load bank test for 500kVA emergency generator', 'Testing & Commissioning', '2026-03-25', 'new', 4),
-  (12, 'SCADA Config Review', 'Review and validate SCADA configuration v2.1', 'IT & Automation', '2026-04-05', 'new', 3)
 ON CONFLICT DO NOTHING;
 
 -- Seed Task Assignees (Atamaları Şimdi Yapıyoruz!)
