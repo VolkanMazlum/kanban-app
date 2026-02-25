@@ -57,33 +57,32 @@ module.exports = (app, query) => {
                COALESCE((
                 SELECT SUM(
                   CASE
-                    WHEN (
-                      SELECT COUNT(*) FROM task_phases tp2
-                      WHERE tp2.task_id = t2.id
-                      AND tp2.start_date IS NOT NULL
-                      AND tp2.end_date IS NOT NULL
-                    ) > 0 THEN (
-                      SELECT COALESCE(SUM(
-                        CASE
-                          WHEN tp2.status = 'done' THEN 0
-                          WHEN tp2.status = 'active' THEN
-                            GREATEST((tp2.end_date - CURRENT_DATE)::INTEGER, 0) * 8
-                          
-                          ELSE
-                            GREATEST((tp2.end_date - tp2.start_date)::INTEGER, 0) * 8
-                        END
-                      ), 0)
-                      FROM task_phases tp2
-                      WHERE tp2.task_id = t2.id
-                      AND tp2.start_date IS NOT NULL
-                      AND tp2.end_date IS NOT NULL
-                    )
-                    
+                    WHEN t2.estimated_hours IS NOT NULL AND t2.estimated_hours > 0 THEN 
+                      CASE
+                        WHEN (SELECT COUNT(*) FROM task_phases WHERE task_id = t2.id AND start_date IS NOT NULL AND end_date IS NOT NULL) > 0 THEN
+                          t2.estimated_hours - COALESCE((
+                            t2.estimated_hours * (
+                              -- Pay: Sadece 'done' olan fazlarin toplam gün sayisi
+                              (SELECT COALESCE(SUM(GREATEST(end_date - start_date, 1)), 0)::NUMERIC 
+                               FROM task_phases WHERE task_id = t2.id AND status = 'done' AND start_date IS NOT NULL AND end_date IS NOT NULL)
+                              / 
+                              -- Payda: Tüm fazlarin toplam gün sayisi
+                              NULLIF((SELECT SUM(GREATEST(end_date - start_date, 1)) 
+                                      FROM task_phases WHERE task_id = t2.id AND start_date IS NOT NULL AND end_date IS NOT NULL), 0)
+                            )
+                          ), 0)
+                        -- Görevin alt fazi yoksa, görev bitene kadar saatin tamamini al
+                        ELSE t2.estimated_hours
+                      END
+
+                    WHEN (SELECT COUNT(*) FROM task_phases WHERE task_id = t2.id AND start_date IS NOT NULL AND end_date IS NOT NULL) > 0 THEN
+                      (
+                        SELECT COALESCE(SUM(GREATEST(end_date - start_date, 1)), 0) 
+                        FROM task_phases 
+                        WHERE task_id = t2.id AND status != 'done' AND start_date IS NOT NULL AND end_date IS NOT NULL
+                      ) * 8
                     WHEN t2.planned_start IS NOT NULL AND t2.planned_end IS NOT NULL THEN
-                      GREATEST(EXTRACT(EPOCH FROM (t2.planned_end::TIMESTAMPTZ - t2.planned_start::TIMESTAMPTZ)) / 3600, 0)
-                    
-                    WHEN t2.estimated_hours IS NOT NULL THEN
-                      t2.estimated_hours
+                      GREATEST((t2.planned_end::DATE - t2.planned_start::DATE), 1) * 8
                     ELSE 0
                   END
                 )
@@ -103,7 +102,7 @@ module.exports = (app, query) => {
         ) ttl ON ttl.task_id = t.id
         GROUP BY e.id, e.name
       `);
-      const per_employee = empRes.rows.map(r => ({
+        const per_employee = empRes.rows.map(r => ({
         id: r.id, name: r.name,
         total_assigned: parseInt(r.total_assigned, 10),
         new_count: parseInt(r.new_count || 0, 10),
