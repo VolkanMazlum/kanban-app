@@ -10,7 +10,7 @@ const dateField = z.string().nullable().optional()
 const taskSchema = z.object({
   title: z.string().min(1, "Title is required").trim(),
   description: z.string().optional(),
-  topic: z.string().nullable().optional(),
+  topics: z.array(z.string()).optional().default([]),
   deadline: z.string().nullable().optional()
     .refine(val => val === null || !isNaN(Date.parse(val)), {
       message: "Invalid date format"
@@ -35,7 +35,7 @@ const taskSchema = z.object({
 const taskUpdateSchema = z.object({
   title: z.string().min(1, "Title is required").trim().optional(),
   description: z.string().optional(),
-  topic: z.string().nullable().optional(),
+  topics: z.array(z.string()).optional().default([]),
   deadline: z.string().nullable().optional()
     .refine(val => val === null || !isNaN(Date.parse(val)) || val === undefined, {
       message: "Invalid date format"
@@ -64,5 +64,5 @@ const employeeSchema = z.object({
 module.exports = {
   taskSchema,
   taskUpdateSchema,
-  employeeSchema
+  employeeSchema,
 };

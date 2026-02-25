@@ -8,12 +8,18 @@ module.exports = (app, query) => {
       const { assignee_id, status } = req.query;
       
       // YENİ MANTIK: tasks -> task_assignees -> employees şeklinde JOIN yapıyoruz
+      // Ve topics ile phases için alt sorgular (subqueries) kullanıyoruz.
       let sql = `
-      SELECT t.id, t.title, t.description, t.topic, t.deadline, t.planned_start, t.planned_end, t.actual_start, t.actual_end, t.status, t.position, t.created_at, t.updated_at, t.estimated_hours,
+      SELECT t.id, t.title, t.description, t.deadline, t.planned_start, t.planned_end, t.actual_start, t.actual_end, t.status, t.position, t.created_at, t.updated_at, t.estimated_hours,
             COALESCE(
               json_agg(json_build_object('id', e.id, 'name', e.name)) FILTER (WHERE e.id IS NOT NULL),
               '[]'
             ) AS assignees,
+            (
+              SELECT COALESCE(json_agg(tt.topic), '[]')
+              FROM task_topics tt
+              WHERE tt.task_id = t.id
+            ) AS topics,
             (
               SELECT COALESCE(json_agg(json_build_object(
                 'id', tp.id,
@@ -21,7 +27,8 @@ module.exports = (app, query) => {
                 'position', tp.position,
                 'start_date', tp.start_date::TEXT,
                 'end_date', tp.end_date::TEXT,
-                'status', tp.status
+                'status', tp.status,
+                'topic', tp.topic_source
               ) ORDER BY tp.position), '[]')
               FROM task_phases tp
               WHERE tp.task_id = t.id
@@ -56,11 +63,29 @@ module.exports = (app, query) => {
   app.get("/api/tasks/:id", async (req, res) => {
     try {
       const sql = `
-        SELECT t.id, t.title, t.description, t.topic, t.deadline, t.planned_start, t.planned_end, t.actual_start, t.actual_end, t.status, t.position, t.created_at, t.updated_at, t.estimated_hours,
+        SELECT t.id, t.title, t.description, t.deadline, t.planned_start, t.planned_end, t.actual_start, t.actual_end, t.status, t.position, t.created_at, t.updated_at, t.estimated_hours,
                COALESCE(
                  json_agg(json_build_object('id', e.id, 'name', e.name)) FILTER (WHERE e.id IS NOT NULL),
                  '[]'
-               ) AS assignees
+               ) AS assignees,
+               (
+                 SELECT COALESCE(json_agg(tt.topic), '[]')
+                 FROM task_topics tt
+                 WHERE tt.task_id = t.id
+               ) AS topics,
+               (
+                 SELECT COALESCE(json_agg(json_build_object(
+                   'id', tp.id,
+                   'name', tp.name,
+                   'position', tp.position,
+                   'start_date', tp.start_date::TEXT,
+                   'end_date', tp.end_date::TEXT,
+                   'status', tp.status,
+                   'topic',(SELECT pt.topic FROM phase_templates pt WHERE pt.name = tp.name LIMIT 1)
+                 ) ORDER BY tp.position), '[]')
+                 FROM task_phases tp
+                 WHERE tp.task_id = t.id
+               ) AS phases
         FROM tasks t 
         LEFT JOIN task_assignees ta ON t.id = ta.task_id
         LEFT JOIN employees e ON ta.employee_id = e.id
@@ -74,55 +99,35 @@ module.exports = (app, query) => {
   });
 
   app.post("/api/tasks", async (req, res) => {
-    const { title, description, topic, assignee_ids, deadline, status, position,
+    // topic yerine topics dizisi alındı
+    const { title, description, topics, assignee_ids, deadline, status, position,
             planned_start, planned_end, actual_start, actual_end, estimated_hours } = req.body;
     
-    // Validate input using Zod schema
     try {
       const validatedData = taskSchema.parse({
-        title,
-        description,
-        topic,
-        deadline,
-        planned_start,
-        planned_end,
-        actual_start,
-        actual_end,
-        status,
-        position,
-        assignee_ids,
-        estimated_hours
+        title, description, topics, deadline, planned_start, planned_end, actual_start, actual_end, status, position, assignee_ids, estimated_hours
       });
       
-      // Use validated data
       const {
-        title: validatedTitle,
-        description: validatedDescription,
-        topic: validatedTopic,
-        deadline: validatedDeadline,
-        planned_start: validatedPlannedStart,
-        planned_end: validatedPlannedEnd,
-        actual_start: validatedActualStart,
-        actual_end: validatedActualEnd,
-        status: validatedStatus,
-        position: validatedPosition,
-        assignee_ids: validatedAssigneeIds,
-        estimated_hours: validatedEstimatedHours
+        title: validatedTitle, description: validatedDescription, topics: validatedTopics, deadline: validatedDeadline,
+        planned_start: validatedPlannedStart, planned_end: validatedPlannedEnd, actual_start: validatedActualStart,
+        actual_end: validatedActualEnd, status: validatedStatus, position: validatedPosition,
+        assignee_ids: validatedAssigneeIds, estimated_hours: validatedEstimatedHours
       } = validatedData;
     
       try {
-        // TRANSACTION BAŞLANGICI: Ya hepsi kaydedilir, ya da hiçbiri (Hata durumunda)
         await query("BEGIN");
         
-        // 1. Görevi oluştur 
+        // 1. Görevi oluştur (topic sütunu yok!)
         const taskResult = await query(
-          "INSERT INTO tasks (title, description, topic, deadline, planned_start, planned_end, actual_start, actual_end, status, position, estimated_hours) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, $11) RETURNING *",
-          [validatedTitle, validatedDescription || "", validatedTopic || null, validatedDeadline || null,
+          "INSERT INTO tasks (title, description, deadline, planned_start, planned_end, actual_start, actual_end, status, position, estimated_hours) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *",
+          [validatedTitle, validatedDescription || "", validatedDeadline || null,
            validatedPlannedStart || null, validatedPlannedEnd || null, validatedActualStart || null, validatedActualEnd || null,
-           validatedStatus, validatedPosition, validatedData.estimated_hours || null]
+           validatedStatus, validatedPosition, validatedEstimatedHours || null]
         );
         const newTask = taskResult.rows[0];
         newTask.assignees = [];
+        newTask.topics = [];
         
         // 2. Kişileri ara tabloya (task_assignees) kaydet
         if (validatedAssigneeIds && validatedAssigneeIds.length > 0) {
@@ -130,11 +135,17 @@ module.exports = (app, query) => {
             "INSERT INTO task_assignees (task_id, employee_id) SELECT $1, unnest($2::int[])",
             [newTask.id, validatedAssigneeIds]
           );
-          const emps = await query(
-            "SELECT id, name FROM employees WHERE id = ANY($1)",
-            [validatedAssigneeIds]
-          );
+          const emps = await query("SELECT id, name FROM employees WHERE id = ANY($1)", [validatedAssigneeIds]);
           newTask.assignees = emps.rows;
+        }
+
+        // 3. YENİ: Kategorileri ara tabloya (task_topics) kaydet
+        if (validatedTopics && validatedTopics.length > 0) {
+          await query(
+            "INSERT INTO task_topics (task_id, topic) SELECT $1, unnest($2::varchar[])",
+            [newTask.id, validatedTopics]
+          );
+          newTask.topics = validatedTopics;
         }
         
         await query("COMMIT");
@@ -145,7 +156,6 @@ module.exports = (app, query) => {
         res.status(500).json({ error: "Database error" });
       }
     } catch (validationError) {
-      // Handle validation errors
       if (validationError.errors) {
         const errorMessage = validationError.errors.map(err => `${err.path.join('.')}: ${err.message}`).join(', ');
         return res.status(400).json({ error: errorMessage });
@@ -156,40 +166,20 @@ module.exports = (app, query) => {
 
   app.put("/api/tasks/:id", async (req, res) => {
     const { id } = req.params;
-    const { title, description, topic, assignee_ids, deadline, status, position,
+    // topic yerine topics dizisi alındı
+    const { title, description, topics, assignee_ids, deadline, status, position,
             planned_start, planned_end, actual_start, actual_end, estimated_hours } = req.body;
     
-    // Validate input using Zod schema
     try {
       const validatedData = taskUpdateSchema.parse({
-        title,
-        description,
-        topic,
-        deadline,
-        planned_start,
-        planned_end,
-        actual_start,
-        actual_end,
-        status,
-        position,
-        assignee_ids,
-        estimated_hours
+        title, description, topics, deadline, planned_start, planned_end, actual_start, actual_end, status, position, assignee_ids, estimated_hours
       });
       
-      // Use validated data
       const {
-        title: validatedTitle,
-        description: validatedDescription,
-        topic: validatedTopic,
-        deadline: validatedDeadline,
-        planned_start: validatedPlannedStart,
-        planned_end: validatedPlannedEnd,
-        actual_start: validatedActualStart,
-        actual_end: validatedActualEnd,
-        status: validatedStatus,
-        position: validatedPosition,
-        assignee_ids: validatedAssigneeIds,
-        estimated_hours: validatedEstimatedHours
+        title: validatedTitle, description: validatedDescription, topics: validatedTopics, deadline: validatedDeadline,
+        planned_start: validatedPlannedStart, planned_end: validatedPlannedEnd, actual_start: validatedActualStart,
+        actual_end: validatedActualEnd, status: validatedStatus, position: validatedPosition,
+        assignee_ids: validatedAssigneeIds, estimated_hours: validatedEstimatedHours
       } = validatedData;
     
       try {
@@ -202,10 +192,10 @@ module.exports = (app, query) => {
         }
         const t = existing.rows[0];
         
-        // 1. Ana görevi güncelle
+        // 1. Ana görevi güncelle (topic sütunu yok!)
         const taskResult = await query(
-          "UPDATE tasks SET title=$1, description=$2, topic=$3, deadline=$4, planned_start=$5, planned_end=$6, actual_start=$7, actual_end=$8, status=$9, position=$10, estimated_hours=$11 WHERE id=$12 RETURNING *",
-          [validatedTitle ?? t.title, validatedDescription ?? t.description, validatedTopic ?? t.topic,
+          "UPDATE tasks SET title=$1, description=$2, deadline=$3, planned_start=$4, planned_end=$5, actual_start=$6, actual_end=$7, status=$8, position=$9, estimated_hours=$10 WHERE id=$11 RETURNING *",
+          [validatedTitle ?? t.title, validatedDescription ?? t.description,
            validatedDeadline !== undefined ? validatedDeadline : t.deadline,
            validatedPlannedStart !== undefined ? validatedPlannedStart : t.planned_start,
            validatedPlannedEnd !== undefined ? validatedPlannedEnd : t.planned_end,
@@ -216,30 +206,31 @@ module.exports = (app, query) => {
         const updatedTask = taskResult.rows[0];
         updatedTask.assignees = [];
 
-        // 2. Atamaları güncelle (Eğer frontend assignee_ids dizisi gönderdiyse)
+        // 2. Atamaları güncelle
         if (validatedAssigneeIds !== undefined) {
           await query("DELETE FROM task_assignees WHERE task_id = $1", [id]);
-          
           if (validatedAssigneeIds.length > 0) {
-            // for loop yerine unnest
-            await query(
-              "INSERT INTO task_assignees (task_id, employee_id) SELECT $1, unnest($2::int[])",
-              [id, validatedAssigneeIds]
-            );
-            const emps = await query(
-              "SELECT id, name FROM employees WHERE id = ANY($1)",
-              [validatedAssigneeIds]
-            );
+            await query("INSERT INTO task_assignees (task_id, employee_id) SELECT $1, unnest($2::int[])", [id, validatedAssigneeIds]);
+            const emps = await query("SELECT id, name FROM employees WHERE id = ANY($1)", [validatedAssigneeIds]);
             updatedTask.assignees = emps.rows;
           }
-        }else {
-           // Frontend assignee göndermediyse (örneğin sadece status değiştiyse), mevcut assigneeleri getir
-           const existingEmps = await query(`
-             SELECT e.id, e.name FROM employees e
-             JOIN task_assignees ta ON e.id = ta.employee_id
-             WHERE ta.task_id = $1
-           `, [id]);
+        } else {
+           const existingEmps = await query(`SELECT e.id, e.name FROM employees e JOIN task_assignees ta ON e.id = ta.employee_id WHERE ta.task_id = $1`, [id]);
            updatedTask.assignees = existingEmps.rows;
+        }
+
+        // 3. YENİ: Kategorileri (Topics) güncelle
+        if (validatedTopics !== undefined) {
+          await query("DELETE FROM task_topics WHERE task_id = $1", [id]);
+          if (validatedTopics.length > 0) {
+            await query("INSERT INTO task_topics (task_id, topic) SELECT $1, unnest($2::varchar[])", [id, validatedTopics]);
+            updatedTask.topics = validatedTopics;
+          } else {
+            updatedTask.topics = [];
+          }
+        } else {
+           const existingTopics = await query(`SELECT topic FROM task_topics WHERE task_id = $1`, [id]);
+           updatedTask.topics = existingTopics.rows.map(row => row.topic);
         }
 
         await query("COMMIT");
@@ -250,7 +241,6 @@ module.exports = (app, query) => {
         res.status(500).json({ error: "Database error" });
       }
     } catch (validationError) {
-      // Handle validation errors
       if (validationError.errors) {
         const errorMessage = validationError.errors.map(err => `${err.path.join('.')}: ${err.message}`).join(', ');
         return res.status(400).json({ error: errorMessage });
@@ -261,19 +251,13 @@ module.exports = (app, query) => {
 
   app.patch("/api/tasks/:id/status", async (req, res) => {
     const { status } = req.body;
-    
-    // Validate status using Zod
     try {
       const validatedData = z.object({
         status: z.enum(['new', 'process', 'blocked', 'done'])
       }).parse({ status });
-      
       const validatedStatus = validatedData.status;
       
       try {
-        // Status 'process' olduğunda actual_start'i güncelle
-        // Status 'done' olduğunda actual_end'i güncelle
-        // Status değişikliklerinde zaman alanlarını uygun şekilde güncelle
         let sql = "UPDATE tasks SET status=$1";
         const params = [validatedStatus];
         
@@ -282,11 +266,8 @@ module.exports = (app, query) => {
         } else if (validatedStatus === 'done') {
           sql += ", actual_end=NOW()";
         } else if (validatedStatus === 'new') {
-          // Eğer görev done veya process durumundan başka bir duruma geçiyorsa
-          // ve bu durumda actual_end doluysa sıfırla
           sql += ", actual_end=NULL , actual_start=NULL, estimated_hours=NULL";
-        }
-        else if (validatedStatus === 'blocked') {
+        } else if (validatedStatus === 'blocked') {
           sql += ", actual_end=NULL";
         }
         
@@ -296,9 +277,17 @@ module.exports = (app, query) => {
         const result = await query(sql, params);
         if (!result.rows.length) return res.status(404).json({ error: "Task not found" });
         res.json(result.rows[0]);
+
+        if (validatedStatus === 'done') {
+          // İlgili phase'i de done yap
+          await query(`
+            UPDATE task_phases 
+            SET status = 'done', end_date = CURRENT_DATE
+            WHERE task_id = $1 AND status != 'done' AND start_date IS NOT NULL AND end_date IS NULL
+          `, [req.params.id]);
+        }
       } catch (err) { res.status(500).json({ error: "Database error" }); }
     } catch (validationError) {
-      // Handle validation errors
       if (validationError.errors) {
         const errorMessage = validationError.errors.map(err => `${err.path.join('.')}: ${err.message}`).join(', ');
         return res.status(400).json({ error: errorMessage });
@@ -309,7 +298,7 @@ module.exports = (app, query) => {
 
   app.delete("/api/tasks/:id", async (req, res) => {
     try {
-      // ON DELETE CASCADE sayesinde task silinince ara tablodaki kayıtlar otomatik silinir
+      // ON DELETE CASCADE sayesinde task_assignees ve task_topics otomatik silinir
       const result = await query("DELETE FROM tasks WHERE id=$1 RETURNING id", [req.params.id]);
       if (!result.rows.length) return res.status(404).json({ error: "Task not found" });
       res.json({ success: true, id: result.rows[0].id });

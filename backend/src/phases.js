@@ -46,15 +46,16 @@ module.exports = (app, query) => {
       // Yenilerini ekle
       for (const phase of phases) {
         await query(
-          `INSERT INTO task_phases (task_id, name, position, start_date, end_date, status)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+          `INSERT INTO task_phases (task_id, name, position, start_date, end_date, status, topic_source)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             req.params.taskId,
             phase.name,
             phase.position ?? 0,
             phase.start_date || null,
             phase.end_date || null,
-            phase.status || 'pending'
+            phase.status || 'pending',
+            phase.topic_source || null
           ]
         );
       }
@@ -72,21 +73,26 @@ module.exports = (app, query) => {
   });
 
   // Tek phase güncelle
-  app.patch("/api/tasks/:taskId/phases/:id", async (req, res) => {
-    const { start_date, end_date, status } = req.body;
+  app.patch("/api/phases/:id", async (req, res) => {
+    const { id } = req.params;
+    const { status, start_date, end_date } = req.body;
     try {
+      let finalEndDate = end_date;
+      if (status === "done" && !end_date) {
+        finalEndDate = new Date().toISOString().slice(0, 10);
+      }
       const result = await query(
         `UPDATE task_phases 
-         SET start_date = COALESCE($1, start_date),
-             end_date   = COALESCE($2, end_date),
-             status     = COALESCE($3, status)
-         WHERE id = $4 AND task_id = $5 RETURNING *`,
-        [start_date || null, end_date || null, status || null, req.params.id, req.params.taskId]
+        SET status = COALESCE($1, status),
+            start_date = COALESCE($2, start_date),
+            end_date = COALESCE($3, end_date)
+        WHERE id = $4 RETURNING *`,
+        [status || null, start_date || null, finalEndDate || null, id]
       );
       if (!result.rows.length) return res.status(404).json({ error: "Phase not found" });
       res.json(result.rows[0]);
     } catch (err) {
-      console.error("PATCH /tasks/:taskId/phases/:id Error:", err);
+      console.error("PATCH /phases error:", err);
       res.status(500).json({ error: "Database error" });
     }
   });

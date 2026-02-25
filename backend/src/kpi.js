@@ -29,15 +29,23 @@ module.exports = (app, query) => {
         avg_days_to_complete: parseFloat(avg_days_to_complete.rows[0].avg_days || 0).toFixed(2)
       };
 
+      // YENİ: Kategori (Topic) istatistiklerini hesaplama sorgusu
+      // Artık "task_topics" ara tablosu ile "tasks" tablosunu JOIN yaparak sayıyoruz.
       const topicRes = await query(`
-        SELECT topic, COUNT(*) as total, SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done
-        FROM tasks WHERE topic IS NOT NULL GROUP BY topic
+        SELECT tt.topic, 
+               COUNT(t.id) as total, 
+               SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as done
+        FROM task_topics tt
+        JOIN tasks t ON tt.task_id = t.id
+        GROUP BY tt.topic
       `);
       const by_topic = topicRes.rows.map(r => ({
-        topic: r.topic, total: parseInt(r.total, 10), done: parseInt(r.done || 0, 10)
+        topic: r.topic, 
+        total: parseInt(r.total, 10), 
+        done: parseInt(r.done || 0, 10)
       }));
 
-      // YENİ KPI SORGUSU: employees -> task_assignees -> tasks
+      // Çalışan (Employee) Performans Sorgusu (Aynı bırakıldı)
       const empRes = await query(`
         SELECT e.id, e.name,
                COUNT(t.id) as total_assigned,
@@ -47,13 +55,42 @@ module.exports = (app, query) => {
                SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as done_count,
                AVG(EXTRACT(EPOCH FROM (t.actual_end - t.actual_start)) / 3600) as avg_completion_hours,
                COALESCE((
-                SELECT SUM(t2.estimated_hours)
+                SELECT SUM(
+                  CASE
+                    WHEN (
+                      SELECT COUNT(*) FROM task_phases tp2
+                      WHERE tp2.task_id = t2.id
+                      AND tp2.start_date IS NOT NULL
+                      AND tp2.end_date IS NOT NULL
+                    ) > 0 THEN (
+                      SELECT COALESCE(SUM(
+                        CASE
+                          WHEN tp2.status = 'done' THEN 0
+                          WHEN tp2.status = 'active' THEN
+                            GREATEST((tp2.end_date - CURRENT_DATE)::INTEGER, 0) * 8
+                          
+                          ELSE
+                            GREATEST((tp2.end_date - tp2.start_date)::INTEGER, 0) * 8
+                        END
+                      ), 0)
+                      FROM task_phases tp2
+                      WHERE tp2.task_id = t2.id
+                      AND tp2.start_date IS NOT NULL
+                      AND tp2.end_date IS NOT NULL
+                    )
+                    
+                    WHEN t2.planned_start IS NOT NULL AND t2.planned_end IS NOT NULL THEN
+                      GREATEST(EXTRACT(EPOCH FROM (t2.planned_end::TIMESTAMPTZ - t2.planned_start::TIMESTAMPTZ)) / 3600, 0)
+                    
+                    WHEN t2.estimated_hours IS NOT NULL THEN
+                      t2.estimated_hours
+                    ELSE 0
+                  END
+                )
                 FROM tasks t2
                 JOIN task_assignees ta2 ON ta2.task_id = t2.id
                 WHERE ta2.employee_id = e.id
                 AND t2.status != 'done'
-                AND t2.status != 'new'
-                AND t2.estimated_hours IS NOT NULL
               ), 0) AS estimated_workload_hours
         FROM employees e
         LEFT JOIN task_assignees ta ON e.id = ta.employee_id
