@@ -14,6 +14,21 @@ export default function GanttChart({ tasks, employees }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [rangeMonths,  setRangeMonths]  = useState(3);
   const [anchor,       setAnchor]       = useState(0);
+  
+  // State for expanded tasks
+  const [expandedTasks, setExpandedTasks] = useState({}); 
+
+  const toggleTaskExpand = (taskId) => {
+    setExpandedTasks(prev => ({ ...prev, [taskId]: !prev[taskId] }));
+  };
+
+  const toggleAllExpand = (expand) => {
+    const newExpanded = {};
+    if (expand) {
+      filtered.forEach(t => newExpanded[t.id] = true);
+    }
+    setExpandedTasks(newExpanded);
+  };
 
   const windowStart = new Date(today.getFullYear(), today.getMonth() + anchor, 1);
   const windowEnd   = new Date(windowStart.getFullYear(), windowStart.getMonth() + rangeMonths, 0);
@@ -44,7 +59,6 @@ export default function GanttChart({ tasks, employees }) {
     const end   = endDateStr ? new Date(endDateStr) : new Date(fallbackDateStr);
     const s = new Date(Math.max(start, windowStart));
     const e2 = new Date(Math.min(end, windowEnd));
-    //s.setHours(0,0,0,0); e2.setHours(0,0,0,0);
     if (s > e2) return null; 
     const off  = Math.round((s - windowStart) / 86400000);
     const span = Math.max(Math.round((e2 - s) / 86400000) + 1, 1);
@@ -79,10 +93,17 @@ export default function GanttChart({ tasks, employees }) {
           <option value="blocked">Blocked</option>
           <option value="done">Done</option>
         </select>
-        <div style={{display:"flex",background:"#F3F4F6",borderRadius:8,padding:3}}>
+        
+        {/* Expand/Collapse All Butonları */}
+        <div style={{display:"flex", background:"#fff", border:"1.5px solid #E5E7EB", borderRadius:8, overflow:"hidden"}}>
+          <button onClick={() => toggleAllExpand(true)} style={{padding:"7px 10px", background:"transparent", border:"none", borderRight:"1px solid #E5E7EB", cursor:"pointer", fontSize:11, fontWeight:600, color:"#374151"}}>Expand All</button>
+          <button onClick={() => toggleAllExpand(false)} style={{padding:"7px 10px", background:"transparent", border:"none", cursor:"pointer", fontSize:11, fontWeight:600, color:"#374151"}}>Collapse All</button>
+        </div>
+
+        <div style={{display:"flex",background:"#F3F4F6",borderRadius:8,padding:3, marginLeft:"auto"}}>
           {[1,2,3,6].map(m=>(<button key={m} onClick={()=>setRangeMonths(m)} style={selBtn(rangeMonths===m)}>{m}M</button>))}
         </div>
-        <div style={{display:"flex",gap:6,marginLeft:"auto",alignItems:"center"}}>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
           <button onClick={()=>setAnchor(a=>a-rangeMonths)} style={outBtn}>← Prev</button>
           <button onClick={()=>setAnchor(0)} style={{...outBtn,background:"#2563EB",color:"#fff",border:"none",boxShadow:"0 2px 6px rgba(37,99,235,0.3)"}}>Today</button>
           <button onClick={()=>setAnchor(a=>a+rangeMonths)} style={outBtn}>Next →</button>
@@ -124,11 +145,27 @@ export default function GanttChart({ tasks, employees }) {
               const asgn = task.assignees || [];
               const topics = task.topics || [];
               const phases = task.phases || [];
+              const isExpanded = expandedTasks[task.id];
+              const hasTopics = topics.length > 0;
 
               return (
                 <div key={task.id} style={{borderBottom:"1px solid #E5E7EB"}}>
-                  {/* Ana Görev Başlığı */}
-                  <div style={{height:ROW_HEIGHT, display:"flex", alignItems:"center", padding:"0 12px", background:"#FAFAFA", borderBottom: topics.length > 0 ? "1px solid #E5E7EB" : "none"}}>
+                  {/* Ana Görev Başlığı - Tıklanabilir yapıldı */}
+                  <div 
+                    onClick={() => hasTopics && toggleTaskExpand(task.id)}
+                    style={{
+                      height:ROW_HEIGHT, display:"flex", alignItems:"center", padding:"0 12px", 
+                      background:"#FAFAFA", borderBottom: (topics.length > 0 && isExpanded) ? "1px solid #E5E7EB" : "none",
+                      cursor: hasTopics ? "pointer" : "default"
+                    }}
+                  >
+                    {/* Açılır/Kapanır Ok İkonu */}
+                    <div style={{width: 16, display: "flex", justifyContent: "center", marginRight: 4}}>
+                      {hasTopics ? (
+                        <span style={{fontSize: 10, color: "#9CA3AF", transition: "transform 0.2s", transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)"}}>▶</span>
+                      ) : null}
+                    </div>
+
                     <div style={{width:8,height:8,borderRadius:"50%",background:STATUS_COLOR[task.status]||"#9CA3AF",flexShrink:0, marginRight:10}}/>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12,fontWeight:700,color:"#111827",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.title}</div>
@@ -138,11 +175,15 @@ export default function GanttChart({ tasks, employees }) {
                     </div>
                   </div>
 
-                  {/* Sadece Kategori (Topic) Başlıkları - Alt alta faz listesi kaldırıldı */}
-                  {topics.map(topicName => {
+                  {/* Sadece Kategori (Topic) Başlıkları - SADECE EXPANDED İSE GÖRÜNÜR */}
+                  {isExpanded && topics.map(topicName => {
                     const ts = TOPIC_STYLE[topicName] || {bg:"#F3F4F6",text:"#374151"};
-                    const topicPhases = phases.filter(ph => ph.topic === topicName && ph.start_date && ph.end_date);
-                    if (topicPhases.length === 0) return null;
+                    const topicPhases = phases.filter(ph => ph.topic === topicName || ph.topic_source === topicName);
+                    
+                    // Sadece start/end date olanları filtreleyebilir veya hepsini gösterebilirsiniz. 
+                    // Gantt şemasında genelde tarihi olanlar önemlidir.
+                    const validPhases = topicPhases.filter(ph => ph.start_date && ph.end_date);
+                    if (validPhases.length === 0) return null;
 
                     return (
                       <div key={topicName} style={{height:TOPIC_ROW_HEIGHT, display:"flex", alignItems:"center", paddingLeft:24, background:ts.bg, borderBottom:"1px solid #fff"}}>
@@ -179,12 +220,13 @@ export default function GanttChart({ tasks, employees }) {
                 const phases = task.phases || [];
                 const bc = STATUS_COLOR[task.status] || "#9CA3AF";
                 const isDone = task.status === "done";
+                const isExpanded = expandedTasks[task.id];
 
                 return (
                   <div key={task.id} style={{borderBottom:"1px solid #E5E7EB"}}>
                     
                     {/* Ana Görev Barı */}
-                    <div style={{height:ROW_HEIGHT, position:"relative", background:"#FAFAFA", borderBottom: topics.length > 0 ? "1px solid #E5E7EB" : "none"}}>
+                    <div style={{height:ROW_HEIGHT, position:"relative", background:"#FAFAFA", borderBottom: (topics.length > 0 && isExpanded) ? "1px solid #E5E7EB" : "none"}}>
                       {taskBp && (
                         <div style={{
                           position:"absolute", left:taskBp.left, width:taskBp.width, top:"50%", transform:"translateY(-50%)",
@@ -196,16 +238,14 @@ export default function GanttChart({ tasks, employees }) {
                       )}
                     </div>
 
-                    {/* Alt Faz Barları - TEK SATIRDA YAN YANA */}
-                    {topics.map(topicName => {
-                      const topicPhases = phases.filter(ph => ph.topic === topicName && ph.start_date && ph.end_date).sort((a,b)=>a.position-b.position);
+                    {/* Alt Faz Barları - SADECE EXPANDED İSE GÖRÜNÜR */}
+                    {isExpanded && topics.map(topicName => {
+                      const topicPhases = phases.filter(ph => (ph.topic === topicName || ph.topic_source === topicName) && ph.start_date && ph.end_date).sort((a,b)=>a.position-b.position);
                       if (topicPhases.length === 0) return null;
 
                       return (
-                        // Her kategori için TEK bir satır oluşturuyoruz
                         <div key={topicName} style={{height:TOPIC_ROW_HEIGHT, position:"relative", borderBottom:"1px solid #F9FAFB", background:"rgba(249, 250, 251, 0.5)"}}>
                           
-                          {/* O kategoriye ait tüm fazları bu tek satırın içine yan yana yerleştiriyoruz */}
                           {topicPhases.map(ph => {
                             const phBp = getBarProps(ph.start_date, ph.end_date, task.deadline);
                             if (!phBp) return null;
@@ -217,10 +257,9 @@ export default function GanttChart({ tasks, employees }) {
                                 position:"absolute", left:phBp.left, width:phBp.width, top:"50%", transform:"translateY(-50%)",
                                 height: 22, borderRadius: 4, background: phColor, opacity: 0.9,
                                 display: "flex", alignItems: "center", padding: "0 6px",
-                                overflow: "hidden", cursor: "default",
+                                overflow: "hidden", cursor: "help",
                                 border: "1px solid rgba(255,255,255,0.3)", boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
                               }}>
-                                {/* YENİ: İsimleri Barın İçine Yazdırma Kısmı */}
                                 <span style={{fontSize: 9, color: "#fff", fontWeight: 600, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow:"hidden"}}>
                                   {ph.status==="done" && "✓ "}{ph.name}
                                 </span>

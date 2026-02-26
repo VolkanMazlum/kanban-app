@@ -103,10 +103,17 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
           <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600,letterSpacing:"0.05em"}}>PROJECT TYPE</label>
           <select value={form.label} onChange={e=>set("label", e.target.value)} style={{...inp, cursor:"pointer"}}>
             <option value="">-- Select Type --</option>
-            <option value="Residential">🏠 Residential </option>
-            <option value="Commercial">🏢 Commercial </option>
-            <option value="Industrial">🏭 Industrial </option>
-            <option value="Public">🏛️ Public </option>
+            <option value="Residential"> Residential </option>
+            <option value="Health"> Health </option>
+            <option value="Industrial"> Industrial </option>
+            <option value="Sports"> Sports </option>
+            <option value="Offices"> Offices </option>
+            <option value="Hotel"> Hotel </option>
+            <option value="Student Housing"> Student Housing </option>
+            <option value="Data Center"> Data Center </option>
+            <option value="Education"> Education </option>
+            <option value="Retail"> Retail </option>
+            <option value="Public"> Public </option>
           </select>
         </div>
         
