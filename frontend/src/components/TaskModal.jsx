@@ -151,10 +151,7 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
             <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600,letterSpacing:"0.05em"}}>DEADLINE</label>
             <input type="date" value={form.deadline} onChange={e=>set("deadline",e.target.value)} style={inp} />
           </div>
-          <div>
-            <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600,letterSpacing:"0.05em"}}>ESTIMATED HOURS</label>
-            <input type="number" min="0" step="0.5" value={form.estimated_hours} onChange={e => set("estimated_hours", e.target.value ? parseFloat(e.target.value) : null)} style={inp} placeholder="e.g. 24" />
-          </div>
+          
         </div>
         
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
