@@ -215,38 +215,46 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
                     {/* Faz Kutucukları */}
                     <div style={{ padding: "8px", display: "flex", flexDirection: "column", gap: 8, background: "#F9FAFB" }}>
                       {topicPhases.map(({ ph, idx }) => (
-                        <div key={idx} style={{ background: "#fff", borderRadius: 6, padding: "10px", border: "1px solid #E5E7EB", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
+                        <div key={idx} style={{background:"#fff",borderRadius:6,padding:"10px",border:"1px solid #E5E7EB"}}>
                           
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{ph.name}</span>
-                            <select value={ph.status} onChange={e => updatePhase(idx, "status", e.target.value)} style={{ ...inp, width: "auto", padding: "4px 8px", fontSize: 11 }}>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                            <span style={{fontSize:12,fontWeight:600,color:"#374151"}}>{ph.name}</span>
+                            <select value={ph.status} onChange={e=>updatePhase(idx,"status",e.target.value)} style={{...inp,width:"auto",padding:"4px 8px",fontSize:11}}>
                               <option value="pending">Pending</option>
                               <option value="active">Active</option>
                               <option value="done">Done</option>
                             </select>
                           </div>
                           
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:8}}>
                             <div>
-                              <label style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 600 }}>START</label>
-                              <input type="date" value={ph.start_date} onChange={e => updatePhase(idx, "start_date", e.target.value)} style={{ ...inp, marginTop: 4, padding: "6px 10px" }} />
+                              <label style={{fontSize:10,color:"#9CA3AF",fontWeight:600}}>START</label>
+                              <input type="date" value={ph.start_date} onChange={e=>updatePhase(idx,"start_date",e.target.value)} style={{...inp,marginTop:4,padding:"6px 10px"}} />
                             </div>
                             <div>
-                              <label style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 600 }}>END</label>
-                              <input type="date" value={ph.end_date} onChange={e => updatePhase(idx, "end_date", e.target.value)} style={{ ...inp, marginTop: 4, padding: "6px 10px" }} />
+                              <label style={{fontSize:10,color:"#9CA3AF",fontWeight:600}}>END</label>
+                              <input type="date" value={ph.end_date} onChange={e=>updatePhase(idx,"end_date",e.target.value)} style={{...inp,marginTop:4,padding:"6px 10px"}} />
                             </div>
+                          </div>
 
-                            {/* Faz Not Alanı */}
-                            <div style={{ marginTop: 8 }}>
-                              <input 
-                                type="text" 
-                                value={ph.note || ""} 
-                                onChange={e => updatePhase(idx, "note", e.target.value)} 
-                                style={{ ...inp, padding: "4px 8px", fontSize: 10, width: "100%", background: "#F3F4F6", border: "1px solid #E5E7EB" }} 
-                                placeholder="Add a note for this phase... (Optional)" 
-                              />
-                            </div>
+                          <div style={{marginBottom:8}}>
+                            <label style={{fontSize:10,color:"#9CA3AF",fontWeight:600}}>ESTIMATED HOURS</label>
+                            <input
+                              type="number" min="0" step="0.5"
+                              value={ph.estimated_hours || ""}
+                              onChange={e=>updatePhase(idx,"estimated_hours", e.target.value ? parseFloat(e.target.value) : null)}
+                              style={{...inp,marginTop:4,padding:"6px 10px"}}
+                              placeholder="e.g. 16"
+                            />
+                          </div>
 
+                          <div>
+                            <label style={{fontSize:10,color:"#9CA3AF",fontWeight:600,marginBottom:4,display:"block"}}>ASSIGNEES</label>
+                            <AssigneePicker
+                              employees={employees}
+                              selectedIds={ph.assignee_ids || (ph.assignees || []).map(a=>a.id)}
+                              onChange={v=>updatePhase(idx,"assignee_ids",v)}
+                            />
                           </div>
                         </div>
                       ))}

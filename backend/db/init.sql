@@ -188,6 +188,14 @@ ON CONFLICT DO NOTHING;
 
 
 
+ALTER TABLE task_phases ADD COLUMN IF NOT EXISTS estimated_hours NUMERIC(5,1);
+
+CREATE TABLE IF NOT EXISTS phase_assignees (
+  phase_id INTEGER REFERENCES task_phases(id) ON DELETE CASCADE,
+  employee_id INTEGER REFERENCES employees(id) ON DELETE CASCADE,
+  PRIMARY KEY (phase_id, employee_id)
+); 
+
 
 CREATE OR REPLACE FUNCTION update_task_timeframes()
 RETURNS TRIGGER AS $$

@@ -27,7 +27,14 @@ module.exports = (app, query) => {
                 'end_date', tp.end_date::TEXT,
                 'status', tp.status,
                 'topic', tp.topic_source,
-                'note', tp.note
+                'note', tp.note,
+                'estimated_hours', tp.estimated_hours,
+                'assignees', COALESCE((
+                  SELECT json_agg(json_build_object('id', e.id, 'name', e.name))
+                  FROM phase_assignees pa
+                  JOIN employees e ON e.id = pa.employee_id
+                  WHERE pa.phase_id = tp.id
+                ), '[]')
               ) ORDER BY tp.position), '[]')
               FROM task_phases tp
               WHERE tp.task_id = t.id
