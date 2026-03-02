@@ -16,7 +16,6 @@ module.exports = (app, query) => {
     try {
       const result = await query(`
         SELECT tp.*,
-          -- Mevcut objeli yapı (Görsel olarak isimleri göstermek isterseniz diye kalsın)
           COALESCE((
             SELECT json_agg(json_build_object('id', e.id, 'name', e.name))
             FROM phase_assignees pa

@@ -106,7 +106,9 @@ module.exports = (app, query) => {
           SELECT SUM(
             CASE
               WHEN tp.status = 'done' THEN 0
-              WHEN tp.estimated_hours IS NOT NULL AND tp.estimated_hours > 0 THEN tp.estimated_hours
+              WHEN tp.estimated_hours IS NOT NULL AND tp.estimated_hours > 0 THEN 
+                GREATEST((LEAST(tp.end_date, $2::DATE) - GREATEST(tp.start_date, $1::DATE)), 0)
+                * (tp.estimated_hours / GREATEST((tp.end_date - tp.start_date), 1)::NUMERIC)
               WHEN tp.status = 'active' THEN
                 GREATEST(
                   (LEAST(tp.end_date, $2::DATE) - GREATEST(tp.start_date, $1::DATE)), 0
