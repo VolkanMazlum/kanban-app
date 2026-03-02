@@ -1,8 +1,7 @@
 const BASE = "/api";
-
 // Get credentials from environment variables (in production, these would be set on the server)
-const AUTH_USERNAME = import.meta.env.VITE_AUTH_USERNAME || 'admin';
-const AUTH_PASSWORD = import.meta.env.VITE_AUTH_PASSWORD || 'secure_password_123';
+const AUTH_USERNAME = import.meta.env.VITE_AUTH_USERNAME ;
+const AUTH_PASSWORD = import.meta.env.VITE_AUTH_PASSWORD ;
 
 // Encode credentials for Basic Auth
 const encodeCredentials = (username, password) => {
