@@ -211,29 +211,6 @@ INSERT INTO employees (name) VALUES
   ('Andrea C.')
 ON CONFLICT DO NOTHING;
 
--- Seed Task Assignees (Atamaları Şimdi Yapıyoruz!)
--- Mantık: (Görev ID, Çalışan ID)
-INSERT INTO task_assignees (task_id, employee_id) VALUES
-  (1, 1),       -- Görev 1, Marco'ya
-  (2, 2),       -- Görev 2, Sofia'ya
-  (3, 3),       -- Görev 3, Luca'ya
-  (4, 4), (4, 5), -- Görev 4 (HVAC), hem Giulia hem Andrea'ya (Çoklu Atama)
-  (5, 5),       -- Görev 5, Andrea'ya
-  (6, 2), (6, 3), -- Görev 6, Sofia ve Luca'ya (Çoklu Atama)
-  (7, 1),
-  (8, 3),
-  (9, 4),
-  (10, 1), (10, 5), -- Görev 10, Marco ve Andrea'ya
-  (11, 1),
-  (12, 2)
-ON CONFLICT DO NOTHING;
--- Seed Task Time Logs (process statusundaki görevler için)
-INSERT INTO task_time_logs (task_id, employee_id, started_at) VALUES
-  (1, 1, NOW()),   -- MV Panel Installation, Marco
-  (5, 5, NOW()),   -- Project Schedule Update, Andrea
-  (9, 4, NOW())    -- Cable Tray Installation, Giulia
-ON CONFLICT DO NOTHING;
-
 -- Sequence (Otomatik artan ID) ayarını güncelle
 -- Manuel ID verdiğimiz için sequence'i en yüksek ID'nin bir fazlasına ayarlamalıyız.
 SELECT setval('tasks_id_seq', (SELECT MAX(id) FROM tasks));
