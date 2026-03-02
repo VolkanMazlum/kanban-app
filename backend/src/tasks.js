@@ -350,6 +350,13 @@ module.exports = (app, query) => {
             WHERE task_id = $1 
           `, [req.params.id]);
         }
+        else if (validatedStatus === 'process') {
+          await query(`
+            UPDATE task_phases 
+            SET status = 'pending'
+            WHERE task_id = $1 
+          `, [req.params.id]);
+        }
         
         res.json(result.rows[0]);
 
