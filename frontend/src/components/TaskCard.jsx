@@ -100,7 +100,7 @@ export default function TaskCard({ task, onDragStart, onEdit, onDelete }) {
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {topics.map(topicName => {
                   const topicPhases = phases.filter(ph => ph.topic === topicName).sort((a,b)=>a.position-b.position);
-                  if (topicPhases.length === 0) return null;
+                  if (topicPhases.length === 0 ) return null;
                   
                   const ts = TOPIC_STYLE[topicName] || { text: "#374151" };
 
@@ -114,6 +114,7 @@ export default function TaskCard({ task, onDragStart, onEdit, onDelete }) {
                       {/* O Kategoriye Ait Fazlar */}
                       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                         {topicPhases.map(ph => {
+                          if (ph.status === "pending") return null; 
                           const phColor = ph.status==="done"?"#059669":ph.status==="active"?"#F59E0B":"#6B7280";
                           return (
                             <div key={ph.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
