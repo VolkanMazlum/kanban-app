@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS task_topics (
   topic VARCHAR(100) NOT NULL,
   PRIMARY KEY (task_id, topic)
 );
+CREATE TABLE IF NOT EXISTS settings (
+  key VARCHAR(100) PRIMARY KEY, 
+  value TEXT NOT NULL
+); 
+INSERT INTO settings (key, value) VALUES ('max_capacity', '250')  ON CONFLICT DO NOTHING;
 
 -- Index for querying tasks by status
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);

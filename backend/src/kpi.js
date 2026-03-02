@@ -22,8 +22,14 @@ module.exports = (app, query) => {
         SELECT COUNT(*) as count FROM tasks 
         WHERE status = 'done' AND EXTRACT(MONTH FROM updated_at) = EXTRACT(MONTH FROM CURRENT_DATE)
       `);
+      const working_employees_res = await query(`
+        SELECT COUNT(DISTINCT employee_id) as count FROM task_assignees
+        WHERE task_id IN (SELECT id FROM tasks WHERE status != 'done')
+      `);
+      const totalEmployeesCountRes = await query(`SELECT COUNT(*) as count FROM employees`);
       const summary = {
         total: totalTasks,
+        working_employees_res: `${working_employees_res.rows[0].count} / ${totalEmployeesCountRes.rows[0].count}`,
         completed_month: totalTasks > 0 ? `${((completed_month_avg.rows[0].count / totalTasks) * 100).toFixed(2)}%` : "0%",// Yüzde olarak tamamlanma oranı
         overdue: overdue,
         avg_days_to_complete: parseFloat(avg_days_to_complete.rows[0].avg_days || 0).toFixed(2)

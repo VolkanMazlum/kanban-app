@@ -1,12 +1,30 @@
 import { TOPIC_STYLE } from "../constants/index.js";
 import Avatar from "./Avatar.jsx";
-
+import { useState, useEffect } from "react";
+import * as api from "../api.js";
 export default function KPIDashboard({ kpi, employees }) {
   if (!kpi) return <div style={{padding:40,textAlign:"center",color:"#9CA3AF",fontFamily:"'Inter',sans-serif",fontSize:14}}>Loading KPIs...</div>;
 
   const { summary, by_status, by_topic = [], per_employee, trend } = kpi;
   const maxTrend = Math.max(...trend.map(t=>t.completed), 1);
-  const MAX_CAPACITY = parseInt(import.meta.env.VITE_MAX_CAPACITY || "250");
+  const [maxCapacity, setMaxCapacity] = useState(250);
+  const [editingCapacity, setEditingCapacity] = useState(false);
+  const [tempCapacity, setTempCapacity] = useState(250);
+
+  useEffect(() => {
+    api.getSettings().then(s => {
+      const val = parseInt(s.max_capacity || "250");
+      setMaxCapacity(val);
+      setTempCapacity(val);
+    }).catch(console.error);
+  }, []);
+
+  const handleCapacitySave = async () => {
+    await api.updateSetting("max_capacity", String(tempCapacity));
+    setMaxCapacity(tempCapacity);
+    setEditingCapacity(false);
+  };
+  const MAX_CAPACITY = maxCapacity;
 
   const cards = [
     { icon:"📋", label:"Total Tasks",        val: summary.total,                color:"#2563EB", bg:"#EFF6FF" },
@@ -16,7 +34,7 @@ export default function KPIDashboard({ kpi, employees }) {
     { icon:"⏰", label:"Overdue",             val: summary.overdue,              color:"#EA580C", bg:"#FFF7ED" },
     { icon:"📅", label:"Avg. Days to Done",   val:`${summary.avg_days_to_complete||0}d`, color:"#0369A1", bg:"#E0F2FE" },
     { icon:"⏱️", label:"Total Est. Hours",    val: per_employee.reduce((sum,emp)=>sum+(emp.estimated_workload_hours||0),0).toFixed(0), color:"#7C3AED", bg:"#F5F3FF" },
-    { icon:"👥", label:"Team Size",           val: employees.length,             color:"#374151", bg:"#F9FAFB" },
+    { icon:"👥", label:"Team Size",           val: summary.working_employees_res,             color:"#374151", bg:"#F9FAFB" },
   ];
 
   return (
@@ -24,6 +42,30 @@ export default function KPIDashboard({ kpi, employees }) {
       <div style={{marginBottom:24}}>
         <h2 style={{fontSize:22,fontWeight:700,color:"#111827",margin:"0 0 4px"}}>Performance Dashboard</h2>
         <p style={{color:"#6B7280",margin:0,fontSize:14}}>Company-wide KPIs and hourly workload — TEKSER S.R.L.</p>
+      </div>
+      
+      
+      <div style={{padding:"18px 24px",borderBottom:"1px solid #F3F4F6",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <h3 style={{fontSize:14,fontWeight:700,color:"#111827",margin:0}}>Team Workload</h3>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {editingCapacity ? (
+            <>
+              <input type="number" value={tempCapacity}
+                onChange={e=>setTempCapacity(parseInt(e.target.value))}
+                style={{width:70,border:"1.5px solid #2563EB",borderRadius:6,padding:"4px 8px",fontSize:12,textAlign:"center"}}
+              />
+              <button onClick={handleCapacitySave} style={{background:"#2563EB",color:"#fff",border:"none",borderRadius:6,padding:"4px 10px",fontSize:12,cursor:"pointer",fontWeight:600}}>Save</button>
+              <button onClick={()=>setEditingCapacity(false)} style={{background:"#F3F4F6",color:"#374151",border:"none",borderRadius:6,padding:"4px 10px",fontSize:12,cursor:"pointer"}}>Cancel</button>
+            </>
+          ) : (
+            <span onClick={()=>setEditingCapacity(true)}
+              style={{fontSize:12,color:"#6B7280",cursor:"pointer",padding:"4px 8px",borderRadius:6,border:"1px dashed #E5E7EB"}}
+              title="Click to edit"
+            >
+              {employees.length} members · Max <strong>{MAX_CAPACITY}h</strong>/person ✏️
+            </span>
+          )}
+        </div>
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:24}}>

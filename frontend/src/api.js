@@ -48,3 +48,8 @@ export const updatePhase        = (taskId, id, data) => req(`/tasks/${taskId}/ph
   method: "PATCH",
   body: JSON.stringify(data)
 });
+export const getSettings        = () => req("/settings");
+export const updateSetting       = (key, value) => req(`/settings/${key}`, {
+  method: "PATCH",
+  body: JSON.stringify({ value })
+});
