@@ -59,65 +59,7 @@ module.exports = (app, query) => {
                SUM(CASE WHEN t.status = 'process' THEN 1 ELSE 0 END) as in_process,
                SUM(CASE WHEN t.status = 'blocked' THEN 1 ELSE 0 END) as blocked,
                SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as done_count,
-               AVG(EXTRACT(EPOCH FROM (t.actual_end - t.actual_start)) / 3600) as avg_completion_hours,
-               COALESCE((
-                SELECT SUM(hours) FROM (
-                  -- Phase assignee'si olan phase'ler
-                  SELECT 
-                    CASE
-                      WHEN tp.status = 'done' THEN 0
-                      WHEN t2.estimated_hours IS NOT NULL AND t2.estimated_hours > 0 THEN 
-                      CASE
-                        WHEN (SELECT COUNT(*) FROM task_phases WHERE task_id = t2.id AND start_date IS NOT NULL AND end_date IS NOT NULL) > 0 THEN
-                          t2.estimated_hours - COALESCE((
-                            t2.estimated_hours * (
-                              -- Pay: Sadece 'done' olan fazlarin toplam gün sayisi
-                              (SELECT COALESCE(SUM(GREATEST(end_date - start_date, 1)), 0)::NUMERIC 
-                               FROM task_phases WHERE task_id = t2.id AND status = 'done' AND start_date IS NOT NULL AND end_date IS NOT NULL)
-                              / 
-                              -- Payda: Tüm fazlarin toplam gün sayisi
-                              NULLIF((SELECT SUM(GREATEST(end_date - start_date, 1)) 
-                                      FROM task_phases WHERE task_id = t2.id AND start_date IS NOT NULL AND end_date IS NOT NULL), 0)
-                            )
-                          ), 0)
-                        -- Görevin alt fazi yoksa, görev bitene kadar saatin tamamini al
-                        ELSE t2.estimated_hours
-                      END
-
-                      WHEN tp.status = 'active' THEN
-                        GREATEST((LEAST(tp.end_date, CURRENT_DATE + 30) - CURRENT_DATE), 0) * 8
-                      ELSE
-                        GREATEST((LEAST(tp.end_date, CURRENT_DATE + 30) - GREATEST(tp.start_date, CURRENT_DATE)), 0) * 8
-                    END AS hours
-                  FROM task_phases tp
-                  JOIN phase_assignees pa ON pa.phase_id = tp.id
-                  JOIN tasks t2 ON t2.id = tp.task_id
-                  WHERE pa.employee_id = e.id
-                  AND t2.status != 'done'
-                  AND tp.start_date IS NOT NULL
-                  AND tp.end_date IS NOT NULL
-
-                  UNION ALL
-
-                  -- Phase assignee'si olmayan task'lar için eski hesap
-                  SELECT
-                    CASE
-                      WHEN t2.estimated_hours IS NOT NULL AND t2.estimated_hours > 0 THEN t2.estimated_hours
-                      WHEN t2.planned_start IS NOT NULL AND t2.planned_end IS NOT NULL THEN
-                        GREATEST((LEAST(t2.planned_end::DATE, CURRENT_DATE + 30) - GREATEST(t2.planned_start::DATE, CURRENT_DATE)), 0) * 8
-                      ELSE 0
-                    END AS hours
-                  FROM tasks t2
-                  JOIN task_assignees ta2 ON ta2.task_id = t2.id
-                  WHERE ta2.employee_id = e.id
-                  AND t2.status != 'done'
-                  AND NOT EXISTS (
-                    SELECT 1 FROM task_phases tp2
-                    JOIN phase_assignees pa2 ON pa2.phase_id = tp2.id
-                    WHERE tp2.task_id = t2.id AND pa2.employee_id = e.id
-                  )
-                ) workload_data
-              ), 0) AS estimated_workload_hours
+               AVG(EXTRACT(EPOCH FROM (t.actual_end - t.actual_start)) / 3600) as avg_completion_hours
         FROM employees e
         LEFT JOIN task_assignees ta ON e.id = ta.employee_id
         LEFT JOIN tasks t ON ta.task_id = t.id
@@ -137,7 +79,6 @@ module.exports = (app, query) => {
         blocked: parseInt(r.blocked || 0, 10),
         done_count: parseInt(r.done_count || 0, 10),
         avg_completion_hours: parseFloat(r.avg_completion_hours || 0).toFixed(2),
-        estimated_workload_hours: parseFloat(r.estimated_workload_hours || 0)
       }));
 
       const trend = [{ month: "Recent", completed: by_status.done }];

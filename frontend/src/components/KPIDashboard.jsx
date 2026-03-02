@@ -137,7 +137,7 @@ useEffect(() => {
     { icon:"🚫", label:"Blocked",             val: by_status.blocked||0,         color:"#DC2626", bg:"#FEF2F2" },
     { icon:"⏰", label:"Overdue",             val: summary.overdue,              color:"#EA580C", bg:"#FFF7ED" },
     { icon:"📅", label:"Avg. Days to Done",   val:`${summary.avg_days_to_complete||0}d`, color:"#0369A1", bg:"#E0F2FE" },
-    { icon:"⏱️", label:"Total Est. Hours",    val: per_employee.reduce((sum,emp)=>sum+(emp.estimated_workload_hours||0),0).toFixed(0), color:"#7C3AED", bg:"#F5F3FF" },
+    { icon:"⏱️", label:"Total Est. Hours",    val: monthlyData ? monthlyData.employees.reduce((sum,emp)=>sum+parseFloat(emp.phase_hours||0),0).toFixed(0) : 0, color:"#7C3AED", bg:"#F5F3FF" },
     { icon:"👥", label:"Team Size",           val: summary.working_employees_res,             color:"#374151", bg:"#F9FAFB" },
   ];
 
@@ -223,62 +223,6 @@ useEffect(() => {
         </div>
       </div>
 
-      <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",overflow:"hidden"}}>
-        <div style={{padding:"18px 24px",borderBottom:"1px solid #F3F4F6",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <h3 style={{fontSize:14,fontWeight:700,color:"#111827",margin:0}}>Team Workload</h3>
-          <span style={{fontSize:12,color:"#9CA3AF"}}>{employees.length} members (Max {MAX_CAPACITY} hours/person)</span>
-        </div>
-        <table style={{width:"100%",borderCollapse:"collapse"}}>
-          <thead>
-            <tr style={{background:"#F9FAFB"}}>
-              {["Team Member","Workload (Hours)","New","In Progress","Blocked","Done","Total"].map(h=>(
-                <th key={h} style={{padding:"10px 16px",fontSize:11,fontWeight:700,color:"#6B7280",textAlign:h==="Team Member"?"left":"center",letterSpacing:"0.05em"}}>{h.toUpperCase()}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {per_employee.map((emp,i)=>{
-              const estimatedHours = emp.estimated_workload_hours;
-              const capacityPct = Math.round((estimatedHours/MAX_CAPACITY)*100);
-              const displayPct = capacityPct>100?"100+":capacityPct;
-              const pct = Math.min(capacityPct,100);
-              const barColor = pct>75?"#DC2626":pct>40?"#D97706":"#059669";
-              const statusVals = [emp.new_count,emp.in_process,emp.blocked,emp.done_count,emp.total_assigned];
-              const statusColors = ["#2563EB","#059669","#DC2626","#7C3AED","#111827"];
-              return (
-                <tr key={emp.id} style={{borderTop:"1px solid #F3F4F6"}}>
-                  <td style={{padding:"12px 16px"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10}}>
-                      <Avatar name={emp.name} size={32} idx={i} />
-                      <div>
-                        <div style={{fontSize:13,fontWeight:600,color:"#111827"}}>{emp.name}</div>
-                        {emp.role&&<div style={{fontSize:11,color:"#9CA3AF"}}>{emp.role}</div>}
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{padding:"12px 16px",width:160}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{flex:1,background:"#F3F4F6",borderRadius:4,height:8}}>
-                        <div style={{background:barColor,width:`${pct}%`,height:"100%",borderRadius:4}} />
-                      </div>
-                      <span style={{fontSize:11,color:barColor,fontWeight:700,width:32}}>{displayPct}%</span>
-                    </div>
-                    <div style={{fontSize:10,color:"#6B7280",marginTop:2}}>{Math.round(estimatedHours)}h</div>
-                  </td>
-                  {statusVals.map((v,ci)=>(
-                    <td key={ci} style={{padding:"12px 16px",textAlign:"center"}}>
-                      <span style={{fontSize:14,fontWeight:v>0?700:400,color:v>0?statusColors[ci]:"#D1D5DB"}}>{v}</span>
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-
-      
       {/* ── Aylık Workload Section ── */}
       <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",overflow:"hidden",marginTop:20}}>
         
