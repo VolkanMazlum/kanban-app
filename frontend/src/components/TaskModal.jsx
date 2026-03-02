@@ -31,6 +31,9 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
           ...ph,
           start_date: ph.start_date?.slice(0, 10) || "",
           end_date: ph.end_date?.slice(0, 10) || "",
+          assignee_ids: ph.assignee_ids || [], // Eksik gelse bile boş dizi yap, silinmesin!
+          note: ph.note || "",
+          estimated_hours: ph.estimated_hours || ""
         })));
       }).catch(console.error);
     }
@@ -247,6 +250,16 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
                               placeholder="e.g. 16"
                             />
                           </div>
+                          {/* Faz Not Alanı */}
+                            <div style={{ marginTop: 8 }}>
+                              <input 
+                                type="text" 
+                                value={ph.note || ""} 
+                                onChange={e => updatePhase(idx, "note", e.target.value)} 
+                                style={{ ...inp, padding: "4px 8px", fontSize: 10, width: "100%", background: "#F3F4F6", border: "1px solid #E5E7EB" }} 
+                                placeholder="Add a note for this phase... (Optional)" 
+                              />
+                            </div>
 
                           <div>
                             <label style={{fontSize:10,color:"#9CA3AF",fontWeight:600,marginBottom:4,display:"block"}}>ASSIGNEES</label>
@@ -260,7 +273,11 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
                       ))}
                     </div>
                   </div>
+                  
+                  
                 );
+
+                
               })}
             </div>
           </div>

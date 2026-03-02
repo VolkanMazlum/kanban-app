@@ -16,12 +16,20 @@ module.exports = (app, query) => {
     try {
       const result = await query(`
         SELECT tp.*,
+          -- Mevcut objeli yapı (Görsel olarak isimleri göstermek isterseniz diye kalsın)
           COALESCE((
             SELECT json_agg(json_build_object('id', e.id, 'name', e.name))
             FROM phase_assignees pa
             JOIN employees e ON e.id = pa.employee_id
             WHERE pa.phase_id = tp.id
-          ), '[]') AS assignees
+          ), '[]') AS assignees,
+          
+          COALESCE((
+            SELECT array_agg(pa.employee_id)
+            FROM phase_assignees pa
+            WHERE pa.phase_id = tp.id
+          ), '{}') AS assignee_ids
+          
         FROM task_phases tp
         WHERE tp.task_id = $1
         ORDER BY tp.position
@@ -39,11 +47,12 @@ module.exports = (app, query) => {
       if (phases && phases.length > 0) {
         for (const ph of phases) {
           const result = await query(
-            `INSERT INTO task_phases (task_id, name, position, start_date, end_date, status, topic_source, estimated_hours)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+            `INSERT INTO task_phases (task_id, name, position, start_date, note, end_date, status, topic_source, estimated_hours)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
             [
               taskId, ph.name, ph.position ?? 0,
-              ph.start_date || null, ph.end_date || null,
+              ph.start_date || null, ph.note || null,
+              ph.end_date || null,
               ph.status || "pending", ph.topic_source || null,
               ph.estimated_hours || null
             ]

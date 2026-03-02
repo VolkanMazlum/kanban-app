@@ -2,6 +2,91 @@ import { TOPIC_STYLE } from "../constants/index.js";
 import Avatar from "./Avatar.jsx";
 import { useState, useEffect } from "react";
 import * as api from "../api.js";
+
+
+function MiniGantt({ phases, monthStart, monthEnd }) {
+  const start  = new Date(monthStart);
+  const end    = new Date(monthEnd);
+  start.setHours(0,0,0,0);
+  end.setHours(0,0,0,0);
+  const totalDays = Math.round((end - start) / 86400000) + 1;
+
+  const TOPIC_COLOR = {
+    "MEP":"#2563EB","ENERGY":"#059669","SUSTAINABILITY":"#0891B2",
+    "ACUSTIC":"#7C3AED","VVF":"#DC2626","STRUCTURE":"#D97706",
+    "GEOTHERMAL":"#065F46","HYDRAULIC INVARIANCE":"#0369A1",
+    "CONTINUOUS COMMISSIONING":"#6D28D9",
+  };
+
+  // Gün başlıkları
+  const days = [];
+  const cur = new Date(start);
+  while (cur <= end) {
+    days.push(new Date(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  return (
+    <div style={{padding:"12px 16px"}}>
+      {/* Gün çizgisi */}
+      <div style={{position:"relative",marginBottom:8}}>
+        <div style={{display:"flex",height:20,borderRadius:4,overflow:"hidden",background:"#E5E7EB"}}>
+          {[...Array(Math.ceil(totalDays/7))].map((_,wi)=>(
+            <div key={wi} style={{flex:`0 0 ${(7/totalDays)*100}%`,fontSize:9,color:"#9CA3AF",display:"flex",alignItems:"center",justifyContent:"center",borderRight:"1px solid #D1D5DB"}}>
+              W{wi+1}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Phase barları */}
+      <div style={{display:"flex",flexDirection:"column",gap:4}}>
+        {phases.map(ph => {
+          const phStart = new Date(Math.max(new Date(ph.start_date), start));
+          const phEnd   = new Date(Math.min(new Date(ph.end_date), end));
+          phStart.setHours(0,0,0,0);
+          phEnd.setHours(0,0,0,0);
+          if (phStart > phEnd) return null;
+
+          const off   = Math.round((phStart - start) / 86400000);
+          const span  = Math.max(Math.round((phEnd - phStart) / 86400000) + 1, 1);
+          const left  = `${(off / totalDays) * 100}%`;
+          const width = `${Math.min((span / totalDays) * 100, 100 - (off/totalDays)*100)}%`;
+          const color = TOPIC_COLOR[ph.topic] || "#6B7280";
+          const phColor = ph.status==="done"?"#059669":ph.status==="active"?"#F59E0B":color;
+
+          return (
+            <div key={ph.phase_id} style={{position:"relative",height:24}}>
+              {/* Task adı solda */}
+              <div style={{position:"absolute",left:0,top:"50%",transform:"translateY(-50%)",width:"20%",fontSize:10,color:"#6B7280",fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",paddingRight:4}}>
+                {ph.task_title}
+              </div>
+              {/* Bar */}
+              <div style={{position:"absolute",left:"20%",right:0,height:"100%"}}>
+                <div
+                  title={`${ph.phase_name}\n${ph.start_date} → ${ph.end_date}\n${ph.estimated_hours ? ph.estimated_hours+'h est.' : ''}`}
+                  style={{
+                    position:"absolute", left, width,
+                    height:20, top:"50%", transform:"translateY(-50%)",
+                    borderRadius:4, background:phColor, opacity:0.9,
+                    display:"flex", alignItems:"center", padding:"0 6px",
+                    overflow:"hidden", cursor:"default",
+                    boxShadow:"0 1px 3px rgba(0,0,0,0.1)"
+                  }}
+                >
+                  <span style={{fontSize:9,color:"#fff",fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                    {ph.status==="done"?"✓ ":""}{ph.phase_name}
+                    {ph.estimated_hours ? ` · ${ph.estimated_hours}h` : ""}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 export default function KPIDashboard({ kpi, employees }) {
   if (!kpi) return <div style={{padding:40,textAlign:"center",color:"#9CA3AF",fontFamily:"'Inter',sans-serif",fontSize:14}}>Loading KPIs...</div>;
 
@@ -10,6 +95,25 @@ export default function KPIDashboard({ kpi, employees }) {
   const [maxCapacity, setMaxCapacity] = useState(250);
   const [editingCapacity, setEditingCapacity] = useState(false);
   const [tempCapacity, setTempCapacity] = useState(250);
+
+  const [monthlyData, setMonthlyData]       = useState(null);
+  const [monthAnchor, setMonthAnchor]       = useState(0); // 0 = bu ay, -1 = geçen ay
+  const [expandedEmp, setExpandedEmp]       = useState(null);
+  const [loadingMonthly, setLoadingMonthly] = useState(false);  
+  const targetDate  = new Date();
+  targetDate.setMonth(targetDate.getMonth() + monthAnchor);
+  const targetYear  = targetDate.getFullYear();
+  const targetMonth = targetDate.getMonth() + 1;
+  const monthLabel  = targetDate.toLocaleString("en-US", { month: "long", year: "numeric" });
+
+useEffect(() => {
+  setLoadingMonthly(true);
+  api.getWorkloadMonthly(targetYear, targetMonth)
+    .then(setMonthlyData)
+    .catch(console.error)
+    .finally(() => setLoadingMonthly(false));
+}, [monthAnchor]);
+
 
   useEffect(() => {
     api.getSettings().then(s => {
@@ -172,6 +276,99 @@ export default function KPIDashboard({ kpi, employees }) {
           </tbody>
         </table>
       </div>
+
+
+      
+      {/* ── Aylık Workload Section ── */}
+      <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",overflow:"hidden",marginTop:20}}>
+        
+        {/* Header + Ay Navigasyonu */}
+        <div style={{padding:"18px 24px",borderBottom:"1px solid #F3F4F6",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <h3 style={{fontSize:14,fontWeight:700,color:"#111827",margin:"0 0 2px"}}>Monthly Phase Workload</h3>
+            <p style={{fontSize:12,color:"#6B7280",margin:0}}>Click a member to see their phase timeline</p>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <button onClick={()=>setMonthAnchor(a=>a-1)} style={{background:"#fff",border:"1.5px solid #E5E7EB",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:12,color:"#374151",fontWeight:600}}>←</button>
+            <span style={{fontSize:13,fontWeight:700,color:"#111827",minWidth:140,textAlign:"center"}}>{monthLabel}</span>
+            <button onClick={()=>setMonthAnchor(a=>a+1)} style={{background:"#fff",border:"1.5px solid #E5E7EB",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:12,color:"#374151",fontWeight:600}}>→</button>
+            <button onClick={()=>setMonthAnchor(0)} style={{background:"#2563EB",color:"#fff",border:"none",borderRadius:7,padding:"5px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>This Month</button>
+          </div>
+        </div>
+
+        {loadingMonthly ? (
+          <div style={{padding:32,textAlign:"center",color:"#9CA3AF",fontSize:13}}>Loading...</div>
+        ) : (
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{background:"#F9FAFB"}}>
+                {["Team Member","Phase Hours","Workload","Phases"].map(h=>(
+                  <th key={h} style={{padding:"10px 16px",fontSize:11,fontWeight:700,color:"#6B7280",textAlign:h==="Team Member"?"left":"center",letterSpacing:"0.05em"}}>{h.toUpperCase()}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(monthlyData?.employees||[]).map((emp,i)=>{
+                const hours = parseFloat(emp.phase_hours) || 0;
+                const pct   = Math.min(Math.round((hours / MAX_CAPACITY) * 100), 100);
+                const barColor = pct>75?"#DC2626":pct>40?"#D97706":"#059669";
+                const isExpanded = expandedEmp === emp.id;
+                const phases = emp.phases || [];
+
+                return (
+                  <>
+                    <tr key={emp.id}
+                      onClick={()=>setExpandedEmp(isExpanded ? null : emp.id)}
+                      style={{borderTop:"1px solid #F3F4F6",cursor:"pointer",background:isExpanded?"#F0F7FF":"#fff",transition:"background 0.15s"}}
+                    >
+                      <td style={{padding:"12px 16px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:10}}>
+                          <Avatar name={emp.name} size={32} idx={i}/>
+                          <div style={{fontSize:13,fontWeight:600,color:"#111827"}}>{emp.name}</div>
+                        </div>
+                      </td>
+                      <td style={{padding:"12px 16px",textAlign:"center"}}>
+                        <span style={{fontSize:14,fontWeight:700,color:barColor}}>{Math.round(hours)}h</span>
+                      </td>
+                      <td style={{padding:"12px 16px",width:160}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <div style={{flex:1,background:"#F3F4F6",borderRadius:4,height:8}}>
+                            <div style={{background:barColor,width:`${pct}%`,height:"100%",borderRadius:4}}/>
+                          </div>
+                          <span style={{fontSize:11,color:barColor,fontWeight:700,width:36}}>{pct}%</span>
+                        </div>
+                      </td>
+                      <td style={{padding:"12px 16px",textAlign:"center"}}>
+                        <span style={{fontSize:12,color:"#6B7280"}}>{phases.length} phase{phases.length!==1?"s":""} {isExpanded?"▲":"▼"}</span>
+                      </td>
+                    </tr>
+
+                    {/* Expanded: Mini Gantt */}
+                    {isExpanded && phases.length > 0 && (
+                      <tr key={`${emp.id}-detail`} style={{borderTop:"1px solid #E5E7EB"}}>
+                        <td colSpan={4} style={{padding:"0 0 0 0",background:"#F8FAFF"}}>
+                          <MiniGantt phases={phases} monthStart={monthlyData.monthStart} monthEnd={monthlyData.monthEnd} />
+                        </td>
+                      </tr>
+                    )}
+
+                    {isExpanded && phases.length === 0 && (
+                      <tr key={`${emp.id}-empty`}>
+                        <td colSpan={4} style={{padding:"16px 24px",textAlign:"center",color:"#9CA3AF",fontSize:13,background:"#F8FAFF"}}>
+                          No phases assigned this month
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+
+
     </div>
   );
 }

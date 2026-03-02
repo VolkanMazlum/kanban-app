@@ -182,7 +182,9 @@ export default function GanttChart({ tasks, employees }) {
                     
                     // Sadece start/end date olanları filtreleyebilir veya hepsini gösterebilirsiniz. 
                     // Gantt şemasında genelde tarihi olanlar önemlidir.
-                    const validPhases = topicPhases.filter(ph => ph.start_date && ph.end_date);
+                    const validPhases = topicPhases.filter(ph => ph.start_date && ph.end_date && 
+                      (empFilter === "all" || (ph.assignees||[]).some(a=>String(a.id)===empFilter))
+                    );
                     if (validPhases.length === 0) return null;
 
                     return (
@@ -240,7 +242,7 @@ export default function GanttChart({ tasks, employees }) {
 
                     {/* Alt Faz Barları - SADECE EXPANDED İSE GÖRÜNÜR */}
                     {isExpanded && topics.map(topicName => {
-                      const topicPhases = phases.filter(ph => (ph.topic === topicName || ph.topic_source === topicName) && ph.start_date && ph.end_date).sort((a,b)=>a.position-b.position);
+                      const topicPhases = phases.filter(ph => (ph.topic === topicName || ph.topic_source === topicName) && ph.start_date && ph.end_date && (empFilter === "all" || (ph.assignees||[]).some(a=>String(a.id)===empFilter))).sort((a,b)=>a.position-b.position);
                       if (topicPhases.length === 0) return null;
 
                       return (

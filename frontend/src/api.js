@@ -53,3 +53,4 @@ export const updateSetting       = (key, value) => req(`/settings/${key}`, {
   method: "PATCH",
   body: JSON.stringify({ value })
 });
+export const getWorkloadMonthly = (year, month) => req(`/kpi/workload-monthly?year=${year}&month=${month}`);

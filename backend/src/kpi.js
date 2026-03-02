@@ -66,6 +66,24 @@ module.exports = (app, query) => {
                   SELECT 
                     CASE
                       WHEN tp.status = 'done' THEN 0
+                      WHEN t2.estimated_hours IS NOT NULL AND t2.estimated_hours > 0 THEN 
+                      CASE
+                        WHEN (SELECT COUNT(*) FROM task_phases WHERE task_id = t2.id AND start_date IS NOT NULL AND end_date IS NOT NULL) > 0 THEN
+                          t2.estimated_hours - COALESCE((
+                            t2.estimated_hours * (
+                              -- Pay: Sadece 'done' olan fazlarin toplam gün sayisi
+                              (SELECT COALESCE(SUM(GREATEST(end_date - start_date, 1)), 0)::NUMERIC 
+                               FROM task_phases WHERE task_id = t2.id AND status = 'done' AND start_date IS NOT NULL AND end_date IS NOT NULL)
+                              / 
+                              -- Payda: Tüm fazlarin toplam gün sayisi
+                              NULLIF((SELECT SUM(GREATEST(end_date - start_date, 1)) 
+                                      FROM task_phases WHERE task_id = t2.id AND start_date IS NOT NULL AND end_date IS NOT NULL), 0)
+                            )
+                          ), 0)
+                        -- Görevin alt fazi yoksa, görev bitene kadar saatin tamamini al
+                        ELSE t2.estimated_hours
+                      END
+
                       WHEN tp.status = 'active' THEN
                         GREATEST((LEAST(tp.end_date, CURRENT_DATE + 30) - CURRENT_DATE), 0) * 8
                       ELSE
@@ -129,5 +147,74 @@ module.exports = (app, query) => {
       console.error("KPI Error:", err);
       res.status(500).json({ error: "Database error while fetching KPIs" }); 
     }
+  });
+
+  app.get("/api/kpi/workload-monthly", async (req, res) => {
+  try {
+    const year  = parseInt(req.query.year)  || new Date().getFullYear();
+    const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+
+    const monthStart = `${year}-${String(month).padStart(2,'0')}-01`;
+    const monthEnd   = new Date(year, month, 0).toISOString().slice(0,10);
+
+    const result = await query(`
+      SELECT 
+        e.id,
+        e.name,
+        COALESCE((
+          SELECT SUM(
+            CASE
+              WHEN tp.status = 'done' THEN 0
+              WHEN tp.estimated_hours IS NOT NULL AND tp.estimated_hours > 0 THEN tp.estimated_hours
+              WHEN tp.status = 'active' THEN
+                GREATEST(
+                  (LEAST(tp.end_date, $2::DATE) - GREATEST(tp.start_date, $1::DATE)), 0
+                ) * 8
+              ELSE
+                GREATEST(
+                  (LEAST(tp.end_date, $2::DATE) - GREATEST(tp.start_date, $1::DATE)), 0
+                ) * 8
+            END
+          )
+          FROM task_phases tp
+          JOIN phase_assignees pa ON pa.phase_id = tp.id
+          WHERE pa.employee_id = e.id
+          AND tp.start_date IS NOT NULL
+          AND tp.end_date IS NOT NULL
+          AND tp.start_date <= $2::DATE
+          AND tp.end_date >= $1::DATE
+        ), 0) AS phase_hours,
+        COALESCE((
+          SELECT json_agg(json_build_object(
+            'phase_id', tp.id,
+            'phase_name', tp.name,
+            'topic', tp.topic_source,
+            'start_date', tp.start_date::TEXT,
+            'end_date', tp.end_date::TEXT,
+            'status', tp.status,
+            'estimated_hours', tp.estimated_hours,
+            'task_title', t.title
+          ) ORDER BY tp.start_date)
+          FROM task_phases tp
+          JOIN phase_assignees pa ON pa.phase_id = tp.id
+          JOIN tasks t ON t.id = tp.task_id
+          WHERE pa.employee_id = e.id
+          AND tp.start_date IS NOT NULL
+          AND tp.end_date IS NOT NULL
+          AND tp.start_date <= $2::DATE
+          AND tp.end_date >= $1::DATE
+        ), '[]') AS phases
+      FROM employees e
+      ORDER BY e.name
+    `, [monthStart, monthEnd]);
+
+    res.json({
+      year, month, monthStart, monthEnd,
+      employees: result.rows
+    });
+  } catch (err) {
+    console.error("Workload monthly error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
   });
 };
