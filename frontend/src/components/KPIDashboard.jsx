@@ -52,8 +52,7 @@ function MiniGantt({ phases, monthStart, monthEnd }) {
           const span  = Math.max(Math.round((phEnd - phStart) / 86400000) + 1, 1);
           const left  = `${(off / totalDays) * 100}%`;
           const width = `${Math.min((span / totalDays) * 100, 100 - (off/totalDays)*100)}%`;
-          const color = TOPIC_COLOR[ph.topic] || "#6B7280";
-          const phColor = ph.status==="done"?"#059669":ph.status==="active"?"#F59E0B":color;
+          const phColor = ph.status==="done"?"#059669":ph.status==="active"?"#F59E0B":"#6B7280";
 
           return (
             <div key={ph.phase_id} style={{position:"relative",height:24}}>

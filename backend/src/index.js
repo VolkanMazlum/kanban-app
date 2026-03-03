@@ -5,10 +5,26 @@ const { authenticate } = require("./auth");
 require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 4000;
+const rateLimit = require("express-rate-limit");
+const helmet = require("helmet");
 
-//app.use(cors({ origin: "*" }));
-app.use(cors({ origin: process.env.FRONTEND_URL })); // Sadece frontend'in çalıştığı portu izin veriyoruz
-app.use(express.json());
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200, 
+  message: { error: "Too many requests, please try again later." }
+});
+
+app.use(cors({ 
+  origin: process.env.FRONTEND_URL,   
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+  allowHeaders: ["Content-Type", "Authorization"]
+ })); 
+app.set("trust proxy", 1); 
+app.use(express.json({ limit: "50kb" }));
+app.use(limiter);
+app.use(helmet());
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
