@@ -11,13 +11,6 @@ function MiniGantt({ phases, monthStart, monthEnd }) {
   end.setHours(0,0,0,0);
   const totalDays = Math.round((end - start) / 86400000) + 1;
 
-  const TOPIC_COLOR = {
-    "MEP":"#2563EB","ENERGY":"#059669","SUSTAINABILITY":"#0891B2",
-    "ACUSTIC":"#7C3AED","VVF":"#DC2626","STRUCTURE":"#D97706",
-    "GEOTHERMAL":"#065F46","HYDRAULIC INVARIANCE":"#0369A1",
-    "CONTINUOUS COMMISSIONING":"#6D28D9",
-  };
-
   // Gün başlıkları
   const days = [];
   const cur = new Date(start);
