@@ -315,9 +315,11 @@ module.exports = (app, query) => {
         
         if (validatedStatus === 'process') {
           sql += ", actual_start=NOW() , actual_end=NULL";
-        } else if (validatedStatus === 'done') {
+        } 
+        /***else if (validatedStatus === 'done') {
           sql += ", actual_end=NOW()";
-        } else if (validatedStatus === 'new') {
+        }***/
+         else if (validatedStatus === 'new') {
           sql += ", actual_end=NULL , actual_start=NULL, estimated_hours=NULL";
         } else if (validatedStatus === 'blocked') {
           sql += ", actual_end=NULL";
@@ -336,7 +338,7 @@ module.exports = (app, query) => {
             WHERE task_id = $1 AND status != 'done' 
           `, [req.params.id]);
         }
-        else if (validatedStatus === 'blocked') {
+        /***else if (validatedStatus === 'blocked') {
           await query(`
             UPDATE task_phases 
             SET status = 'pending'
@@ -349,7 +351,7 @@ module.exports = (app, query) => {
             SET status = 'pending'
             WHERE task_id = $1 
           `, [req.params.id]);
-        }
+        }***/
         else if (validatedStatus === 'process') {
           await query(`
             UPDATE task_phases 
