@@ -198,24 +198,6 @@ CREATE TABLE IF NOT EXISTS phase_assignees (
 ); 
 
 
-CREATE OR REPLACE FUNCTION update_task_timeframes()
-RETURNS TRIGGER AS $$
-BEGIN
-  -- Güncellenen veya eklenen zaman kaydına göre görev zamanlarını güncelle
-  IF NEW.status = 'process' AND OLD.status != 'process' AND NEW.actual_start IS NULL THEN
-    NEW.actual_start = NOW();
-  END IF;
-  IF NEW.status = 'done' AND OLD.status != 'done' AND NEW.actual_end IS NULL THEN
-    NEW.actual_end = NOW();
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-DROP TRIGGER IF EXISTS tasks_timeframe_update ON tasks;
-CREATE TRIGGER tasks_timeframe_update
-BEFORE UPDATE ON tasks
-FOR EACH ROW EXECUTE FUNCTION update_task_timeframes();
-
 -- Seed Employees
 INSERT INTO employees (name) VALUES
   ('Marco R.'),

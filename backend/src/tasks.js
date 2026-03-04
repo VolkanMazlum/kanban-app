@@ -345,12 +345,32 @@ module.exports = (app, query) => {
       const validatedStatus = validatedData.status;
       
       try {
+        const existing = await query("SELECT status, actual_start FROM tasks WHERE id = $1", [req.params.id]);
+        if (!existing.rows.length) return res.status(404).json({ error: "Task not found" });
+
+        const prevStatus = existing.rows[0].status;
+        const hasActualStart = existing.rows[0].actual_start;
         let sql = "UPDATE tasks SET status=$1";
         const params = [validatedStatus];
         
         if (validatedStatus === 'process') {
-          sql += ", actual_start=NOW() , actual_end=NULL";
-        } 
+          sql += ", actual_end=NULL";
+          if (!hasActualStart) {
+            const earliestPhase = await query(`
+              SELECT MIN(start_date) as earliest 
+              FROM task_phases 
+              WHERE task_id = $1 AND start_date IS NOT NULL
+            `, [req.params.id]);
+            
+            const earliest = earliestPhase.rows[0]?.earliest;
+            if (earliest) {
+              params.push(earliest);
+              sql += `, actual_start=$${params.length}`;
+            } else {
+              sql += ", actual_start=NOW()";
+            }
+          }
+        }
          else if (validatedStatus === 'new') {
           sql += ", actual_end=NULL , actual_start=NULL, estimated_hours=NULL";
         } else if (validatedStatus === 'blocked') {
