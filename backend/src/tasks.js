@@ -29,8 +29,8 @@ module.exports = (app, query) => {
                 'topic', tp.topic_source,
                 'note', tp.note,
                 'estimated_hours', tp.estimated_hours,
-                'assignees', COALESCE((
-                  SELECT json_agg(json_build_object('id', e.id, 'name', e.name))
+                'assignee_hours', COALESCE((
+                  SELECT json_agg(json_build_object('id', e.id, 'name', e.name, 'estimated_hours', pa.estimated_hours))
                   FROM phase_assignees pa
                   JOIN employees e ON e.id = pa.employee_id
                   WHERE pa.phase_id = tp.id
@@ -87,7 +87,14 @@ module.exports = (app, query) => {
                    'end_date', tp.end_date::TEXT,
                    'status', tp.status,
                    'topic', tp.topic_source,
-                   'note', tp.note
+                   'note', tp.note,
+                   'estimated_hours', tp.estimated_hours,
+                   'assignee_hours', COALESCE((
+                     SELECT json_agg(json_build_object('id', e.id, 'name', e.name, 'estimated_hours', pa.estimated_hours))
+                     FROM phase_assignees pa
+                     JOIN employees e ON e.id = pa.employee_id
+                     WHERE pa.phase_id = tp.id
+                   ), '[]')
                  ) ORDER BY tp.position), '[]')
                  FROM task_phases tp
                  WHERE tp.task_id = t.id
@@ -105,7 +112,6 @@ module.exports = (app, query) => {
   });
 
   app.post("/api/tasks", async (req, res) => {
-    // Note: React will need to pass 'phases' in the body now
     const { title, description, label, topics, assignee_ids, deadline, status, position,
             planned_start, planned_end, actual_start, actual_end, estimated_hours, phases } = req.body;
     
@@ -124,7 +130,7 @@ module.exports = (app, query) => {
       try {
         await query("BEGIN");
         
-        // 1. Create main task (removed 'note' from here)
+        // 1. Create main task 
         const taskResult = await query(
           "INSERT INTO tasks (title, description, label, deadline, planned_start, planned_end, actual_start, actual_end, status, position, estimated_hours) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *",
           [validatedTitle, validatedDescription || "", validatedLabel || null, validatedDeadline || null,
@@ -155,23 +161,38 @@ module.exports = (app, query) => {
           newTask.topics = validatedTopics;
         }
 
-        // 4. NEW: Save Phases (with note and topic_source)
+        // 4. Save Phases AND their Assignees
         if (phases && phases.length > 0) {
           for (let i = 0; i < phases.length; i++) {
             const ph = phases[i];
-            await query(
-              "INSERT INTO task_phases (task_id, name, position, start_date, end_date, status, topic_source, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            
+            // Insert Phase and get its ID
+            const phaseResult = await query(
+              "INSERT INTO task_phases (task_id, name, position, start_date, end_date, status, topic_source, note, estimated_hours) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
               [
                 newTask.id, 
                 ph.name, 
-                i, // Recalculate position based on array order
+                i, 
                 ph.start_date || null, 
                 ph.end_date || null, 
                 ph.status || 'pending', 
                 ph.topic_source || null, 
-                ph.note || null
+                ph.note || null,
+                ph.estimated_hours || null
               ]
             );
+            
+            const newPhaseId = phaseResult.rows[0].id;
+
+            // Insert Phase Assignees & Hours
+            if (ph.assignee_hours && ph.assignee_hours.length > 0) {
+              for (const ah of ph.assignee_hours) {
+                await query(
+                  "INSERT INTO phase_assignees (phase_id, employee_id, estimated_hours) VALUES ($1, $2, $3)",
+                  [newPhaseId, ah.id, ah.estimated_hours || null]
+                );
+              }
+            }
           }
           newTask.phases = phases;
         }
@@ -219,7 +240,7 @@ module.exports = (app, query) => {
         }
         const t = existing.rows[0];
         
-        // 1. Update main task (removed 'note' from here)
+        // 1. Update main task
         const taskResult = await query(
           "UPDATE tasks SET title=$1, description=$2, label=$3, deadline=$4, planned_start=$5, planned_end=$6, actual_start=$7, actual_end=$8, status=$9, position=$10, estimated_hours=$11 WHERE id=$12 RETURNING *",
           [validatedTitle ?? t.title, validatedDescription ?? t.description,
@@ -261,15 +282,16 @@ module.exports = (app, query) => {
            updatedTask.topics = existingTopics.rows.map(row => row.topic);
         }
 
-        // 4. NEW: Update Phases (Delete old, insert new)
+        // 4. Update Phases (Delete old, insert new)
         if (phases !== undefined) {
-          await query("DELETE FROM task_phases WHERE task_id = $1", [id]);
+          await query("DELETE FROM task_phases WHERE task_id = $1", [id]); // This deletes phase_assignees too via CASCADE
           
           if (phases.length > 0) {
             for (let i = 0; i < phases.length; i++) {
               const ph = phases[i];
-              await query(
-                "INSERT INTO task_phases (task_id, name, position, start_date, end_date, status, topic_source, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+              
+              const phaseResult = await query(
+                "INSERT INTO task_phases (task_id, name, position, start_date, end_date, status, topic_source, note, estimated_hours) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
                 [
                   id, 
                   ph.name, 
@@ -277,10 +299,23 @@ module.exports = (app, query) => {
                   ph.start_date || null, 
                   ph.end_date || null, 
                   ph.status || 'pending', 
-                  ph.topic_source || ph.topic || null, // ensure we catch the topic
-                  ph.note || null
+                  ph.topic_source || ph.topic || null, 
+                  ph.note || null,
+                  ph.estimated_hours || null
                 ]
               );
+              
+              const newPhaseId = phaseResult.rows[0].id;
+
+              // NEW: Insert Phase Assignees & Hours
+              if (ph.assignee_hours && ph.assignee_hours.length > 0) {
+                for (const ah of ph.assignee_hours) {
+                  await query(
+                    "INSERT INTO phase_assignees (phase_id, employee_id, estimated_hours) VALUES ($1, $2, $3)",
+                    [newPhaseId, ah.id, ah.estimated_hours || null]
+                  );
+                }
+              }
             }
           }
         }
@@ -316,9 +351,6 @@ module.exports = (app, query) => {
         if (validatedStatus === 'process') {
           sql += ", actual_start=NOW() , actual_end=NULL";
         } 
-        /***else if (validatedStatus === 'done') {
-          sql += ", actual_end=NOW()";
-        }***/
          else if (validatedStatus === 'new') {
           sql += ", actual_end=NULL , actual_start=NULL, estimated_hours=NULL";
         } else if (validatedStatus === 'blocked') {
@@ -338,20 +370,6 @@ module.exports = (app, query) => {
             WHERE task_id = $1 AND status != 'done' 
           `, [req.params.id]);
         }
-        /***else if (validatedStatus === 'blocked') {
-          await query(`
-            UPDATE task_phases 
-            SET status = 'pending'
-            WHERE task_id = $1 
-          `, [req.params.id]);
-        }
-        else if (validatedStatus === 'new') {
-          await query(`
-            UPDATE task_phases 
-            SET status = 'pending'
-            WHERE task_id = $1 
-          `, [req.params.id]);
-        }***/
         else if (validatedStatus === 'process') {
           await query(`
             UPDATE task_phases 

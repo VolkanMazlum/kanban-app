@@ -23,8 +23,20 @@ module.exports = (app, query) => {
         WHERE status = 'done' AND EXTRACT(MONTH FROM updated_at) = EXTRACT(MONTH FROM CURRENT_DATE)
       `);
       const working_employees_res = await query(`
-        SELECT COUNT(DISTINCT employee_id) as count FROM task_assignees
-        WHERE task_id IN (SELECT id FROM tasks WHERE status != 'done')
+        SELECT COUNT(DISTINCT employee_id) as count 
+        FROM (
+          SELECT employee_id 
+          FROM task_assignees 
+          WHERE task_id IN (SELECT id FROM tasks WHERE status != 'done')
+          
+          UNION
+          
+          SELECT pa.employee_id 
+          FROM phase_assignees pa
+          JOIN task_phases tp ON pa.phase_id = tp.id
+          JOIN tasks t ON tp.task_id = t.id
+          WHERE t.status != 'done' AND tp.status != 'done'
+        ) as combined_assignees
       `);
       const totalEmployeesCountRes = await query(`SELECT COUNT(*) as count FROM employees`);
       const summary = {
@@ -106,9 +118,9 @@ module.exports = (app, query) => {
           SELECT SUM(
             CASE
               WHEN tp.status = 'done' THEN 0
-              WHEN tp.estimated_hours IS NOT NULL AND tp.estimated_hours > 0 THEN 
+              WHEN pa.estimated_hours IS NOT NULL AND pa.estimated_hours > 0 THEN 
                 GREATEST((LEAST(tp.end_date, $2::DATE) - GREATEST(tp.start_date, $1::DATE)), 0)
-                * (tp.estimated_hours / GREATEST((tp.end_date - tp.start_date), 1)::NUMERIC)
+                * (pa.estimated_hours / GREATEST((tp.end_date - tp.start_date), 1)::NUMERIC)
               WHEN tp.status = 'active' THEN
                 GREATEST(
                   (LEAST(tp.end_date, $2::DATE) - GREATEST(tp.start_date, $1::DATE)), 0
@@ -135,7 +147,7 @@ module.exports = (app, query) => {
             'start_date', tp.start_date::TEXT,
             'end_date', tp.end_date::TEXT,
             'status', tp.status,
-            'estimated_hours', tp.estimated_hours,
+            'estimated_hours', pa.estimated_hours,
             'task_title', t.title
           ) ORDER BY tp.start_date)
           FROM task_phases tp

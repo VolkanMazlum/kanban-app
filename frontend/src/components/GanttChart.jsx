@@ -15,7 +15,6 @@ export default function GanttChart({ tasks, employees }) {
   const [rangeMonths,  setRangeMonths]  = useState(3);
   const [anchor,       setAnchor]       = useState(0);
   
-  // State for expanded tasks
   const [expandedTasks, setExpandedTasks] = useState({}); 
 
   const toggleTaskExpand = (taskId) => {
@@ -44,10 +43,19 @@ export default function GanttChart({ tasks, employees }) {
     cur = new Date(y, m+1, 1);
   }
 
+  // Kişi ana görevde YOKSA bile fazlarında VARSA göster
   const filtered = tasks.filter(t => {
     if (!t.deadline) return false;
     if (statusFilter !== "all" && t.status !== statusFilter) return false;
-    if (empFilter !== "all" && !(t.assignees||[]).some(a=>String(a.id)===empFilter)) return false;
+    
+    if (empFilter !== "all") {
+      const inMainTask = (t.assignees || []).some(a => String(a.id) === empFilter);
+      const inPhases = (t.phases || []).some(ph => 
+        (ph.assignee_hours || ph.assignees || []).some(a => String(a.id) === empFilter)
+      );
+      if (!inMainTask && !inPhases) return false;
+    }
+
     const s = t.actual_start ? new Date(t.actual_start) : t.planned_start ? new Date(t.planned_start) : new Date(t.deadline);
     const e2 = t.actual_end ? new Date(t.actual_end) : t.planned_end ? new Date(t.planned_end) : new Date(t.deadline);
     s.setHours(0,0,0,0); e2.setHours(0,0,0,0);
@@ -69,7 +77,6 @@ export default function GanttChart({ tasks, employees }) {
   }
 
   const todayPct = today >= windowStart && today <= windowEnd ? `${(Math.round((today - windowStart) / 86400000) / totalDays) * 100}%` : null;
-
   const selBtn = (active) => ({ padding:"5px 12px", borderRadius:6, border:"none", cursor:"pointer", fontSize:12, fontWeight:600, fontFamily:"Inter,sans-serif", background: active?"#fff":"transparent", color: active?"#111827":"#6B7280", boxShadow: active?"0 1px 3px rgba(0,0,0,0.08)":"none", transition:"all 0.15s" });
   const outBtn = { background:"#fff", border:"1.5px solid #E5E7EB", borderRadius:7, padding:"6px 12px", cursor:"pointer", fontSize:12, color:"#374151", fontFamily:"Inter,sans-serif", fontWeight:600 };
 
@@ -94,7 +101,6 @@ export default function GanttChart({ tasks, employees }) {
           <option value="done">Done</option>
         </select>
         
-        {/* Expand/Collapse All Butonları */}
         <div style={{display:"flex", background:"#fff", border:"1.5px solid #E5E7EB", borderRadius:8, overflow:"hidden"}}>
           <button onClick={() => toggleAllExpand(true)} style={{padding:"7px 10px", background:"transparent", border:"none", borderRight:"1px solid #E5E7EB", cursor:"pointer", fontSize:11, fontWeight:600, color:"#374151"}}>Expand All</button>
           <button onClick={() => toggleAllExpand(false)} style={{padding:"7px 10px", background:"transparent", border:"none", cursor:"pointer", fontSize:11, fontWeight:600, color:"#374151"}}>Collapse All</button>
@@ -110,24 +116,6 @@ export default function GanttChart({ tasks, employees }) {
         </div>
       </div>
 
-      <div style={{display:"flex",gap:16,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-        {Object.entries(STATUS_COLOR).map(([s,c])=>(
-          <div key={s} style={{display:"flex",alignItems:"center",gap:5}}>
-            <div style={{width:12,height:12,borderRadius:3,background:c}}/>
-            <span style={{fontSize:11,color:"#6B7280",fontWeight:500,textTransform:"capitalize"}}>{s==="process"?"In Process":s.charAt(0).toUpperCase()+s.slice(1)}</span>
-          </div>
-        ))}
-        <div style={{display:"flex",alignItems:"center",gap:5}}>
-          <div style={{width:12,height:12,borderRadius:3,background:"#059669"}}/><span style={{fontSize:11,color:"#6B7280",fontWeight:500}}>Phase Done</span>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:5}}>
-          <div style={{width:12,height:12,borderRadius:3,background:"#F59E0B"}}/><span style={{fontSize:11,color:"#6B7280",fontWeight:500}}>Phase Active</span>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:5}}>
-          <div style={{width:12,height:12,borderRadius:3,background:"#6B7280"}}/><span style={{fontSize:11,color:"#6B7280",fontWeight:500}}>Phase Pending</span>
-        </div>
-      </div>
-
       {filtered.length === 0 ? (
         <div style={{background:"#fff",borderRadius:12,padding:"48px 0",textAlign:"center",border:"1px solid #E5E7EB",color:"#9CA3AF",fontSize:14}}>
           No tasks with deadlines visible in this period
@@ -135,22 +123,28 @@ export default function GanttChart({ tasks, employees }) {
       ) : (
         <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",overflow:"hidden", display:"flex"}}>
           
-          {/* ─── SOL KOLON (Görevler ve Sadece Kategori İsimleri) ─── */}
+          {/* ─── SOL KOLON ─── */}
           <div style={{width:256,flexShrink:0,borderRight:"1px solid #E5E7EB", background:"#fff"}}>
             <div style={{height:36,borderBottom:"1px solid #E5E7EB",background:"#F9FAFB",display:"flex",alignItems:"center",padding:"0 16px"}}>
               <span style={{fontSize:11,fontWeight:700,color:"#6B7280",letterSpacing:"0.05em"}}>TASKS & CATEGORIES</span>
             </div>
             
             {filtered.map((task) => {
-              const asgn = task.assignees || [];
               const topics = task.topics || [];
               const phases = task.phases || [];
               const isExpanded = expandedTasks[task.id];
               const hasTopics = topics.length > 0;
 
+              // Tüm çalışanları toplayıp sol sütunda gösteriyoruz
+              const allAsgnMap = new Map();
+              (task.assignees || []).forEach(a => allAsgnMap.set(a.id, a));
+              phases.forEach(ph => {
+                (ph.assignee_hours || ph.assignees || []).forEach(a => allAsgnMap.set(a.id, a));
+              });
+              const uniqueAssignees = Array.from(allAsgnMap.values());
+
               return (
                 <div key={task.id} style={{borderBottom:"1px solid #E5E7EB"}}>
-                  {/* Ana Görev Başlığı - Tıklanabilir yapıldı */}
                   <div 
                     onClick={() => hasTopics && toggleTaskExpand(task.id)}
                     style={{
@@ -159,7 +153,6 @@ export default function GanttChart({ tasks, employees }) {
                       cursor: hasTopics ? "pointer" : "default"
                     }}
                   >
-                    {/* Açılır/Kapanır Ok İkonu */}
                     <div style={{width: 16, display: "flex", justifyContent: "center", marginRight: 4}}>
                       {hasTopics ? (
                         <span style={{fontSize: 10, color: "#9CA3AF", transition: "transform 0.2s", transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)"}}>▶</span>
@@ -171,19 +164,17 @@ export default function GanttChart({ tasks, employees }) {
                       <div style={{fontSize:12,fontWeight:700,color:"#111827",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.title}</div>
                     </div>
                     <div style={{display:"flex",flexShrink:0}}>
-                      {asgn.slice(0,3).map((a,ai)=>(<div key={a.id} style={{marginLeft:ai>0?-6:0}}><Avatar name={a.name} size={22} idx={ai}/></div>))}
+                      {uniqueAssignees.slice(0,3).map((a,ai)=>(<div key={a.id} style={{marginLeft:ai>0?-6:0}} title={a.name}><Avatar name={a.name} size={22} idx={ai}/></div>))}
                     </div>
                   </div>
 
-                  {/* Sadece Kategori (Topic) Başlıkları - SADECE EXPANDED İSE GÖRÜNÜR */}
                   {isExpanded && topics.map(topicName => {
                     const ts = TOPIC_STYLE[topicName] || {bg:"#F3F4F6",text:"#374151"};
-                    const topicPhases = phases.filter(ph => ph.topic === topicName || ph.topic_source === topicName);
+                    const topicPhases = phases.filter(ph => (ph.topic === topicName || ph.topic_source === topicName));
                     
-                    // Sadece start/end date olanları filtreleyebilir veya hepsini gösterebilirsiniz. 
-                    // Gantt şemasında genelde tarihi olanlar önemlidir.
-                    const validPhases = topicPhases.filter(ph => ph.start_date && ph.end_date && 
-                      (empFilter === "all" || (ph.assignees||[]).some(a=>String(a.id)===empFilter))
+                    const validPhases = topicPhases.filter(ph => 
+                      ph.start_date && ph.end_date && 
+                      (empFilter === "all" || (ph.assignee_hours || ph.assignees || []).some(a=>String(a.id)===empFilter))
                     );
                     if (validPhases.length === 0) return null;
 
@@ -198,7 +189,7 @@ export default function GanttChart({ tasks, employees }) {
             })}
           </div>
 
-          {/* ─── SAĞ KOLON (Timeline ve Barlar) ─── */}
+          {/* ─── SAĞ KOLON ─── */}
           <div style={{flex:1,overflowX:"auto",position:"relative",minWidth:0}}>
             <div style={{display:"flex",height:36,borderBottom:"1px solid #E5E7EB",background:"#F9FAFB"}}>
               {monthSegments.map((seg,i)=>(
@@ -207,7 +198,6 @@ export default function GanttChart({ tasks, employees }) {
             </div>
 
             <div style={{position:"relative"}}>
-              {/* Dikey ay ayırıcı çizgiler */}
               {(()=>{let x=0;return monthSegments.slice(0,-1).map((seg,mi)=>{x+=(seg.days/totalDays)*100;return <div key={mi} style={{position:"absolute",left:`${x}%`,top:0,bottom:"100%",height:"100%",width:1,background:"#E5E7EB",pointerEvents:"none"}}/>;});})()}
               
               {todayPct && (
@@ -226,8 +216,6 @@ export default function GanttChart({ tasks, employees }) {
 
                 return (
                   <div key={task.id} style={{borderBottom:"1px solid #E5E7EB"}}>
-                    
-                    {/* Ana Görev Barı */}
                     <div style={{height:ROW_HEIGHT, position:"relative", background:"#FAFAFA", borderBottom: (topics.length > 0 && isExpanded) ? "1px solid #E5E7EB" : "none"}}>
                       {taskBp && (
                         <div style={{
@@ -240,22 +228,29 @@ export default function GanttChart({ tasks, employees }) {
                       )}
                     </div>
 
-                    {/* Alt Faz Barları - SADECE EXPANDED İSE GÖRÜNÜR */}
                     {isExpanded && topics.map(topicName => {
-                      const topicPhases = phases.filter(ph => (ph.topic === topicName || ph.topic_source === topicName) && ph.start_date && ph.end_date && (empFilter === "all" || (ph.assignees||[]).some(a=>String(a.id)===empFilter))).sort((a,b)=>a.position-b.position);
+                      const topicPhases = phases.filter(ph => 
+                        (ph.topic === topicName || ph.topic_source === topicName) && 
+                        ph.start_date && ph.end_date && 
+                        (empFilter === "all" || (ph.assignee_hours || ph.assignees || []).some(a=>String(a.id)===empFilter))
+                      ).sort((a,b)=>a.position-b.position);
+                      
                       if (topicPhases.length === 0) return null;
 
                       return (
                         <div key={topicName} style={{height:TOPIC_ROW_HEIGHT, position:"relative", borderBottom:"1px solid #F9FAFB", background:"rgba(249, 250, 251, 0.5)"}}>
-                          
                           {topicPhases.map(ph => {
                             const phBp = getBarProps(ph.start_date, ph.end_date, task.deadline);
                             if (!phBp) return null;
 
                             const phColor = ph.status==="done"?"#059669":ph.status==="active"?"#F59E0B":"#6B7280";
                             
+                            // Tooltip içinde çalışanları ve saatlerini göstermek için
+                            const assigneesInfo = (ph.assignee_hours || []).map(a => `${a.name} (${a.estimated_hours||0}h)`).join(', ');
+                            const tooltip = `${ph.name}\n📅 ${ph.start_date} / ${ph.end_date}${ph.note ? `\n📝 ${ph.note}`: ""}${assigneesInfo ? `\n👥 ${assigneesInfo}` : ""}`;
+
                             return (
-                              <div key={ph.id} title={`${ph.name}\n${ph.start_date} - ${ph.end_date} ${ph.note ? `\n📝 Note: ${ph.note}`: ""}`} style={{
+                              <div key={ph.id} title={tooltip} style={{
                                 position:"absolute", left:phBp.left, width:phBp.width, top:"50%", transform:"translateY(-50%)",
                                 height: 22, borderRadius: 4, background: phColor, opacity: 0.9,
                                 display: "flex", alignItems: "center", padding: "0 6px",

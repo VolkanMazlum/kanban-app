@@ -3,7 +3,6 @@ import Avatar from "./Avatar.jsx";
 import { useState, useEffect } from "react";
 import * as api from "../api.js";
 
-
 function MiniGantt({ phases, monthStart, monthEnd }) {
   const start  = new Date(monthStart);
   const end    = new Date(monthEnd);
@@ -11,17 +10,9 @@ function MiniGantt({ phases, monthStart, monthEnd }) {
   end.setHours(0,0,0,0);
   const totalDays = Math.round((end - start) / 86400000) + 1;
 
-  // Gün başlıkları
-  const days = [];
-  const cur = new Date(start);
-  while (cur <= end) {
-    days.push(new Date(cur));
-    cur.setDate(cur.getDate() + 1);
-  }
-
   return (
     <div style={{padding:"12px 16px"}}>
-      {/* Gün çizgisi */}
+      {/* Hafta çizgisi */}
       <div style={{position:"relative",marginBottom:8}}>
         <div style={{display:"flex",height:20,borderRadius:4,overflow:"hidden",background:"#E5E7EB"}}>
           {[...Array(Math.ceil(totalDays/7))].map((_,wi)=>(
@@ -49,14 +40,12 @@ function MiniGantt({ phases, monthStart, monthEnd }) {
 
           return (
             <div key={ph.phase_id} style={{position:"relative",height:24}}>
-              {/* Task adı solda */}
               <div style={{position:"absolute",left:0,top:"50%",transform:"translateY(-50%)",width:"20%",fontSize:10,color:"#6B7280",fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",paddingRight:4}}>
                 {ph.task_title}
               </div>
-              {/* Bar */}
               <div style={{position:"absolute",left:"20%",right:0,height:"100%"}}>
                 <div
-                  title={`${ph.phase_name}\n${ph.start_date} → ${ph.end_date}\n${ph.estimated_hours ? ph.estimated_hours+'h est.' : ''}`}
+                  title={`${ph.phase_name}\n${ph.start_date} → ${ph.end_date}\n${ph.estimated_hours ? ph.estimated_hours+'h assigned to this member' : ''}`}
                   style={{
                     position:"absolute", left, width,
                     height:20, top:"50%", transform:"translateY(-50%)",
@@ -79,33 +68,34 @@ function MiniGantt({ phases, monthStart, monthEnd }) {
     </div>
   );
 }
+
 export default function KPIDashboard({ kpi, employees }) {
   if (!kpi) return <div style={{padding:40,textAlign:"center",color:"#9CA3AF",fontFamily:"'Inter',sans-serif",fontSize:14}}>Loading KPIs...</div>;
 
-  const { summary, by_status, by_topic = [], per_employee, trend } = kpi;
-  const maxTrend = Math.max(...trend.map(t=>t.completed), 1);
+  const { summary, by_status, by_topic = [], trend } = kpi;
+  const maxTrend = Math.max(...(trend.length ? trend.map(t=>t.completed) : [1]), 1);
   const [maxCapacity, setMaxCapacity] = useState(250);
   const [editingCapacity, setEditingCapacity] = useState(false);
   const [tempCapacity, setTempCapacity] = useState(250);
 
   const [monthlyData, setMonthlyData]       = useState(null);
-  const [monthAnchor, setMonthAnchor]       = useState(0); // 0 = bu ay, -1 = geçen ay
+  const [monthAnchor, setMonthAnchor]       = useState(0);
   const [expandedEmp, setExpandedEmp]       = useState(null);
   const [loadingMonthly, setLoadingMonthly] = useState(false);  
+
   const targetDate  = new Date();
   targetDate.setMonth(targetDate.getMonth() + monthAnchor);
   const targetYear  = targetDate.getFullYear();
   const targetMonth = targetDate.getMonth() + 1;
   const monthLabel  = targetDate.toLocaleString("en-US", { month: "long", year: "numeric" });
 
-useEffect(() => {
-  setLoadingMonthly(true);
-  api.getMonthlyWorkload(targetYear, targetMonth)
-    .then(setMonthlyData)
-    .catch(console.error)
-    .finally(() => setLoadingMonthly(false));
-}, [monthAnchor]);
-
+  useEffect(() => {
+    setLoadingMonthly(true);
+    api.getMonthlyWorkload(targetYear, targetMonth)
+      .then(setMonthlyData)
+      .catch(console.error)
+      .finally(() => setLoadingMonthly(false));
+  }, [monthAnchor, targetYear, targetMonth]);
 
   useEffect(() => {
     api.getSettings().then(s => {
@@ -120,6 +110,7 @@ useEffect(() => {
     setMaxCapacity(tempCapacity);
     setEditingCapacity(false);
   };
+  
   const MAX_CAPACITY = maxCapacity;
 
   const cards = [
@@ -139,7 +130,6 @@ useEffect(() => {
         <h2 style={{fontSize:22,fontWeight:700,color:"#111827",margin:"0 0 4px"}}>Performance Dashboard</h2>
         <p style={{color:"#6B7280",margin:0,fontSize:14}}>Company-wide KPIs and hourly workload — TEKSER S.R.L.</p>
       </div>
-      
       
       <div style={{padding:"18px 24px",borderBottom:"1px solid #F3F4F6",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <h3 style={{fontSize:14,fontWeight:700,color:"#111827",margin:0}}>Team Workload</h3>
@@ -215,10 +205,7 @@ useEffect(() => {
         </div>
       </div>
 
-      {/* ── Aylık Workload Section ── */}
       <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",overflow:"hidden",marginTop:20}}>
-        
-        {/* Header + Ay Navigasyonu */}
         <div style={{padding:"18px 24px",borderBottom:"1px solid #F3F4F6",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
             <h3 style={{fontSize:14,fontWeight:700,color:"#111827",margin:"0 0 2px"}}>Monthly Phase Workload</h3>
@@ -279,7 +266,6 @@ useEffect(() => {
                       </td>
                     </tr>
 
-                    {/* Expanded: Mini Gantt */}
                     {isExpanded && phases.length > 0 && (
                       <tr key={`${emp.id}-detail`} style={{borderTop:"1px solid #E5E7EB"}}>
                         <td colSpan={4} style={{padding:"0 0 0 0",background:"#F8FAFF"}}>
@@ -302,9 +288,6 @@ useEffect(() => {
           </table>
         )}
       </div>
-
-
-
     </div>
   );
 }

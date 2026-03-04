@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import * as api from "../api.js";
 import { COLUMNS, TOPICS, TOPIC_STYLE, inp } from "../constants/index.js";
 import Avatar from "./Avatar.jsx";
-import AssigneePicker from "./AssigneePicker.jsx";
 
 export default function TaskModal({ task, employees, onSave, onClose }) {
   const blank = { title:"", description:"", label:"", topics:[], assignee_ids:[], deadline:"", status:"new", planned_start:"", planned_end:"", estimated_hours:"" };
@@ -31,7 +30,7 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
           ...ph,
           start_date: ph.start_date?.slice(0, 10) || "",
           end_date: ph.end_date?.slice(0, 10) || "",
-          assignee_ids: ph.assignee_ids || [], // Eksik gelse bile boş dizi yap, silinmesin!
+          assignee_hours: ph.assignee_hours || [], 
           note: ph.note || "",
           estimated_hours: ph.estimated_hours || ""
         })));
@@ -60,7 +59,8 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
         start_date: "", 
         end_date: "", 
         status: "pending",
-        topic_source: toggledTopic
+        topic_source: toggledTopic,
+        assignee_hours: [] 
       }));
       setPhases(p => [...p, ...newPhases].map((ph, i) => ({...ph, position: i})));
     }
@@ -70,13 +70,12 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
     setPhases(p => p.map((ph, i) => {
       if (i !== idx) return ph;
       const updated = { ...ph, [key]: val };
-      // Status done yapılınca end_date bugün otomatik set edilir
       if (key === "status" && val === "done") {
         updated.end_date = new Date().toISOString().slice(0, 10);
       }
       return updated;
     }));
-};
+  };
 
   const phasesRef = useRef(phases);
   useEffect(() => { phasesRef.current = phases; }, [phases]);
@@ -101,7 +100,7 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
           <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600,letterSpacing:"0.05em"}}>TITLE *</label>
           <input value={form.title} onChange={e=>set("title",e.target.value)} style={inp} placeholder="Task title..." />
         </div>
-        {/* YENİ: Label (Project Type) Seçici */}
+        
         <div style={{marginBottom:14}}>
           <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600,letterSpacing:"0.05em"}}>PROJECT TYPE</label>
           <select value={form.label} onChange={e=>set("label", e.target.value)} style={{...inp, cursor:"pointer"}}>
@@ -120,7 +119,6 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
           </select>
         </div>
         
-        {/* Kategoriler Butonları */}
         <div style={{marginBottom:14}}>
           <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600,letterSpacing:"0.05em"}}>CATEGORIES (Multiple Allowed)</label>
           <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
@@ -151,7 +149,6 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
             <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600,letterSpacing:"0.05em"}}>DEADLINE</label>
             <input type="date" value={form.deadline} onChange={e=>set("deadline",e.target.value)} style={inp} />
           </div>
-          
         </div>
         
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
@@ -165,7 +162,7 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
           </div>
         </div>
         
-        <div style={{marginBottom:14}}>
+        <div style={{marginBottom:24}}>
           <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:8,fontWeight:600,letterSpacing:"0.05em"}}>STATUS</label>
           <div style={{display:"flex",gap:6}}>
             {COLUMNS.map(col=>(
@@ -180,14 +177,7 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
           </div>
         </div>
 
-        <div style={{marginBottom:24}}>
-          <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:8,fontWeight:600,letterSpacing:"0.05em"}}>
-            ASSIGNEES <span style={{color:"#9CA3AF",fontWeight:400}}>(multiple allowed)</span>
-          </label>
-          <AssigneePicker employees={employees} selectedIds={form.assignee_ids} onChange={v=>set("assignee_ids",v)} />
-        </div>
-
-        {/* HATA YAPMAZ GRUPLAMA (Kategoriye Göre Bölünmüş Form Fazları) */}
+        {/* PHASES BLOCK */}
         {phases.length > 0 && (
           <div style={{marginBottom:24}}>
             <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:8,fontWeight:600,letterSpacing:"0.05em"}}>PROJECT PHASES</label>
@@ -195,7 +185,6 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
               {form.topics.map(topicName => {
                 const ts = TOPIC_STYLE[topicName] || { text: "#374151", bg: "#F3F4F6", border: "#E5E7EB" };
-                const expectedNames = (phaseTemplates[topicName] || []).map(t => t.name);
                 
                 const topicPhases = phases
                   .map((ph, i) => ({ ph, idx: i }))
@@ -205,14 +194,14 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
 
                 return (
                   <div key={topicName} style={{ border: `1px solid ${ts.border}`, borderRadius: 8, overflow: "hidden" }}>
-                    {/* Kategori Başlığı */}
+                    {/* Category Header */}
                     <div style={{ background: ts.bg, padding: "8px 12px", borderBottom: `1px solid ${ts.border}` }}>
                       <span style={{ fontSize: 11, fontWeight: 700, color: ts.text, letterSpacing: "0.05em" }}>
                         {topicName.toUpperCase()}
                       </span>
                     </div>
                     
-                    {/* Faz Kutucukları */}
+                    {/* Phase Cards */}
                     <div style={{ padding: "8px", display: "flex", flexDirection: "column", gap: 8, background: "#F9FAFB" }}>
                       {topicPhases.map(({ ph, idx }) => (
                         <div key={idx} style={{background:"#fff",borderRadius:6,padding:"10px",border:"1px solid #E5E7EB"}}>
@@ -238,7 +227,7 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
                           </div>
 
                           <div style={{marginBottom:8}}>
-                            <label style={{fontSize:10,color:"#9CA3AF",fontWeight:600}}>ESTIMATED HOURS</label>
+                            <label style={{fontSize:10,color:"#9CA3AF",fontWeight:600}}>PHASE ESTIMATED HOURS</label>
                             <input
                               type="number" min="0" step="0.5"
                               value={ph.estimated_hours || ""}
@@ -247,34 +236,75 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
                               placeholder="e.g. 16"
                             />
                           </div>
-                          {/* Faz Not Alanı */}
-                            <div style={{ marginTop: 8 }}>
-                              <input 
-                                type="text" 
-                                value={ph.note || ""} 
-                                onChange={e => updatePhase(idx, "note", e.target.value)} 
-                                style={{ ...inp, padding: "4px 8px", fontSize: 10, width: "100%", background: "#F3F4F6", border: "1px solid #E5E7EB" }} 
-                                placeholder="Add a note for this phase... (Optional)" 
-                              />
-                            </div>
-
-                          <div>
-                            <label style={{fontSize:10,color:"#9CA3AF",fontWeight:600,marginBottom:4,display:"block"}}>ASSIGNEES</label>
-                            <AssigneePicker
-                              employees={employees}
-                              selectedIds={ph.assignee_ids || (ph.assignees || []).map(a=>a.id)}
-                              onChange={v=>updatePhase(idx,"assignee_ids",v)}
+                          
+                          <div style={{ marginTop: 8, marginBottom: 12 }}>
+                            <label style={{fontSize:10,color:"#9CA3AF",fontWeight:600}}>NOTES</label>
+                            <input 
+                              type="text" 
+                              value={ph.note || ""} 
+                              onChange={e => updatePhase(idx, "note", e.target.value)} 
+                              style={{ ...inp, marginTop:4, padding: "6px 10px", fontSize: 11, width: "100%", background: "#F3F4F6" }} 
+                              placeholder="Add a note for this phase... (Optional)" 
                             />
                           </div>
+
+                          {/* MOVED INSIDE THE PHASE LOOP: Phase Assignees & Hours */}
+                          <div style={{background:"#F9FAFB", border:"1px solid #E5E7EB", padding: "8px", borderRadius: 6}}>
+                            <label style={{fontSize:10,color:"#374151",fontWeight:700,marginBottom:8,display:"block"}}>ASSIGNEES & HOURS FOR THIS PHASE</label>
+                            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                              {employees.map(emp => {
+                                const assignment = (ph.assignee_hours || []).find(a => a.id === emp.id);
+                                const isSelected = !!assignment;
+                                
+                                return (
+                                  <div key={emp.id} style={{display:"flex",alignItems:"center",gap:8}}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const current = ph.assignee_hours || [];
+                                        const exists = current.find(a => a.id === emp.id);
+                                        const updated = exists
+                                          ? current.filter(a => a.id !== emp.id)
+                                          : [...current, { id: emp.id, name: emp.name, estimated_hours: "" }];
+                                        updatePhase(idx, "assignee_hours", updated);
+                                      }}
+                                      style={{
+                                        width:22, height:22, borderRadius:4, border:"none",
+                                        background: isSelected ? "#2563EB" : "#E5E7EB",
+                                        color: isSelected ? "#fff" : "#6B7280",
+                                        cursor:"pointer", fontSize:12, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center"
+                                      }}
+                                    >
+                                      {isSelected ? "✓" : "+"}
+                                    </button>
+                                    <Avatar name={emp.name} size={22} idx={employees.indexOf(emp)} />
+                                    <span style={{fontSize:11,color:"#374151",flex:1, fontWeight: isSelected ? 600 : 400}}>{emp.name}</span>
+                                    
+                                    {isSelected && (
+                                      <input
+                                        type="number" min="0" step="0.5"
+                                        value={assignment.estimated_hours || ""}
+                                        onChange={e => {
+                                          const updated = (ph.assignee_hours || []).map(a =>
+                                            a.id === emp.id ? { ...a, estimated_hours: e.target.value ? parseFloat(e.target.value) : "" } : a
+                                          );
+                                          updatePhase(idx, "assignee_hours", updated);
+                                        }}
+                                        placeholder="hrs"
+                                        style={{width:60, border:"1px solid #D1D5DB", borderRadius:4, padding:"4px", fontSize:11, textAlign:"center"}}
+                                      />
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
                         </div>
                       ))}
                     </div>
                   </div>
-                  
-                  
                 );
-
-                
               })}
             </div>
           </div>

@@ -17,11 +17,11 @@ module.exports = (app, query) => {
       const result = await query(`
         SELECT tp.*,
           COALESCE((
-            SELECT json_agg(json_build_object('id', e.id, 'name', e.name))
+            SELECT json_agg(json_build_object('id', e.id, 'name', e.name, 'estimated_hours', pa.estimated_hours))
             FROM phase_assignees pa
             JOIN employees e ON e.id = pa.employee_id
             WHERE pa.phase_id = tp.id
-          ), '[]') AS assignees,
+          ), '[]') AS assignee_hours,
           
           COALESCE((
             SELECT array_agg(pa.employee_id)
@@ -62,6 +62,17 @@ module.exports = (app, query) => {
               "INSERT INTO phase_assignees (phase_id, employee_id) SELECT $1, unnest($2::int[])",
               [phaseId, ph.assignee_ids]
             );
+          }
+          if (ph.assignee_hours && ph.assignee_hours.length > 0) {
+            for (const a of ph.assignee_hours) {
+              await query(
+                `INSERT INTO phase_assignees (phase_id, employee_id, estimated_hours) 
+                VALUES ($1, $2, $3)
+                ON CONFLICT (phase_id, employee_id) 
+                DO UPDATE SET estimated_hours = EXCLUDED.estimated_hours`,
+                [phaseId, a.id, a.estimated_hours || null]
+              );
+            }
           }
         }
       }
