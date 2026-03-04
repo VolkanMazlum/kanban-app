@@ -135,8 +135,14 @@ export default function App() {
 
   const filtered = filterEmpId === "all"
     ? tasks
-    : tasks.filter(t => (t.assignees||[]).some(a => String(a.id) === filterEmpId));
-
+    : tasks.filter(t => {
+        const matchAssignee = (t.assignees || []).some(a => Number(a.id) === Number(filterEmpId));
+        const matchPhase = (t.phases || []).some(ph => {
+          const ass = ph.assignee_hours || ph.assignees || [];
+          return ass.some(a => Number(a.id) === Number(filterEmpId));
+        });
+        return matchAssignee || matchPhase;
+      });
   return (
     <div style={{minHeight:"100vh",background:"#F9FAFB",fontFamily:"'Inter',sans-serif"}}>
       <style>{`
