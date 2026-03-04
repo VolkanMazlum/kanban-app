@@ -347,8 +347,6 @@ module.exports = (app, query) => {
       try {
         const existing = await query("SELECT status, actual_start FROM tasks WHERE id = $1", [req.params.id]);
         if (!existing.rows.length) return res.status(404).json({ error: "Task not found" });
-
-        const prevStatus = existing.rows[0].status;
         const hasActualStart = existing.rows[0].actual_start;
         let sql = "UPDATE tasks SET status=$1";
         const params = [validatedStatus];
