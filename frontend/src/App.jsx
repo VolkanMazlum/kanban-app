@@ -23,6 +23,43 @@ export default function App() {
   const [toasts, setToasts]       = useState([]);
   const dragId = useRef(null);
 
+  const [isHR, setIsHR] = useState(false);
+  const [showHRLogin, setShowHRLogin] = useState(false);
+  const [hrError, setHRError] = useState("");
+
+  const handleHRLogin = async (password) => {
+  try {
+    const hrAuth = btoa(`hr:${password}`);
+    // api.js'deki req yerine direkt getKPI kullan
+    const res = await fetch("/api/kpi", {
+      headers: {
+        "Authorization": `Basic ${btoa(`${import.meta.env.VITE_AUTH_USERNAME}:${import.meta.env.VITE_AUTH_PASSWORD}`)}`,
+        "X-HR-Auth": hrAuth
+      }
+    });
+    if (res.ok) {
+      setIsHR(true);
+      setShowHRLogin(false);
+      sessionStorage.setItem("hrAuth", hrAuth);
+    } else {
+      setHRError("Wrong password");
+    }
+  } catch (err) {
+    console.error("HR login error:", err);
+    setHRError("Connection error");
+  }
+};
+
+// Sayfa yüklenince HR session'ı kontrol et
+  useEffect(() => {
+    const hrAuth = sessionStorage.getItem("hrAuth");
+    if (hrAuth) {
+      fetch("/api/kpi", { headers: { "X-HR-Auth": hrAuth }})
+        .then(r => { if (r.ok) setIsHR(true); })
+        .catch(() => {});
+    }
+  }, []);
+
   const toast = useCallback((msg, type="success") => {
     const id = Date.now();
     setToasts(p => [...p, {id, msg, type}]);
@@ -123,7 +160,7 @@ export default function App() {
             <div style={{fontSize:10,color:"#9CA3AF",fontWeight:600,letterSpacing:"0.06em"}}>S.R.L. — PROJECT MANAGEMENT</div>
           </div>
           <div style={{display:"flex",background:"#F3F4F6",borderRadius:8,padding:3,marginLeft:20}}>
-            {[{id:"board",label:"📋  Board"},{id:"kpi",label:"📊  KPIs"},{id:"gantt",label:"📅  Gantt"}].map(tab=>(
+            {[{id:"board",label:"📋  Board"},{id:"gantt",label:"📅  Gantt"}, ...(isHR ? [{id:"kpi",label:"📊  KPIs"}] : [])].map(tab=>(
               <button key={tab.id} onClick={()=>setView(tab.id)} style={{
                 padding:"6px 16px",borderRadius:6,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,
                 fontFamily:"'Inter',sans-serif",
@@ -133,6 +170,21 @@ export default function App() {
                 transition:"all 0.15s",
               }}>{tab.label}</button>
             ))}
+            {!isHR && (
+              <button onClick={()=>setShowHRLogin(true)} style={{
+                background:"#F9FAFB", border:"1.5px solid #E5E7EB",
+                borderRadius:8, padding:"7px 14px", color:"#6B7280",
+                fontSize:12, cursor:"pointer", fontWeight:600
+              }}>🔐 HR Login</button>
+            )}
+
+            {isHR && (
+              <button onClick={()=>{setIsHR(false);sessionStorage.removeItem("hrAuth");setView("board");}} style={{
+                background:"#FEF2F2", border:"1.5px solid #FECACA",
+                borderRadius:8, padding:"7px 14px", color:"#DC2626",
+                fontSize:12, cursor:"pointer", fontWeight:600
+              }}>HR Logout</button>
+            )}
           </div>
         </div>
 
@@ -218,6 +270,46 @@ export default function App() {
 
       {modal?.type==="task" && <TaskModal task={modal.task} employees={employees} onSave={handleTaskSave} onClose={()=>setModal(null)} />}
       {modal?.type==="employees" && <EmployeeManager employees={employees} onAdd={handleEmpAdd} onDelete={handleEmpDelete} onClose={()=>setModal(null)} />}
+      {showHRLogin && (
+          <div style={{position:"fixed",inset:0,background:"rgba(17,24,39,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,backdropFilter:"blur(4px)"}}>
+            <div style={{background:"#fff",borderRadius:16,padding:28,width:360,boxShadow:"0 20px 60px rgba(0,0,0,0.15)",fontFamily:"'Inter',sans-serif"}}>
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:10,color:"#9CA3AF",letterSpacing:"0.1em",fontWeight:600,marginBottom:2}}>RESTRICTED ACCESS</div>
+                <h3 style={{color:"#111827",margin:0,fontSize:18,fontWeight:700}}>HR Login</h3>
+              </div>
+              <div style={{marginBottom:14}}>
+                <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600}}>PASSWORD</label>
+                <input
+                  type="password"
+                  id="hr-password-input"
+                  style={{
+                    width:"100%", border:"1.5px solid #E5E7EB", borderRadius:8,
+                    padding:"9px 12px", fontSize:13, fontFamily:"'Inter',sans-serif",
+                    outline:"none", color:"#111827"
+                  }}
+                  placeholder="Enter HR password..."
+                  onKeyDown={e => {
+                    if (e.key === "Enter") {
+                      handleHRLogin(e.target.value);
+                    }
+                  }}
+                />
+                {hrError && <div style={{fontSize:12,color:"#DC2626",marginTop:4}}>{hrError}</div>}
+              </div>
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={()=>{
+                  const val = document.getElementById("hr-password-input").value;
+                  handleHRLogin(val);
+                }} style={{flex:1,padding:11,background:"#2563EB",color:"#fff",border:"none",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer"}}>
+                  Login
+                </button>
+                <button onClick={()=>{setShowHRLogin(false);setHRError("");}} style={{flex:1,padding:11,background:"#F9FAFB",color:"#374151",border:"1.5px solid #E5E7EB",borderRadius:8,fontSize:13,cursor:"pointer"}}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       <Toast toasts={toasts} />
     </div>
   );

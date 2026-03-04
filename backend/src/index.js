@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
-const { authenticate } = require("./auth");
+const {  authenticate, authenticateHR  } = require("./auth");
 require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -19,7 +19,7 @@ app.use(cors({
   origin: process.env.FRONTEND_URL,   
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-  allowHeaders: ["Content-Type", "Authorization"]
+  allowHeaders: ["Content-Type", "Authorization", "X-HR-Auth"]
  })); 
 app.set("trust proxy", 1); 
 app.use(express.json({ limit: "50kb" }));
@@ -30,6 +30,8 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: false,
 });
+
+
 
 pool.connect()
   .then(client => { console.log(" PostgreSQL connected"); client.release(); })
@@ -42,6 +44,7 @@ app.get("/health", (req, res) => res.json({ status: "ok", timestamp: new Date().
 
 // Apply authentication middleware to all API routes
 app.use('/api', authenticate);
+//app.use('/api/kpi', authenticateHR);
 
 // Import and initialize route modules
 require('./tasks')(app, query);

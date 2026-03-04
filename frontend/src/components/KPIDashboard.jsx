@@ -100,7 +100,7 @@ export default function KPIDashboard({ kpi, employees }) {
 
 useEffect(() => {
   setLoadingMonthly(true);
-  api.getWorkloadMonthly(targetYear, targetMonth)
+  api.getMonthlyWorkload(targetYear, targetMonth)
     .then(setMonthlyData)
     .catch(console.error)
     .finally(() => setLoadingMonthly(false));

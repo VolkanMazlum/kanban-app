@@ -9,12 +9,16 @@ const encodeCredentials = (username, password) => {
 };
 
 async function req(path, options = {}) {
+  const defaultHeaders = {
+    "Content-Type": "application/json",
+    "Authorization": `Basic ${encodeCredentials(AUTH_USERNAME, AUTH_PASSWORD)}`
+  };
   const res = await fetch(`${BASE}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Basic ${encodeCredentials(AUTH_USERNAME, AUTH_PASSWORD)}`
-    },
     ...options,
+    headers: {
+      ...defaultHeaders,
+      ...(options.headers || {}),  // extra header'lar merge edilir
+    },
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -34,7 +38,13 @@ export const getEmployees    = ()       => req("/employees");
 export const createEmployee  = (name, role) => req("/employees", { method: "POST", body: JSON.stringify({ name, role }) });
 export const deleteEmployee  = (id)    => req(`/employees/${id}`, { method: "DELETE" });
 
-export const getKPI          = ()       => req("/kpi");
+//export const getKPI          = ()       => req("/kpi");
+export const getKPI = () => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  const headers = hrAuth ? { "X-HR-Auth": hrAuth } : {};
+  return req("/kpi", { headers });
+};
+
 export const getTimeLogs     = (params = {}) => req(`/time-logs${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""}`);
 export const logTime         = (data) => req("/time-logs", { method: "POST", body: JSON.stringify(data) });
 
@@ -53,4 +63,9 @@ export const updateSetting       = (key, value) => req(`/settings/${key}`, {
   method: "PATCH",
   body: JSON.stringify({ value })
 });
-export const getWorkloadMonthly = (year, month) => req(`/kpi/workload-monthly?year=${year}&month=${month}`);
+//export const getWorkloadMonthly = (year, month) => req(`/kpi/workload-monthly?year=${year}&month=${month}`);
+export const getMonthlyWorkload = (year, month) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  const headers = hrAuth ? { "X-HR-Auth": hrAuth } : {};
+  return req(`/kpi/workload-monthly?year=${year}&month=${month}`, { headers });
+};

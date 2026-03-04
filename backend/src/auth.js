@@ -46,4 +46,18 @@ const authenticate = (req, res, next) => {
   }
 };
 
-module.exports = { authenticate };
+
+const authenticateHR = (req, res, next) => {
+  const hrAuth = req.headers['x-hr-auth'];
+  if (!hrAuth) {
+    return res.status(401).json({ error: 'HR authentication required' });
+  }
+  const decoded = Buffer.from(hrAuth, 'base64').toString('utf8');
+  const [username, password] = decoded.split(':');
+  if (username === 'hr' && password === process.env.HR_PASSWORD) {
+    return next();
+  }
+  return res.status(403).json({ error: 'HR access only' });
+};
+
+module.exports = { authenticate, authenticateHR };
