@@ -1,12 +1,43 @@
-# 📋 ProjeBoard — Kanban Yönetim Sistemi
+# 📋 ProjeBoard — Kanban Management System
 
-A complete, self‑hosted Kanban board for internal project management, built with a **React + Vite** frontend, **Node.js + Express** backend, and **PostgreSQL** database. All services are containerised and orchestrated with Docker Compose.
+[![Docker Pulls](https://img.shields.io/docker/pulls/yourdockerhub/projeboard?style=flat-square)](https://hub.docker.com/r/yourdockerhub/projeboard)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-20.x-green?style=flat-square&logo=node.js)](https://nodejs.org/)
+[![React](https://img.shields.io/badge/React-18.2-brightgreen?style=flat-square&logo=react)](https://reactjs.org/)
+
+---
+
+## ✨ Overview
+
+**ProjeBoard** is a self‑hosted Kanban board for internal project management. It combines a **React + Vite** frontend, **Node.js + Express** backend, and a **PostgreSQL** database. All services are containerised and orchestrated with **Docker Compose** for a one‑click deployment experience.
+
+---
+
+## 📚 Table of Contents
+
+- [Architecture](#-architecture)
+- [Screenshots](#-screenshots)
+- [Installation & Running](#-installation--running)
+  - [Docker (recommended)](#docker-recommended)
+  - [Local Development](#local-development)
+- [Environment Variables](#-environment-variables)
+- [API Reference](#-api-reference)
+  - [Tasks](#tasks)
+  - [Employees](#employees)
+  - [KPI](#kpi)
+  - [Phases & Templates](#phases--templates)
+  - [Work Hours & Costs](#work-hours--costs)
+  - [Overtime](#overtime)
+  - [Task Finances](#task-finances)
+- [Features](#-features)
+- [Contributing](#-contributing)
+- [License](#-license)
 
 ---
 
 ## 🏗️ Architecture
 
-```
+```text
 kanban-app/
 ├── docker-compose.yml          # Orchestrates all services
 ├── backend/                    # Express API
@@ -18,9 +49,10 @@ kanban-app/
 │       ├── employees.js        # Employee CRUD
 │       ├── kpi.js              # KPI endpoint
 │       ├── phases.js           # Phase & template logic
-│       ├── settings.js         # (future config)
+│       ├── settings.js         # Future config
 │       ├── tasks.js            # Full task CRUD with phases & topics
 │       ├── timeLogs.js         # Time‑tracking endpoints
+│       ├── costs.js            # Work‑hours, cost calculations, overtime & finance
 │       ├── validation.js       # Zod schemas
 │       └── db/
 │           └── init.sql        # DB schema & seed data
@@ -44,50 +76,65 @@ kanban-app/
 
 ---
 
+## 📸 Screenshots
+
+| Board View | Task Modal |
+|---|---|
+| ![Board](./docs/screenshots/board.png) | ![Task Modal](./docs/screenshots/task-modal.png) |
+
+*Add your own screenshots under `docs/screenshots/`.*
+
+---
+
 ## 🚀 Installation & Running
 
-### Prerequisites
-- **Docker Desktop** (Windows/macOS/Linux) – provides Docker Engine & Compose
-- **Git** – to clone the repository
+### Docker (recommended)
 
-### Quick Start (Docker)
 ```bash
-# Clone the repository (or unzip the archive you received)
+# Clone the repository
 git clone <repo‑url>
 cd kanban-app
 
-# Create a .env file (see .env.example for required keys)
+# Copy example environment file and edit the values you need
 cp .env.example .env
-# Edit .env with your preferred credentials
+# Open .env in your favorite editor and set POSTGRES credentials, auth user/pass, etc.
 
-# Build and start all services
+# Build and start all services (detached mode)
 docker compose up --build -d
 ```
-The stack will be available at:
-- Frontend: <http://localhost:3000>
-- Backend API: <http://localhost:4000/api>
-- PostgreSQL: `localhost:5432` (use the credentials from `.env`)
 
-### Development (without Docker)
+The stack will be available at:
+- **Frontend:** <http://localhost:3000>
+- **Backend API:** <http://localhost:4000/api>
+- **PostgreSQL:** `localhost:5432` (use credentials from `.env`)
+
+### Local Development (without Docker)
+
 #### Backend
+
 ```bash
 cd backend
 npm install
-npm run dev   # http://localhost:4000
+npm run dev   # Starts API on http://localhost:4000
 ```
+
 #### Frontend
+
 ```bash
 cd frontend
 npm install
-npm run dev   # http://localhost:5173 (Vite dev server)
+npm run dev   # Vite dev server at http://localhost:5173
 ```
-> **Tip:** The backend respects the `FRONTEND_URL` env var for CORS; set it to the Vite dev URL when developing locally.
+
+> **Tip:** The backend respects the `FRONTEND_URL` environment variable for CORS. Set it to the Vite dev URL when developing locally.
 
 ---
 
 ## ⚙️ Environment Variables
+
 The project uses a shared `.env` file (mounted into each container). Required keys:
-```
+
+```dotenv
 # Docker / PostgreSQL
 POSTGRES_USER
 POSTGRES_PASSWORD
@@ -98,104 +145,115 @@ DATABASE_URL=postgresql://POSTGRES_USER:POSTGRES_PASSWORD@db:5432/POSTGRES_DB
 PORT=4000
 AUTH_USERNAME   # Basic‑auth username
 AUTH_PASSWORD   # Basic‑auth password
-FRONTEND_URL   # Used by CORS middleware
-
-# Optional – for local dev (override Docker values)
+FRONTEND_URL    # Used by CORS middleware (e.g., http://localhost:5173)
 ```
-> **Security note:** Never commit real passwords to source control; add `.env` to `.gitignore` (already done).
+
+Optional variables for local development can be added as needed. **Never** commit real passwords to source control – `.env` is already listed in `.gitignore`.
 
 ---
 
-## 📡 API Endpoints
+## 📡 API Reference
+
 All endpoints are prefixed with `/api` and require **Basic Auth** (see `backend/src/auth.js`).
 
 ### Tasks
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/tasks` | List tasks, filter with `?assignee_id=` or `?status=` |
-| GET | `/api/tasks/:id` | Get single task with topics, assignees & phases |
-| POST | `/api/tasks` | Create a task (body includes `phases` array) |
-| PUT | `/api/tasks/:id` | Full update (including `phases`) |
+| GET | `/api/tasks` | List tasks, optional filters `?assignee_id=` or `?status=` |
+| GET | `/api/tasks/:id` | Retrieve a task with its phases, topics, and assignees |
+| POST | `/api/tasks` | Create a new task (include `phases` array in body) |
+| PUT | `/api/tasks/:id` | Full update of a task (including phases) |
 | PATCH | `/api/tasks/:id/status` | Update only the `status` field (also updates related phases) |
 | DELETE | `/api/tasks/:id` | Delete a task |
 
 ### Employees
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/employees` | List all employees |
-| POST | `/api/employees` | Add a new employee (body: `{ "name": "John Doe" }`) |
+| POST | `/api/employees` | Add a new employee (`{ "name": "John Doe" }`) |
 | DELETE | `/api/employees/:id` | Delete employee (cascade removes assignments) |
 
 ### KPI
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/kpi` | Retrieve KPI aggregates for the board |
 
-### Phases (Templates & Task‑specific)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/phase-templates` | Get reusable phase templates grouped by topic |
+| GET | `/api/kpi` | Retrieve KPI aggregates (summary, status, topics, employee performance) |
+
+### Phases & Templates
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/kpi/workload-monthly` | Retrieve monthly workload per employee (query params `year` & `month`) |
 | GET | `/api/tasks/:taskId/phases` | List phases for a specific task |
 | POST | `/api/tasks/:taskId/phases` | Replace all phases for a task (expects `phases` array) |
 | PATCH | `/api/phases/:id` | Update a single phase (status, dates, assignees, etc.) |
 
-### Time Logs
+### Work Hours & Costs
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/time-logs` | List **all** time logs |
-| GET | `/api/tasks/:taskId/time-logs` | Logs for a specific task |
-| GET | `/api/employees/:employeeId/time-logs` | Logs for a specific employee |
-| POST | `/api/time-logs/start` | Start a new log (sets `started_at` to now) |
-| PATCH | `/api/time-logs/:id/stop` | Stop an active log (sets `ended_at` to now) |
-| POST | `/api/time-logs` | Create a complete log with both timestamps |
-| PUT | `/api/time-logs/:id` | Full update of a log |
-| DELETE | `/api/time-logs/:id` | Delete a log |
+| POST | `/api/work-hours` | Record or update work hours for an employee on a task (`employee_id`, `task_id`, `date`, `hours`, `note`) |
+| GET | `/api/work-hours/:employeeId?year=&month=` | Retrieve logged work‑hours for an employee filtered by year/month |
+| GET | `/api/costs` *(HR protected)* | Get yearly cost overview per employee – includes annual gross, logged hours, overtime, dynamic hourly rates, and cost history |
+| POST | `/api/costs/:employeeId` *(HR protected)* | Add a new annual cost record for an employee (`annual_gross`, `valid_from`) |
+
+### Overtime
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/costs/:employeeId/overtime?year=` *(HR protected)* | List overtime hours per month for a given year |
+| POST | `/api/costs/:employeeId/overtime` *(HR protected)* | Record or update overtime hours (`year`, `month`, `amount` or `hours`) |
+
+### Task Finances
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/task-finances?year=` *(HR protected)* | Retrieve revenue per task for a given year and aggregated work‑hours per employee |
+| POST | `/api/task-finances/:taskId` *(HR protected)* | Set or update revenue for a task (`revenue`) |
 
 ---
 
-## ✨ Features
-- **Drag‑and‑drop Kanban board** with columns: New → In Process → Blocked → Done
-- **Phase templates** for reusable workflows (e.g., design → development → review)
-- **Employee assignment** at both task and phase levels
-- **KPI dashboard** showing total tasks, completed tasks, overdue tasks, etc.
-- **Time‑tracking** (start/stop) for fine‑grained work logging
-- **Persistent storage** via PostgreSQL (Docker volume)
-- **Containerised** – one‑click deployment with Docker Compose
-- **Basic authentication** for API security (username/password from `.env`)
-- **Development mode** with hot‑reload (`nodemon` & Vite)
+## 🌟 Features
 
----
-
-## 🏢 Production Deployment (to a remote server)
-```bash
-# Copy the repo to the server (SSH/SCP)
-scp -r kanban-app/ user@myserver:/opt/kanban-app
-
-# SSH into the server
-ssh user@myserver
-cd /opt/kanban-app
-
-# Adjust .env for production secrets
-nano .env   # set strong passwords, change PORT if needed
-
-# Start containers in detached mode
-docker compose up -d --build
-```
-The application will be reachable at `http://<server-ip>:3000`.
+- Drag‑and‑drop Kanban board (New → In Process → Blocked → Done)
+- Phase templates for reusable workflows (e.g., design → development → review)
+- Employee assignment at both task and phase levels
+- KPI dashboard showing total tasks, completed tasks, overdue tasks, etc.
+- Time‑tracking (start/stop) for fine‑grained work logging
+- **Work‑hours API** to record daily effort per employee/task
+- **Cost calculations** with dynamic hourly rates, overtime handling, and cost history
+- **Task finance** reporting – revenue per task and aggregated work‑hours
+- Persistent storage via PostgreSQL (Docker volume)
+- Containerised – one‑click deployment with Docker Compose
+- Basic authentication for API security (username/password from `.env`)
+- Development mode with hot‑reload (`nodemon` & Vite)
 
 ---
 
 ## 🤝 Contributing
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/awesome-feature`)
-3. Make your changes
-4. Ensure the backend tests (if added) pass and the app still builds
-5. Open a Pull Request describing your changes
+
+We welcome contributions! Please follow these steps:
+
+1. **Fork** the repository.
+2. Create a feature branch:
+   ```bash
+   git checkout -b feature/awesome-feature
+   ```
+3. Make your changes and **add tests** if applicable.
+4. Ensure the backend tests (if any) pass and the app still builds.
+5. Open a Pull Request with a clear description of your changes.
+
+### Code of Conduct
+
+Please note that this project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
 
 ---
 
 ## 📄 License
-This project is licensed under the **MIT License** – see the `LICENSE` file for details.
+
+This project is licensed under the **MIT License** – see the [`LICENSE`](LICENSE) file for details.
 
 ---
 
