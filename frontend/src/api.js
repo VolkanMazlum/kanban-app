@@ -115,3 +115,7 @@ export const saveTaskRevenue = (taskId, data) => {
     headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
   });
 };
+export const savePhaseMonthlyHours = (phaseId, data) => 
+  req(`/phases/${phaseId}/monthly-hours`, { method: "POST", body: JSON.stringify(data) });
+export const getPhaseMonthlyHours = (phaseId) => 
+  req(`/phases/${phaseId}/monthly-hours`);

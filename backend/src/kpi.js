@@ -102,6 +102,7 @@ module.exports = (app, query) => {
     }
   });
 
+
   app.get("/api/kpi/workload-monthly", async (req, res) => {
   try {
     const year  = parseInt(req.query.year)  || new Date().getFullYear();
@@ -114,17 +115,28 @@ module.exports = (app, query) => {
       SELECT 
         e.id,
         e.name,
+        -- Aylık saat: önce phase_assignee_monthly_hours'a bak, yoksa eski hesaplamayı kullan
         COALESCE((
           SELECT SUM(
             CASE
               WHEN tp.status = 'done' THEN 0
-              WHEN pa.estimated_hours IS NOT NULL AND pa.estimated_hours > 0 THEN 
+              -- Yeni sistem: monthly_hours tablosunda kayıt varsa onu kullan
+              WHEN EXISTS (
+                SELECT 1 FROM phase_assignee_monthly_hours pamh2
+                WHERE pamh2.phase_id = tp.id AND pamh2.employee_id = e.id
+              ) THEN COALESCE((
+                SELECT pamh.hours
+                FROM phase_assignee_monthly_hours pamh
+                WHERE pamh.phase_id = tp.id 
+                AND pamh.employee_id = e.id
+                AND pamh.year = $3
+                AND pamh.month = $4
+              ), 0)
+              -- Eski sistem: estimated_hours varsa prorate et
+              WHEN pa.estimated_hours IS NOT NULL AND pa.estimated_hours > 0 THEN
                 GREATEST((LEAST(tp.end_date, $2::DATE) - GREATEST(tp.start_date, $1::DATE)), 0)
                 * (pa.estimated_hours / GREATEST((tp.end_date - tp.start_date), 1)::NUMERIC)
-              WHEN tp.status = 'active' THEN
-                GREATEST(
-                  (LEAST(tp.end_date, $2::DATE) - GREATEST(tp.start_date, $1::DATE)), 0
-                ) * 8
+              -- Fallback: 8h/gün
               ELSE
                 GREATEST(
                   (LEAST(tp.end_date, $2::DATE) - GREATEST(tp.start_date, $1::DATE)), 0
@@ -139,6 +151,8 @@ module.exports = (app, query) => {
           AND tp.start_date <= $2::DATE
           AND tp.end_date >= $1::DATE
         ), 0) AS phase_hours,
+
+        -- Phase listesi (monthly_hours da dahil)
         COALESCE((
           SELECT json_agg(json_build_object(
             'phase_id', tp.id,
@@ -148,7 +162,15 @@ module.exports = (app, query) => {
             'end_date', tp.end_date::TEXT,
             'status', tp.status,
             'estimated_hours', pa.estimated_hours,
-            'task_title', t.title
+            'task_title', t.title,
+            'monthly_hours_this_month', COALESCE((
+              SELECT pamh.hours
+              FROM phase_assignee_monthly_hours pamh
+              WHERE pamh.phase_id = tp.id
+              AND pamh.employee_id = e.id
+              AND pamh.year = $3
+              AND pamh.month = $4
+            ), null)
           ) ORDER BY tp.start_date)
           FROM task_phases tp
           JOIN phase_assignees pa ON pa.phase_id = tp.id
@@ -159,9 +181,10 @@ module.exports = (app, query) => {
           AND tp.start_date <= $2::DATE
           AND tp.end_date >= $1::DATE
         ), '[]') AS phases
+
       FROM employees e
       ORDER BY e.name
-    `, [monthStart, monthEnd]);
+    `, [monthStart, monthEnd, year, month]);
 
     res.json({
       year, month, monthStart, monthEnd,
@@ -171,5 +194,6 @@ module.exports = (app, query) => {
     console.error("Workload monthly error:", err);
     res.status(500).json({ error: "Database error" });
   }
-  });
+});
+
 };

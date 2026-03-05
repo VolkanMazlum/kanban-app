@@ -13,30 +13,40 @@ module.exports = (app, query) => {
   });
 
   app.get("/api/tasks/:taskId/phases", async (req, res) => {
-    try {
-      const result = await query(`
-        SELECT tp.*,
-          COALESCE((
-            SELECT json_agg(json_build_object('id', e.id, 'name', e.name, 'estimated_hours', pa.estimated_hours))
-            FROM phase_assignees pa
-            JOIN employees e ON e.id = pa.employee_id
-            WHERE pa.phase_id = tp.id
-          ), '[]') AS assignee_hours,
-          
-          COALESCE((
-            SELECT array_agg(pa.employee_id)
-            FROM phase_assignees pa
-            WHERE pa.phase_id = tp.id
-          ), '{}') AS assignee_ids
-          
-        FROM task_phases tp
-        WHERE tp.task_id = $1
-        ORDER BY tp.position
-      `, [req.params.taskId]);
-      res.json(result.rows);
-    } catch (err) { res.status(500).json({ error: "Database error" }); }
-  });
-
+  try {
+    const result = await query(`
+      SELECT tp.*,
+        COALESCE((
+          SELECT json_agg(json_build_object(
+            'id', e.id, 
+            'name', e.name, 
+            'estimated_hours', pa.estimated_hours,
+            'monthly_hours', COALESCE((
+              SELECT json_agg(json_build_object(
+                'year', pamh.year,
+                'month', pamh.month,
+                'hours', pamh.hours
+              ) ORDER BY pamh.year, pamh.month)
+              FROM phase_assignee_monthly_hours pamh
+              WHERE pamh.phase_id = tp.id AND pamh.employee_id = pa.employee_id
+            ), '[]')
+          ))
+          FROM phase_assignees pa
+          JOIN employees e ON e.id = pa.employee_id
+          WHERE pa.phase_id = tp.id
+        ), '[]') AS assignee_hours,
+        COALESCE((
+          SELECT array_agg(pa.employee_id)
+          FROM phase_assignees pa
+          WHERE pa.phase_id = tp.id
+        ), '{}') AS assignee_ids
+      FROM task_phases tp
+      WHERE tp.task_id = $1
+      ORDER BY tp.position
+    `, [req.params.taskId]);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: "Database error" }); }
+});
   app.post("/api/tasks/:taskId/phases", async (req, res) => {
     const { taskId } = req.params;
     const { phases } = req.body;
@@ -72,6 +82,16 @@ module.exports = (app, query) => {
                 DO UPDATE SET estimated_hours = EXCLUDED.estimated_hours`,
                 [phaseId, a.id, a.estimated_hours || null]
               );
+              if (a.monthly_hours && a.monthly_hours.length > 0) {
+                for (const mh of a.monthly_hours) {
+                  await query(
+                    `INSERT INTO phase_assignee_monthly_hours (phase_id, employee_id, year, month, hours)
+                    VALUES ($1, $2, $3, $4, $5)
+                    ON CONFLICT (phase_id, employee_id, year, month) DO UPDATE SET hours = $5`,
+                    [phaseId, a.id, mh.year, mh.month, mh.hours]
+                  );
+                }
+              }
             }
           }
         }
@@ -123,4 +143,37 @@ module.exports = (app, query) => {
       res.status(500).json({ error: "Database error" });
     }
   });
+
+  // Aylık saatleri kaydet
+app.post("/api/phases/:phaseId/monthly-hours", async (req, res) => {
+  const { phaseId } = req.params;
+  const { employee_id, year, month, hours } = req.body;
+  try {
+    const result = await query(
+      `INSERT INTO phase_assignee_monthly_hours (phase_id, employee_id, year, month, hours)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (phase_id, employee_id, year, month) DO UPDATE SET hours = $5
+       RETURNING *`,
+      [phaseId, employee_id, year, month, hours]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// Aylık saatleri getir
+app.get("/api/phases/:phaseId/monthly-hours", async (req, res) => {
+  const { phaseId } = req.params;
+  try {
+    const result = await query(
+      `SELECT * FROM phase_assignee_monthly_hours WHERE phase_id = $1 ORDER BY year, month`,
+      [phaseId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
 };

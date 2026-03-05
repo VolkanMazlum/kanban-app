@@ -77,6 +77,20 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
     }));
   };
 
+  function getPhaseMonths(startDate, endDate) {
+    if (!startDate || !endDate) return [];
+    const months = [];
+    const cur = new Date(startDate);
+    cur.setDate(1);
+    const end = new Date(endDate);
+    end.setDate(1);
+    while (cur <= end) {
+      months.push({ year: cur.getFullYear(), month: cur.getMonth() + 1 });
+      cur.setMonth(cur.getMonth() + 1);
+    }
+    return months;
+  }
+
   const phasesRef = useRef(phases);
   useEffect(() => { phasesRef.current = phases; }, [phases]);
 
@@ -251,48 +265,76 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
                           {/* MOVED INSIDE THE PHASE LOOP: Phase Assignees & Hours */}
                           <div style={{background:"#F9FAFB", border:"1px solid #E5E7EB", padding: "8px", borderRadius: 6}}>
                             <label style={{fontSize:10,color:"#374151",fontWeight:700,marginBottom:8,display:"block"}}>ASSIGNEES & HOURS FOR THIS PHASE</label>
+                            {(!ph.start_date || !ph.end_date) && (
+                              <div style={{fontSize:11,color:"#F59E0B",marginBottom:8,padding:"6px 8px",background:"#FFFBEB",borderRadius:6,border:"1px solid #FDE68A"}}>
+                                ⚠ Enter start and end dates to set monthly hours
+                              </div>
+                            )}
                             <div style={{display:"flex",flexDirection:"column",gap:8}}>
                               {employees.map(emp => {
                                 const assignment = (ph.assignee_hours || []).find(a => a.id === emp.id);
                                 const isSelected = !!assignment;
-                                
+                                const phaseMonths = getPhaseMonths(ph.start_date, ph.end_date);
+                                const monthlyHours = assignment?.monthly_hours || [];
+
                                 return (
-                                  <div key={emp.id} style={{display:"flex",alignItems:"center",gap:8}}>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
+                                  <div key={emp.id}>
+                                    {/* Kişi seç */}
+                                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                                      <button type="button" onClick={() => {
                                         const current = ph.assignee_hours || [];
                                         const exists = current.find(a => a.id === emp.id);
                                         const updated = exists
                                           ? current.filter(a => a.id !== emp.id)
-                                          : [...current, { id: emp.id, name: emp.name, estimated_hours: "" }];
+                                          : [...current, { id: emp.id, name: emp.name, estimated_hours: 0, monthly_hours: [] }];
                                         updatePhase(idx, "assignee_hours", updated);
-                                      }}
-                                      style={{
-                                        width:22, height:22, borderRadius:4, border:"none",
+                                      }} style={{
+                                        width:22, height:22, borderRadius:"50%", border:"none",
                                         background: isSelected ? "#2563EB" : "#E5E7EB",
                                         color: isSelected ? "#fff" : "#6B7280",
-                                        cursor:"pointer", fontSize:12, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center"
-                                      }}
-                                    >
-                                      {isSelected ? "✓" : "+"}
-                                    </button>
-                                    <Avatar name={emp.name} size={22} idx={employees.indexOf(emp)} />
-                                    <span style={{fontSize:11,color:"#374151",flex:1, fontWeight: isSelected ? 600 : 400}}>{emp.name}</span>
-                                    
-                                    {isSelected && (
-                                      <input
-                                        type="number" min="0" step="0.5"
-                                        value={assignment.estimated_hours || ""}
-                                        onChange={e => {
-                                          const updated = (ph.assignee_hours || []).map(a =>
-                                            a.id === emp.id ? { ...a, estimated_hours: e.target.value ? parseFloat(e.target.value) : "" } : a
+                                        cursor:"pointer", fontSize:11, fontWeight:700
+                                      }}>{isSelected ? "✓" : "+"}</button>
+                                      <Avatar name={emp.name} size={20} idx={employees.indexOf(emp)} />
+                                      <span style={{fontSize:12,color:"#374151",flex:1}}>{emp.name}</span>
+                                      {isSelected && (
+                                        <span style={{fontSize:10,color:"#9CA3AF"}}>
+                                          Total: {monthlyHours.reduce((s,m) => s + (parseFloat(m.hours)||0), 0)}h
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Aylık saat inputları */}
+                                    {isSelected && phaseMonths.length > 0 && (
+                                      <div style={{marginLeft:30,display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+                                        {phaseMonths.map(({year, month}) => {
+                                          const mh = monthlyHours.find(m => m.year===year && m.month===month);
+                                          const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                                          return (
+                                            <div key={`${year}-${month}`} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                                              <span style={{fontSize:9,color:"#9CA3AF",fontWeight:600}}>{MONTH_LABELS[month-1]}</span>
+                                              <input
+                                                type="number" min="0" step="0.5"
+                                                value={mh?.hours || ""}
+                                                onChange={e => {
+                                                  const updated = (ph.assignee_hours || []).map(a => {
+                                                    if (a.id !== emp.id) return a;
+                                                    const existingMonths = a.monthly_hours || [];
+                                                    const hasMonth = existingMonths.find(m => m.year===year && m.month===month);
+                                                    const newMonths = hasMonth
+                                                      ? existingMonths.map(m => m.year===year && m.month===month ? {...m, hours: parseFloat(e.target.value)||0} : m)
+                                                      : [...existingMonths, {year, month, hours: parseFloat(e.target.value)||0}];
+                                                    const total = newMonths.reduce((s,m) => s+(parseFloat(m.hours)||0), 0);
+                                                    return { ...a, monthly_hours: newMonths, estimated_hours: total };
+                                                  });
+                                                  updatePhase(idx, "assignee_hours", updated);
+                                                }}
+                                                placeholder="h"
+                                                style={{width:44,border:"1.5px solid #E5E7EB",borderRadius:6,padding:"3px 4px",fontSize:11,textAlign:"center"}}
+                                              />
+                                            </div>
                                           );
-                                          updatePhase(idx, "assignee_hours", updated);
-                                        }}
-                                        placeholder="hrs"
-                                        style={{width:60, border:"1px solid #D1D5DB", borderRadius:4, padding:"4px", fontSize:11, textAlign:"center"}}
-                                      />
+                                        })}
+                                      </div>
                                     )}
                                   </div>
                                 );

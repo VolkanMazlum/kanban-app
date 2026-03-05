@@ -254,6 +254,15 @@ CREATE TABLE IF NOT EXISTS task_revenues (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS phase_assignee_monthly_hours (
+  phase_id INTEGER REFERENCES task_phases(id) ON DELETE CASCADE,
+  employee_id INTEGER REFERENCES employees(id) ON DELETE CASCADE,
+  year INTEGER NOT NULL,
+  month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+  hours NUMERIC(5,1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (phase_id, employee_id, year, month)
+);
+
 -- Sequence (Otomatik artan ID) ayarını güncelle
 -- Manuel ID verdiğimiz için sequence'i en yüksek ID'nin bir fazlasına ayarlamalıyız.
 SELECT setval('tasks_id_seq', (SELECT MAX(id) FROM tasks));

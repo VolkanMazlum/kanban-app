@@ -90,12 +90,24 @@ module.exports = (app, query) => {
                    'note', tp.note,
                    'estimated_hours', tp.estimated_hours,
                    'assignee_hours', COALESCE((
-                     SELECT json_agg(json_build_object('id', e.id, 'name', e.name, 'estimated_hours', pa.estimated_hours))
-                     FROM phase_assignees pa
-                     JOIN employees e ON e.id = pa.employee_id
-                     WHERE pa.phase_id = tp.id
-                   ), '[]')
-                 ) ORDER BY tp.position), '[]')
+                      SELECT json_agg(json_build_object(
+                        'id', e.id, 
+                        'name', e.name,
+                        'estimated_hours', pa.estimated_hours,
+                        'monthly_hours', COALESCE((
+                          SELECT json_agg(json_build_object(
+                            'year', pamh.year,
+                            'month', pamh.month,
+                            'hours', pamh.hours
+                          ) ORDER BY pamh.year, pamh.month)
+                          FROM phase_assignee_monthly_hours pamh
+                          WHERE pamh.phase_id = tp.id AND pamh.employee_id = pa.employee_id
+                        ), '[]')
+                      ))
+                      FROM phase_assignees pa
+                      JOIN employees e ON e.id = pa.employee_id
+                      WHERE pa.phase_id = tp.id
+                    ), '[]')
                  FROM task_phases tp
                  WHERE tp.task_id = t.id
                ) AS phases
