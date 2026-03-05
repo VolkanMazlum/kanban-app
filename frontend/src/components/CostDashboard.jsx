@@ -310,13 +310,26 @@ export default function CostDashboard({ employees, isHR }) {
                 {Array.from({length: (days[0].getDay() + 6) % 7}).map((_, i) => (
                   <div key={`empty-${i}`} />
                 ))}
-
                 {days.map(day => {
                   const dateStr   = day.toISOString().slice(0,10);
                   const isPast    = day <= today;
                   const isWeekend = day.getDay() === 0 || day.getDay() === 6;
                   const isToday   = day.toDateString() === today.toDateString();
                   const dayLabel  = day.toLocaleString("en-US", { weekday:"short" });
+
+                  // Sadece o GÜN içinde aktif olan (başlamış ve henüz bitmemiş) projeleri göster
+                  const activeTasksOnThisDay = assignedTasks.filter(t => {
+                    const dayTime = day.getTime();
+                    
+                    // Başlangıç: Varsa Actual, yoksa Planned, o da yoksa Created_at
+                    const start = t.actual_start || t.planned_start || t.created_at;
+                    const startTime = new Date(start).setHours(0,0,0,0);
+                    
+                    const end = t.actual_end || t.planned_end;
+                    const endTime = end ? new Date(end).setHours(23,59,59,999) : Infinity;
+
+                    return dayTime >= startTime && dayTime <= endTime;
+                  });
 
                   const dayTotal = assignedTasks.reduce((sum, t) => sum + (parseFloat(dailyHours[t.id]?.[dateStr]?.hours) || 0), 0);
                   const hasHours = dayTotal > 0;
@@ -327,8 +340,7 @@ export default function CostDashboard({ employees, isHR }) {
                       borderRadius:8, padding:"8px 8px 10px",
                       border:`1.5px solid ${isToday ? "#2563EB" : hasHours ? "#86EFAC" : isWeekend ? "#F3F4F6" : "#E5E7EB"}`,
                       opacity: isPast ? 1 : 0.35,
-                      transition:"border-color 0.15s",
-                      display: "flex", flexDirection: "column"
+                      display: "flex", flexDirection: "column", minHeight: 120
                     }}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8, paddingBottom: 6, borderBottom: "1px dashed #E5E7EB"}}>
                         <span style={{fontSize:9,fontWeight:700,color:isWeekend?"#D1D5DB":isToday?"#2563EB":"#9CA3AF"}}>{dayLabel}</span>
@@ -339,28 +351,33 @@ export default function CostDashboard({ employees, isHR }) {
                       </div>
 
                       <div style={{maxHeight: 180, overflowY: "auto", paddingRight: 2}}>
-                        {assignedTasks.map(task => {
-                          const entry = dailyHours[task.id]?.[dateStr] || { hours: "", note: "" };
-                          return (
-                            <div key={task.id} style={{marginBottom: 8}}>
-                              <div style={{fontSize:9, fontWeight:600, color:"#4B5563", marginBottom: 3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}} title={task.title}>
-                                {task.title}
+                        {/* ARTIK assignedTasks DEĞİL, activeTasksOnThisDay LİSTELENİYOR */}
+                        {activeTasksOnThisDay.length === 0 ? (
+                          <div style={{fontSize:9, color:"#D1D5DB", textAlign:"center", marginTop:10}}>No active tasks</div>
+                        ) : (
+                          activeTasksOnThisDay.map(task => {
+                            const entry = dailyHours[task.id]?.[dateStr] || { hours: "", note: "" };
+                            return (
+                              <div key={task.id} style={{marginBottom: 8}}>
+                                <div style={{fontSize:9, fontWeight:600, color:"#4B5563", marginBottom: 3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}} title={task.title}>
+                                  {task.title}
+                                </div>
+                                <input
+                                  type="number" min="0" max="24" step="0.5" disabled={!isPast || isWeekend}
+                                  value={entry.hours || ""}
+                                  onChange={e => setDailyHours(p => ({...p, [task.id]: {...(p[task.id]||{}), [dateStr]: {...(p[task.id]?.[dateStr]||{}), hours: e.target.value}}}))}
+                                  onBlur={e => isPast && !isWeekend && handleDaySave(task.id, dateStr, e.target.value, entry.note)}
+                                  placeholder="h"
+                                  style={{
+                                    width:"100%", border:`1px solid ${entry.hours ? "#86EFAC" : "#E5E7EB"}`,
+                                    borderRadius:4, padding:"4px 6px", fontSize:11, textAlign:"right",
+                                    background: isWeekend ? "#F3F4F6" : "#fff", color:"#111827", outline:"none"
+                                  }}
+                                />
                               </div>
-                              <input
-                                type="number" min="0" max="24" step="0.5" disabled={!isPast || isWeekend}
-                                value={entry.hours || ""}
-                                onChange={e => setDailyHours(p => ({...p, [task.id]: {...(p[task.id]||{}), [dateStr]: {...(p[task.id]?.[dateStr]||{}), hours: e.target.value}}}))}
-                                onBlur={e => isPast && !isWeekend && handleDaySave(task.id, dateStr, e.target.value, entry.note)}
-                                placeholder="h"
-                                style={{
-                                  width:"100%", border:`1px solid ${entry.hours ? "#86EFAC" : "#E5E7EB"}`,
-                                  borderRadius:4, padding:"4px 6px", fontSize:11, textAlign:"right",
-                                  background: isWeekend ? "#F3F4F6" : "#fff", color:"#111827", outline:"none"
-                                }}
-                              />
-                            </div>
-                          );
-                        })}
+                            );
+                          })
+                        )}
                       </div>
                     </div>
                   );

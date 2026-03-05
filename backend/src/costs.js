@@ -109,20 +109,29 @@ module.exports = (app, query, authenticateHR) => {
     } catch (err) { res.status(500).json({ error: "Database error" }); }
   });
 
-  // Proje maliyetleri yıla göre filtreleniyor
+  // --- PROJE / TASK FİNANSMANI (Yıl Aralıklarına Göre) ---
   app.get("/api/task-finances", authenticateHR, async (req, res) => {
     const targetYear = parseInt(req.query.year) || new Date().getFullYear();
     try {
+      // SADECE Seçili yılda aktif olan taskları getiriyoruz
       const tasksRes = await query(`
         SELECT t.id, t.title, COALESCE(tr.revenue, 0) as revenue 
-        FROM tasks t LEFT JOIN task_revenues tr ON t.id = tr.task_id ORDER BY t.created_at DESC
-      `);
+        FROM tasks t 
+        LEFT JOIN task_revenues tr ON t.id = tr.task_id 
+        WHERE 
+          (EXTRACT(YEAR FROM t.planned_start) <= $1 AND (t.planned_end IS NULL OR EXTRACT(YEAR FROM t.planned_end) >= $1))
+          OR 
+          (EXTRACT(YEAR FROM t.actual_start) <= $1 AND (t.actual_end IS NULL OR EXTRACT(YEAR FROM t.actual_end) >= $1))
+        ORDER BY t.created_at DESC
+      `, [targetYear]);
+      
       const hoursRes = await query(`
         SELECT task_id, employee_id, SUM(hours) as total_hours 
         FROM employee_work_hours 
         WHERE task_id IS NOT NULL AND EXTRACT(YEAR FROM date) = $1
         GROUP BY task_id, employee_id
       `, [targetYear]);
+
       res.json({ tasks: tasksRes.rows, task_hours: hoursRes.rows });
     } catch (err) { res.status(500).json({ error: "Database error" }); }
   });
