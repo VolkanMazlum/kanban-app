@@ -8,7 +8,7 @@ import TaskCard from "./components/TaskCard.jsx";
 import EmployeeManager from "./components/EmployeeManager.jsx";
 import GanttChart from "./components/GanttChart.jsx";
 import KPIDashboard from "./components/KPIDashboard.jsx";
-
+import CostDashboard from "./components/CostDashboard.jsx";
 
 export default function App() {
   const [tasks, setTasks]         = useState([]);
@@ -166,7 +166,7 @@ export default function App() {
             <div style={{fontSize:10,color:"#9CA3AF",fontWeight:600,letterSpacing:"0.06em"}}>S.R.L. — PROJECT MANAGEMENT</div>
           </div>
           <div style={{display:"flex",background:"#F3F4F6",borderRadius:8,padding:3,marginLeft:20}}>
-            {[{id:"board",label:"📋  Board"},{id:"gantt",label:"📅  Gantt"}, ...(isHR ? [{id:"kpi",label:"📊  KPIs"}] : [])].map(tab=>(
+            {[{id:"board",label:"📋  Board"},{id:"gantt",label:"📅  Gantt"},{id:"costs", label:"💰  Costs"} ,  ...(isHR ? [{id:"kpi",label:"📊  KPIs"}] : [])].map(tab=>(
               <button key={tab.id} onClick={()=>setView(tab.id)} style={{
                 padding:"6px 16px",borderRadius:6,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,
                 fontFamily:"'Inter',sans-serif",
@@ -176,6 +176,7 @@ export default function App() {
                 transition:"all 0.15s",
               }}>{tab.label}</button>
             ))}
+
             {!isHR && (
               <button onClick={()=>setShowHRLogin(true)} style={{
                 background:"#F9FAFB", border:"1.5px solid #E5E7EB",
@@ -231,7 +232,9 @@ export default function App() {
           <div style={{color:"#DC2626",fontSize:14}}>⚠ {error}</div>
           <button onClick={loadAll} style={{background:"#2563EB",color:"#fff",border:"none",borderRadius:8,padding:"8px 20px",fontFamily:"'Inter',sans-serif",fontSize:13,cursor:"pointer"}}>Retry</button>
         </div>
-      ) : view==="gantt" ? (
+      ) : view==="costs" ? (
+        <CostDashboard employees={employees} isHR={isHR} />
+      ): view==="gantt" ? (
         <GanttChart tasks={tasks} employees={employees} />
       ) : view==="kpi" ? (
         <KPIDashboard kpi={kpi} employees={employees} tasks={tasks} />

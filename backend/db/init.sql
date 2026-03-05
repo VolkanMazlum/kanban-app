@@ -207,6 +207,53 @@ INSERT INTO employees (name) VALUES
   ('Andrea C.')
 ON CONFLICT DO NOTHING;
 
+CREATE TABLE IF NOT EXISTS employee_costs (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  annual_gross NUMERIC(10,2) NOT NULL,
+  valid_from DATE NOT NULL DEFAULT CURRENT_DATE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE employee_work_hours (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  hours NUMERIC(4,1) NOT NULL DEFAULT 0,
+  note TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+
+CREATE INDEX IF NOT EXISTS idx_work_hours_employee ON employee_work_hours(employee_id);
+CREATE INDEX IF NOT EXISTS idx_work_hours_date ON employee_work_hours(date);
+
+CREATE INDEX IF NOT EXISTS idx_employee_costs_employee_id ON employee_costs(employee_id);
+DELETE FROM employee_work_hours WHERE task_id IS NULL;
+
+
+-- Tabella per i costi degli straordinari mensili
+CREATE TABLE IF NOT EXISTS employee_overtime_costs (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  year INTEGER NOT NULL,
+  month INTEGER NOT NULL,
+  hours NUMERIC(5,1) NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(employee_id, year, month)
+);
+
+CREATE INDEX IF NOT EXISTS idx_employee_overtime_emp_year ON employee_overtime_costs(employee_id, year);
+
+ALTER TABLE employee_work_hours ADD CONSTRAINT employee_work_hours_emp_task_date_key UNIQUE(employee_id, task_id, date);
+
+CREATE TABLE IF NOT EXISTS task_revenues (
+  task_id INTEGER PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+  revenue NUMERIC(12,2) NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Sequence (Otomatik artan ID) ayarını güncelle
 -- Manuel ID verdiğimiz için sequence'i en yüksek ID'nin bir fazlasına ayarlamalıyız.
 SELECT setval('tasks_id_seq', (SELECT MAX(id) FROM tasks));

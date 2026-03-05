@@ -69,3 +69,49 @@ export const getMonthlyWorkload = (year, month) => {
   const headers = hrAuth ? { "X-HR-Auth": hrAuth } : {};
   return req(`/kpi/workload-monthly?year=${year}&month=${month}`, { headers });
 };
+
+export const getCosts = (year) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  const url = year ? `/costs?year=${year}` : "/costs";
+  return req(url, { headers: hrAuth ? { "X-HR-Auth": hrAuth } : {} });
+};
+
+export const addEmployeeCost = (employeeId, data) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  return req(`/costs/${employeeId}`, {
+    method: "POST",
+    body: JSON.stringify(data),
+    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+  });
+};
+export const saveWorkHours = (data) => req("/work-hours", { method: "POST", body: JSON.stringify(data) });
+export const getWorkHours = (employeeId, year, month) => req(`/work-hours/${employeeId}?year=${year}&month=${month}`);
+export const getOvertimeCosts = (employeeId, year) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  return req(`/costs/${employeeId}/overtime?year=${year}`, { 
+    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {} 
+  });
+};
+
+export const saveOvertimeCost = (employeeId, data) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  return req(`/costs/${employeeId}/overtime`, {
+    method: "POST", 
+    body: JSON.stringify(data),
+    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+  });
+};
+export const getTaskFinances = (year) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  const url = year ? `/task-finances?year=${year}` : "/task-finances";
+  return req(url, { headers: hrAuth ? { "X-HR-Auth": hrAuth } : {} });
+};
+
+export const saveTaskRevenue = (taskId, data) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  return req(`/task-finances/${taskId}`, {
+    method: "POST",
+    body: JSON.stringify(data),
+    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+  });
+};
