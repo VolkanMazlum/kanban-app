@@ -182,7 +182,7 @@ export default function App() {
                 background:"#F9FAFB", border:"1.5px solid #E5E7EB",
                 borderRadius:8, padding:"7px 14px", color:"#6B7280",
                 fontSize:12, cursor:"pointer", fontWeight:600
-              }}>🔐 HR Login</button>
+              }}>🔐 Private Area Login</button>
             )}
 
             {isHR && (
@@ -190,7 +190,7 @@ export default function App() {
                 background:"#FEF2F2", border:"1.5px solid #FECACA",
                 borderRadius:8, padding:"7px 14px", color:"#DC2626",
                 fontSize:12, cursor:"pointer", fontWeight:600
-              }}>HR Logout</button>
+              }}>Private Area Logout</button>
             )}
           </div>
         </div>
@@ -284,7 +284,7 @@ export default function App() {
             <div style={{background:"#fff",borderRadius:16,padding:28,width:360,boxShadow:"0 20px 60px rgba(0,0,0,0.15)",fontFamily:"'Inter',sans-serif"}}>
               <div style={{marginBottom:20}}>
                 <div style={{fontSize:10,color:"#9CA3AF",letterSpacing:"0.1em",fontWeight:600,marginBottom:2}}>RESTRICTED ACCESS</div>
-                <h3 style={{color:"#111827",margin:0,fontSize:18,fontWeight:700}}>HR Login</h3>
+                <h3 style={{color:"#111827",margin:0,fontSize:18,fontWeight:700}}>Private Area Login</h3>
               </div>
               <div style={{marginBottom:14}}>
                 <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600}}>PASSWORD</label>
@@ -296,7 +296,7 @@ export default function App() {
                     padding:"9px 12px", fontSize:13, fontFamily:"'Inter',sans-serif",
                     outline:"none", color:"#111827"
                   }}
-                  placeholder="Enter HR password..."
+                  placeholder="Enter password here..."
                   onKeyDown={e => {
                     if (e.key === "Enter") {
                       handleHRLogin(e.target.value);
