@@ -1,29 +1,32 @@
 const BASE = "/api";
+let loginPromise = null; // YENİ: Kilit değişkenimiz
 
 async function req(path, options = {}) {
   let token = sessionStorage.getItem('token');
   
   if (!token && !path.startsWith('/login')) {
-    // Token yoksa login yapılması gerekiyor
-    try {
-      const response = await fetch('/api/login', {
+    // Eğer devam eden bir login işlemi yoksa başlat
+    if (!loginPromise) {
+      loginPromise = fetch('/api/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: import.meta.env.VITE_AUTH_USERNAME,
           password: import.meta.env.VITE_AUTH_PASSWORD
         })
+      }).then(async (res) => {
+        if (!res.ok) throw new Error('Login failed');
+        const data = await res.json();
+        sessionStorage.setItem('token', data.token);
+        return data.token;
+      }).finally(() => {
+        loginPromise = null; // İşlem bitince kilidi aç
       });
-      
-      if (!response.ok) {
-        throw new Error('Login failed');
-      }
-      
-      const data = await response.json();
-      sessionStorage.setItem('token', data.token);
-      token = data.token;
+    }
+    
+    // Diğer istekler ilk isteğin bitmesini bekler
+    try {
+      token = await loginPromise;
     } catch (error) {
       console.error('Login error:', error);
       throw new Error('Authentication required');
@@ -34,19 +37,22 @@ async function req(path, options = {}) {
     "Content-Type": "application/json",
     "Authorization": token ? `Bearer ${token}` : ''
   };
+  
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
       ...defaultHeaders,
-      ...(options.headers || {}),  // extra header'lar merge edilir
+      ...(options.headers || {}),
     },
   });
+  
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `HTTP ${res.status}`);
   }
   return res.json();
 }
+
 
 export const getTasks        = (params = {}) => req(`/tasks${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""}`);
 export const getTask         = (id) => req(`/tasks/${id}`);

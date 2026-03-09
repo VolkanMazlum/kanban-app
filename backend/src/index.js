@@ -14,7 +14,7 @@ const limiter = rateLimit({
   max: 150, 
   message: { error: "Too many requests, please try again later." }
 });
-app.set("trust proxy", 1); 
+app.set("trust proxy", true); 
 app.use(helmet());
 app.use(cors({ 
   origin: process.env.FRONTEND_URL,   
