@@ -23,40 +23,41 @@ export default function App() {
   const [toasts, setToasts]       = useState([]);
   const dragId = useRef(null);
 
-  const [isHR, setIsHR] = useState(false);
+  const [isHR, setIsHR] = useState(() => {
+    return sessionStorage.getItem("hrAuth") !== null;
+  });
   const [showHRLogin, setShowHRLogin] = useState(false);
   const [hrError, setHRError] = useState("");
 
   const handleHRLogin = async (password) => {
   try {
     const hrAuth = btoa(`hr:${password}`);
-    // api.js'deki req yerine direkt getKPI kullan
-    const res = await fetch("/api/kpi", {
-      headers: {
-        "Authorization": `Basic ${btoa(`${import.meta.env.VITE_AUTH_USERNAME}:${import.meta.env.VITE_AUTH_PASSWORD}`)}`,
-        "X-HR-Auth": hrAuth
-      }
-    });
-    if (res.ok) {
-      setIsHR(true);
-      setShowHRLogin(false);
-      sessionStorage.setItem("hrAuth", hrAuth);
-    } else {
-      setHRError("Wrong password");
-    }
+    
+    sessionStorage.setItem("hrAuth", hrAuth); 
+    
+    await api.getKPI(); 
+
+    setIsHR(true);
+    setShowHRLogin(false);
+    
   } catch (err) {
     console.error("HR login error:", err);
-    setHRError("Connection error");
+    // Şifre yanlışsa veya hata verdiyse sessionStorage'dan sahte yetkiyi sil
+    sessionStorage.removeItem("hrAuth"); 
+    setHRError("Wrong password or connection error");
   }
 };
 
-// Sayfa yüklenince HR session'ı kontrol et
   useEffect(() => {
     const hrAuth = sessionStorage.getItem("hrAuth");
     if (hrAuth) {
-      fetch("/api/kpi", { headers: { "X-HR-Auth": hrAuth }})
-        .then(r => { if (r.ok) setIsHR(true); })
-        .catch(() => {});
+      api.getKPI()
+        .then(() => setIsHR(true)) 
+        .catch((err) => {
+           console.error("HR Session check failed:", err);
+           sessionStorage.removeItem("hrAuth");
+           setIsHR(false);
+        });
     }
   }, []);
 
