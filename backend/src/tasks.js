@@ -33,7 +33,7 @@ module.exports = (app, query) => {
                   SELECT json_agg(json_build_object('id', e.id, 'name', e.name, 'estimated_hours', pa.estimated_hours))
                   FROM phase_assignees pa
                   JOIN employees e ON e.id = pa.employee_id
-                  WHERE pa.phase_id = tp.id
+                  WHERE pa.phase_id = tp.id and e.is_active = TRUE
                 ), '[]')
               ) ORDER BY tp.position), '[]')
               FROM task_phases tp
@@ -101,7 +101,7 @@ module.exports = (app, query) => {
                             'hours', pamh.hours
                           ) ORDER BY pamh.year, pamh.month)
                           FROM phase_assignee_monthly_hours pamh
-                          WHERE pamh.phase_id = tp.id AND pamh.employee_id = pa.employee_id
+                          WHERE pamh.phase_id = tp.id AND pamh.employee_id = pa.employee_id AND e.is_active = TRUE
                         ), '[]')
                       ))
                       FROM phase_assignees pa

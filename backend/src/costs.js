@@ -39,7 +39,9 @@ module.exports = (app, query, authenticateHR) => {
           COALESCE((SELECT SUM(wh.hours) FROM employee_work_hours wh WHERE wh.employee_id = e.id AND EXTRACT(YEAR FROM wh.date) = $1), 0) AS logged_hours,
           COALESCE((SELECT SUM(hours) FROM employee_overtime_costs WHERE employee_id = e.id AND year = $1), 0) AS overtime_hours,
           COALESCE((SELECT json_agg(json_build_object('id', ec.id, 'annual_gross', ec.annual_gross, 'valid_from', ec.valid_from::TEXT) ORDER BY ec.valid_from DESC) FROM employee_costs ec WHERE ec.employee_id = e.id), '[]') AS cost_history
-        FROM employees e ORDER BY e.name
+        FROM employees e 
+        WHERE e.is_active = TRUE
+        ORDER BY e.name
       `, [targetYear]);
 
       const THEORETICAL_HOURS_CONST = 2000;

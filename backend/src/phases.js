@@ -33,12 +33,13 @@ module.exports = (app, query) => {
           ))
           FROM phase_assignees pa
           JOIN employees e ON e.id = pa.employee_id
-          WHERE pa.phase_id = tp.id
+          WHERE pa.phase_id = tp.id AND e.is_active = TRUE
         ), '[]') AS assignee_hours,
         COALESCE((
           SELECT array_agg(pa.employee_id)
           FROM phase_assignees pa
-          WHERE pa.phase_id = tp.id
+          JOIN employees e ON e.id = pa.employee_id
+          WHERE pa.phase_id = tp.id AND e.is_active = TRUE
         ), '{}') AS assignee_ids
       FROM task_phases tp
       WHERE tp.task_id = $1

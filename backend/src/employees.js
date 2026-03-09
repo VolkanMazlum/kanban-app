@@ -3,7 +3,7 @@ const { employeeSchema } = require("./validation");
 module.exports = (app, query) => {
   app.get("/api/employees", async (req, res) => {
     try {
-      const result = await query("SELECT * FROM employees ORDER BY name ASC");
+      const result = await query("SELECT * FROM employees WHERE is_active = TRUE ORDER BY name ASC");
       res.json(result.rows);
     } catch (err) { res.status(500).json({ error: "Database error" }); }
   });
@@ -33,7 +33,7 @@ module.exports = (app, query) => {
   app.delete("/api/employees/:id", async (req, res) => {
     try {
       // ON DELETE CASCADE sayesinde çalışanı silince ara tablodaki atamaları da otomatik silinecek
-      await query("DELETE FROM employees WHERE id = $1", [req.params.id]);
+      await query("UPDATE employees SET is_active = FALSE WHERE id = $1", [req.params.id]);
       res.json({ success: true });
     } catch (err) { res.status(500).json({ error: "Database error" }); }
   });
