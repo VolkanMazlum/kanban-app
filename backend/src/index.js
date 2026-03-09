@@ -14,17 +14,18 @@ const limiter = rateLimit({
   max: 150, 
   message: { error: "Too many requests, please try again later." }
 });
-
+app.set("trust proxy", 1); 
+app.use(helmet());
 app.use(cors({ 
   origin: process.env.FRONTEND_URL,   
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-  allowHeaders: ["Content-Type", "Authorization", "X-HR-Auth"]
- })); 
-app.set("trust proxy", 1); 
+  allowedHeaders: ["Content-Type", "Authorization", "X-HR-Auth"]
+}));
+
 app.use(express.json({ limit: "50kb" }));
 app.use(limiter);
-app.use(helmet());
+
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -42,8 +43,28 @@ const query = (text, params) => pool.query(text, params);
 // Health check endpoint (no authentication required)
 app.get("/health", (req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
 
+// Login endpoint (no authentication required)
+app.post("/api/login", require('./login').login);
+
 // Apply authentication middleware to all API routes
-app.use('/api', authenticate);
+app.use('/api', (req, res, next) => {
+  // Önce JWT kontrolü
+  const token = req.headers['authorization']&& req.headers['authorization'].startsWith('Bearer ')
+    ? req.headers['authorization'].substring(7)
+    : null;
+  
+  if (token) {
+  const decoded = require('./jwt').verifyToken(token);
+  if (!decoded) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+  req.user = decoded;
+  return next();
+ }
+  
+  // JWT yoksa eski authenticate middleware'e geç
+  authenticate(req, res, next);
+});
 //app.use('/api/kpi', authenticateHR);
 
 // Import and initialize route modules

@@ -1,17 +1,38 @@
 const BASE = "/api";
-// Get credentials from environment variables (in production, these would be set on the server)
-const AUTH_USERNAME = import.meta.env.VITE_AUTH_USERNAME ;
-const AUTH_PASSWORD = import.meta.env.VITE_AUTH_PASSWORD ;
-
-// Encode credentials for Basic Auth
-const encodeCredentials = (username, password) => {
-  return btoa(`${username}:${password}`);
-};
 
 async function req(path, options = {}) {
+  let token = sessionStorage.getItem('token');
+  
+  if (!token && !path.startsWith('/login')) {
+    // Token yoksa login yapılması gerekiyor
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: import.meta.env.VITE_AUTH_USERNAME,
+          password: import.meta.env.VITE_AUTH_PASSWORD
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Login failed');
+      }
+      
+      const data = await response.json();
+      sessionStorage.setItem('token', data.token);
+      token = data.token;
+    } catch (error) {
+      console.error('Login error:', error);
+      throw new Error('Authentication required');
+    }
+  }
+  
   const defaultHeaders = {
     "Content-Type": "application/json",
-    "Authorization": `Basic ${encodeCredentials(AUTH_USERNAME, AUTH_PASSWORD)}`
+    "Authorization": token ? `Bearer ${token}` : ''
   };
   const res = await fetch(`${BASE}${path}`, {
     ...options,
