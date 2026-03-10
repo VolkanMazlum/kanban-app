@@ -16,7 +16,12 @@ module.exports = (app, query) => {
         const { key } = req.params;
         const { value } = req.body;
         try {
-            await query("UPDATE settings SET value = $1 WHERE key = $2", [value, key]);
+            // UPSERT: insert if not exists, update if exists
+            await query(
+                `INSERT INTO settings (key, value) VALUES ($1, $2)
+                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+                [key, value]
+            );
             res.json({ message: "Setting updated successfully" });
         } catch (err) {
             console.error("PATCH /settings/:key Error:", err);

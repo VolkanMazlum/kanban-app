@@ -5,6 +5,13 @@ import * as api from "../api.js";
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const ANNUAL_HOURS = 2000;
 
+const GENERAL_COST_FIELDS = [
+  { key: "rent",       label: "Rent",             icon: "🏢", color: "#6366F1" },
+  { key: "operating",  label: "Operating Cost",   icon: "⚙️",  color: "#F59E0B" },
+  { key: "equipment",  label: "Equipment",        icon: "🔧", color: "#10B981" },
+  { key: "unexpected", label: "Unexpected Cost",  icon: "⚠️",  color: "#EF4444" },
+];
+
 function getDaysInMonth(year, month) {
   const days = [];
   const date = new Date(year, month - 1, 1);
@@ -42,6 +49,14 @@ export default function CostDashboard({ employees, isHR }) {
   const [dailyHours, setDailyHours]       = useState({});
   const [saving, setSaving]               = useState(false);
 
+  // ── GENERAL COSTS (Genel Giderler) ──
+  const [generalCosts, setGeneralCosts]     = useState({ rent: 0, operating: 0, equipment: 0, unexpected: 0 });
+  const [generalCostsInput, setGeneralCostsInput] = useState({ rent: "", operating: "", equipment: "", unexpected: "" });
+  const [savingGeneralCost, setSavingGeneralCost] = useState({});
+
+  // ── PER-TASK WEIGHTS ──
+  const [taskWeights, setTaskWeights] = useState({});
+
   useEffect(() => {
     api.getTasks().then(setAllTasks).catch(console.error);
   }, []);
@@ -54,7 +69,36 @@ export default function CostDashboard({ employees, isHR }) {
 
   useEffect(() => {
     if (isHR && hrTab === "projects") {
-      api.getTaskFinances(selectedYear).then(setFinances).catch(console.error);
+      // Load finances & settings in parallel
+      Promise.all([
+        api.getTaskFinances(selectedYear),
+        api.getSettings(),
+      ]).then(([fin, settings]) => {
+        setFinances(fin);
+
+        // General costs
+        const vals = {
+          rent:       parseFloat(settings[`gc_rent_${selectedYear}`])       || 0,
+          operating:  parseFloat(settings[`gc_operating_${selectedYear}`])  || 0,
+          equipment:  parseFloat(settings[`gc_equipment_${selectedYear}`])  || 0,
+          unexpected: parseFloat(settings[`gc_unexpected_${selectedYear}`]) || 0,
+        };
+        setGeneralCosts(vals);
+        setGeneralCostsInput({
+          rent:       vals.rent       || "",
+          operating:  vals.operating  || "",
+          equipment:  vals.equipment  || "",
+          unexpected: vals.unexpected || "",
+        });
+
+        // Task weights — key: tw_{taskId}_{year}
+        const weights = {};
+        fin.tasks.forEach(t => {
+          const raw = settings[`tw_${t.id}_${selectedYear}`];
+          if (raw !== undefined) weights[t.id] = raw;
+        });
+        setTaskWeights(weights);
+      }).catch(console.error);
     }
   }, [isHR, hrTab, selectedYear]);
 
@@ -92,7 +136,6 @@ export default function CostDashboard({ employees, isHR }) {
       await api.addEmployeeCost(selectedEmpHR.id, newCost);
       const updated = await api.getCosts(selectedYear); 
       setCosts(updated);
-      // Güncel veriyi seçili çalışana da yansıt (Modal daki history'nin yenilenmesi için)
       const freshEmp = updated.find(e => e.id === selectedEmpHR.id);
       setSelectedEmpHR(freshEmp);
       setShowCostModal(false); 
@@ -123,6 +166,28 @@ export default function CostDashboard({ employees, isHR }) {
       await api.saveTaskRevenue(taskId, { revenue: parseFloat(revenue) || 0 });
       setFinances(p => ({ ...p, tasks: p.tasks.map(t => t.id === taskId ? { ...t, revenue } : t) }));
     } catch (err) { console.error(err); }
+  };
+
+  // Save a general cost field to settings (year-scoped key)
+  const handleSaveGeneralCost = async (field, value) => {
+    const numVal = parseFloat(value) || 0;
+    setGeneralCosts(p => ({ ...p, [field]: numVal }));
+    setSavingGeneralCost(p => ({ ...p, [field]: true }));
+    try {
+      await api.updateSetting(`gc_${field}_${selectedYear}`, String(numVal));
+    } catch (err) { console.error(err); }
+    setSavingGeneralCost(p => ({ ...p, [field]: false }));
+  };
+
+  // ── total general cost & per-task allocations ──
+  const totalGeneralCost = GENERAL_COST_FIELDS.reduce((sum, f) => sum + (generalCosts[f.key] || 0), 0);
+
+  const totalWeight = finances.tasks.reduce((sum, t) => sum + (parseFloat(taskWeights[t.id]) || 0), 0);
+
+  const getExtraCost = (taskId) => {
+    if (totalWeight <= 0 || totalGeneralCost <= 0) return 0;
+    const w = parseFloat(taskWeights[taskId]) || 0;
+    return (w / totalWeight) * totalGeneralCost;
   };
 
   const days = getDaysInMonth(selectedYear, selectedMonth);
@@ -212,50 +277,275 @@ export default function CostDashboard({ employees, isHR }) {
 
       {/* ── HR: PROJE FİNANSMANI ── */}
       {isHR && hrTab === "projects" && (
-        <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",overflow:"hidden",marginBottom:24}}>
-          <table style={{width:"100%",borderCollapse:"collapse"}}>
-            <thead>
-              <tr style={{background:"#F9FAFB"}}>
-                {["Project / Task", "Logged Hours", "Actual Cost (Dynamic)", "Client Revenue (€)", "Profit / Loss"].map(h => (
-                  <th key={h} style={{padding:"12px 16px",fontSize:11,fontWeight:700,color:"#6B7280",textAlign:h==="Project / Task"?"left":"center",letterSpacing:"0.05em"}}>{h.toUpperCase()}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {finances.tasks.map(task => {
-                const tHours = finances.task_hours.filter(th => th.task_id === task.id);
-                let totalCost = 0; let totalHours = 0;
-                tHours.forEach(th => {
-                  const emp = costs.find(e => e.id === th.employee_id);
-                  const rate = emp ? parseFloat(emp.hourly_rate_dynamic) : 0;
-                  totalCost += (parseFloat(th.total_hours) * rate);
-                  totalHours += parseFloat(th.total_hours);
-                });
-                const revenue = parseFloat(task.revenue) || 0;
-                const profit = revenue - totalCost;
-                const isProfitable = profit >= 0;
+        <>
+          {/* ── GENEL GİDERLER PANELİ ── */}
+          <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",padding:"20px 24px",marginBottom:20}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+              <div>
+                <div style={{fontSize:10,color:"#9CA3AF",fontWeight:700,letterSpacing:"0.1em",marginBottom:2}}>OVERHEAD — {selectedYear}</div>
+                <h3 style={{margin:0,fontSize:16,fontWeight:700,color:"#111827"}}>General Company Costs</h3>
+                <p style={{margin:"4px 0 0",fontSize:12,color:"#9CA3AF"}}>These costs will be distributed across projects based on weight</p>
+              </div>
+              {totalGeneralCost > 0 && (
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:10,color:"#9CA3AF",fontWeight:700,letterSpacing:"0.05em",marginBottom:2}}>TOTAL OVERHEAD</div>
+                  <div style={{fontSize:22,fontWeight:800,color:"#EF4444"}}>
+                    €{totalGeneralCost.toLocaleString("it-IT",{minimumFractionDigits:0,maximumFractionDigits:0})}
+                  </div>
+                </div>
+              )}
+            </div>
 
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
+              {GENERAL_COST_FIELDS.map(field => (
+                <div key={field.key} style={{background:"#F9FAFB",borderRadius:10,padding:"14px 16px",border:"1.5px solid #E5E7EB",transition:"border-color 0.15s"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                    <span style={{fontSize:16}}>{field.icon}</span>
+                    <span style={{fontSize:11,fontWeight:700,color:"#6B7280",letterSpacing:"0.05em"}}>{field.label.toUpperCase()}</span>
+                    {savingGeneralCost[field.key] && (
+                      <span style={{fontSize:10,color:"#9CA3AF",marginLeft:"auto"}}>saving…</span>
+                    )}
+                  </div>
+                  <div style={{position:"relative"}}>
+                    <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:13,color:"#9CA3AF",pointerEvents:"none"}}>€</span>
+                    <input
+                      type="number"
+                      step="100"
+                      min="0"
+                      value={generalCostsInput[field.key]}
+                      onChange={e => setGeneralCostsInput(p => ({ ...p, [field.key]: e.target.value }))}
+                      onBlur={e => handleSaveGeneralCost(field.key, e.target.value)}
+                      placeholder="0"
+                      style={{
+                        width:"100%",
+                        border:`1.5px solid ${generalCosts[field.key] > 0 ? field.color + "66" : "#E5E7EB"}`,
+                        borderRadius:8,
+                        padding:"8px 10px 8px 24px",
+                        fontSize:14,
+                        fontWeight:700,
+                        color: generalCosts[field.key] > 0 ? field.color : "#374151",
+                        background:"#fff",
+                        outline:"none",
+                        boxSizing:"border-box",
+                        fontFamily:"'Inter',sans-serif",
+                      }}
+                    />
+                  </div>
+                  {generalCosts[field.key] > 0 && (
+                    <div style={{marginTop:6,fontSize:11,color:field.color,fontWeight:600}}>
+                      €{generalCosts[field.key].toLocaleString("it-IT",{minimumFractionDigits:0})}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {totalGeneralCost > 0 && totalWeight > 0 && (
+              <div style={{marginTop:14,padding:"10px 14px",background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:8,display:"flex",gap:8,alignItems:"center"}}>
+                <span style={{fontSize:14}}>📊</span>
+                <span style={{fontSize:12,color:"#92400E",fontWeight:500}}>
+                  Total overhead of <strong>€{totalGeneralCost.toLocaleString("it-IT",{minimumFractionDigits:0})}</strong> will be distributed across <strong>{finances.tasks.filter(t => (parseFloat(taskWeights[t.id])||0) > 0).length}</strong> weighted project{finances.tasks.filter(t => (parseFloat(taskWeights[t.id])||0) > 0).length !== 1 ? "s" : ""} (total weight: <strong>{totalWeight.toFixed(1)}</strong>)
+                </span>
+              </div>
+            )}
+            {totalGeneralCost > 0 && totalWeight === 0 && (
+              <div style={{marginTop:14,padding:"10px 14px",background:"#F3F4F6",border:"1px solid #E5E7EB",borderRadius:8,display:"flex",gap:8,alignItems:"center"}}>
+                <span style={{fontSize:14}}>💡</span>
+                <span style={{fontSize:12,color:"#6B7280"}}>Set project weights below to distribute overhead costs across projects</span>
+              </div>
+            )}
+          </div>
+
+          {/* ── PROJE TABLOSU ── */}
+          <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",overflow:"hidden",marginBottom:24}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead>
+                <tr style={{background:"#F9FAFB"}}>
+                  {[
+                    { label:"Project / Task", align:"left" },
+                    { label:"Logged Hours",   align:"center" },
+                    { label:"Labour Cost",    align:"center" },
+                    { label:"Weight",         align:"center", hint:"Relative weight for overhead distribution" },
+                    { label:"Overhead Share", align:"center", hint:"Portion of general costs allocated to this project" },
+                    { label:"Total Cost",     align:"center" },
+                    { label:"Revenue (€)",    align:"center" },
+                    { label:"Net Profit",     align:"center" },
+                  ].map(h => (
+                    <th key={h.label} title={h.hint || ""} style={{padding:"12px 16px",fontSize:11,fontWeight:700,color:"#6B7280",textAlign:h.align,letterSpacing:"0.05em",cursor:h.hint?"help":"default"}}>
+                      {h.label.toUpperCase()}{h.hint ? " ℹ" : ""}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {finances.tasks.map(task => {
+                  const tHours = finances.task_hours.filter(th => th.task_id === task.id);
+                  let labourCost = 0; let totalHours = 0;
+                  tHours.forEach(th => {
+                    const emp = costs.find(e => e.id === th.employee_id);
+                    const rate = emp ? parseFloat(emp.hourly_rate_dynamic) : 0;
+                    labourCost += (parseFloat(th.total_hours) * rate);
+                    totalHours += parseFloat(th.total_hours);
+                  });
+
+                  const revenue    = parseFloat(task.revenue) || 0;
+                  const extraCost  = getExtraCost(task.id);
+                  const totalCost  = labourCost + extraCost;
+                  const profit     = revenue - totalCost;
+                  const isProfitable = profit >= 0;
+                  const weight     = taskWeights[task.id] ?? "";
+                  const weightPct  = totalWeight > 0 && (parseFloat(weight) || 0) > 0
+                    ? (((parseFloat(weight) || 0) / totalWeight) * 100).toFixed(1)
+                    : null;
+
+                  return (
+                    <tr key={task.id} style={{borderTop:"1px solid #F3F4F6"}}>
+                      {/* Project */}
+                      <td style={{padding:"14px 16px",fontSize:13,fontWeight:600,color:"#111827"}}>{task.title}</td>
+
+                      {/* Hours */}
+                      <td style={{padding:"14px 16px",textAlign:"center",fontSize:13,fontWeight:600,color:"#374151"}}>{totalHours.toFixed(1)}h</td>
+
+                      {/* Labour Cost */}
+                      <td style={{padding:"14px 16px",textAlign:"center",fontSize:13,fontWeight:600,color:"#DC2626"}}>
+                        - €{labourCost.toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}
+                      </td>
+
+                      {/* Weight Input */}
+                      <td style={{padding:"14px 16px",textAlign:"center"}}>
+                        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={weight}
+                            onChange={e => setTaskWeights(p => ({ ...p, [task.id]: e.target.value }))}
+                            onBlur={e => api.updateSetting(`tw_${task.id}_${selectedYear}`, e.target.value || "0").catch(console.error)}
+                            placeholder="—"
+                            style={{
+                              width:70,
+                              padding:"6px 8px",
+                              border:`1.5px solid ${(parseFloat(weight)||0) > 0 ? "#6366F1" : "#E5E7EB"}`,
+                              borderRadius:6,
+                              textAlign:"center",
+                              outline:"none",
+                              fontWeight:700,
+                              fontSize:13,
+                              color:(parseFloat(weight)||0) > 0 ? "#4F46E5" : "#374151",
+                              background:(parseFloat(weight)||0) > 0 ? "#EEF2FF" : "#fff",
+                              fontFamily:"'Inter',sans-serif",
+                            }}
+                          />
+                          {weightPct && (
+                            <span style={{fontSize:10,color:"#9CA3AF",fontWeight:500}}>{weightPct}%</span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Overhead Share */}
+                      <td style={{padding:"14px 16px",textAlign:"center"}}>
+                        {extraCost > 0 ? (
+                          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                            <span style={{fontSize:13,fontWeight:700,color:"#F59E0B"}}>
+                              - €{extraCost.toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}
+                            </span>
+                            <span style={{fontSize:10,color:"#D1D5DB"}}>of overhead</span>
+                          </div>
+                        ) : (
+                          <span style={{color:"#D1D5DB",fontSize:13}}>—</span>
+                        )}
+                      </td>
+
+                      {/* Total Cost */}
+                      <td style={{padding:"14px 16px",textAlign:"center"}}>
+                        <span style={{
+                          fontSize:13,fontWeight:700,
+                          color: totalCost > 0 ? "#DC2626" : "#D1D5DB",
+                          background: totalCost > 0 ? "#FEF2F2" : "transparent",
+                          padding: totalCost > 0 ? "3px 8px" : "0",
+                          borderRadius:6,
+                        }}>
+                          {totalCost > 0 ? `- €${totalCost.toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}` : "—"}
+                        </span>
+                      </td>
+
+                      {/* Revenue */}
+                      <td style={{padding:"14px 16px",textAlign:"center"}}>
+                        <input 
+                          type="number" step="100" defaultValue={revenue > 0 ? revenue : ""} placeholder="e.g. 5000"
+                          onBlur={e => handleSaveRevenue(task.id, e.target.value)}
+                          style={{width:110, padding:"6px 8px", border:"1px solid #D1D5DB", borderRadius:6, textAlign:"center", outline:"none", fontWeight:600, color:"#059669", fontFamily:"'Inter',sans-serif", fontSize:13}}
+                        />
+                      </td>
+
+                      {/* Net Profit */}
+                      <td style={{padding:"14px 16px",textAlign:"center"}}>
+                        {revenue > 0 || totalCost > 0 ? (
+                          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                            <span style={{
+                              fontSize:14,fontWeight:800,
+                              color: isProfitable ? "#059669" : "#DC2626",
+                              background: isProfitable ? "#F0FDF4" : "#FEF2F2",
+                              padding:"4px 10px",borderRadius:6,
+                            }}>
+                              {isProfitable ? "+" : ""}€{profit.toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}
+                            </span>
+                            {extraCost > 0 && (
+                              <span style={{fontSize:10,color:"#9CA3AF"}}>incl. overhead</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{color:"#D1D5DB",fontSize:13}}>—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+
+              {/* TOTALS ROW */}
+              {finances.tasks.length > 0 && (() => {
+                let grandLabour = 0, grandRevenue = 0, grandHours = 0, grandExtra = 0;
+                finances.tasks.forEach(task => {
+                  const tHours = finances.task_hours.filter(th => th.task_id === task.id);
+                  tHours.forEach(th => {
+                    const emp = costs.find(e => e.id === th.employee_id);
+                    const rate = emp ? parseFloat(emp.hourly_rate_dynamic) : 0;
+                    grandLabour += parseFloat(th.total_hours) * rate;
+                    grandHours  += parseFloat(th.total_hours);
+                  });
+                  grandRevenue += parseFloat(task.revenue) || 0;
+                  grandExtra   += getExtraCost(task.id);
+                });
+                const grandTotal  = grandLabour + grandExtra;
+                const grandProfit = grandRevenue - grandTotal;
                 return (
-                  <tr key={task.id} style={{borderTop:"1px solid #F3F4F6"}}>
-                    <td style={{padding:"14px 16px",fontSize:13,fontWeight:600,color:"#111827"}}>{task.title}</td>
-                    <td style={{padding:"14px 16px",textAlign:"center",fontSize:13,fontWeight:600,color:"#374151"}}>{totalHours.toFixed(1)}h</td>
-                    <td style={{padding:"14px 16px",textAlign:"center",fontSize:13,fontWeight:600,color:"#DC2626"}}>- €{totalCost.toLocaleString("it-IT", {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
-                    <td style={{padding:"14px 16px",textAlign:"center"}}>
-                      <input 
-                        type="number" step="100" defaultValue={revenue > 0 ? revenue : ""} placeholder="e.g. 5000"
-                        onBlur={e => handleSaveRevenue(task.id, e.target.value)}
-                        style={{width:100, padding:"6px", border:"1px solid #D1D5DB", borderRadius:6, textAlign:"center", outline:"none", fontWeight:600, color:"#059669"}}
-                      />
-                    </td>
-                    <td style={{padding:"14px 16px",textAlign:"center",fontSize:14,fontWeight:700,color:isProfitable ? "#059669" : "#DC2626"}}>
-                      {isProfitable ? "+" : ""}€{profit.toLocaleString("it-IT", {minimumFractionDigits:2, maximumFractionDigits:2})}
-                    </td>
-                  </tr>
+                  <tfoot>
+                    <tr style={{background:"#F9FAFB",borderTop:"2px solid #E5E7EB"}}>
+                      <td style={{padding:"12px 16px",fontSize:12,fontWeight:700,color:"#6B7280"}}>TOTALS</td>
+                      <td style={{padding:"12px 16px",textAlign:"center",fontSize:12,fontWeight:700,color:"#374151"}}>{grandHours.toFixed(1)}h</td>
+                      <td style={{padding:"12px 16px",textAlign:"center",fontSize:12,fontWeight:700,color:"#DC2626"}}>- €{grandLabour.toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                      <td style={{padding:"12px 16px",textAlign:"center",fontSize:11,color:"#9CA3AF"}}>Σ {totalWeight.toFixed(1)}</td>
+                      <td style={{padding:"12px 16px",textAlign:"center",fontSize:12,fontWeight:700,color:"#F59E0B"}}>- €{grandExtra.toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                      <td style={{padding:"12px 16px",textAlign:"center",fontSize:12,fontWeight:700,color:"#DC2626"}}>- €{grandTotal.toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                      <td style={{padding:"12px 16px",textAlign:"center",fontSize:12,fontWeight:700,color:"#059669"}}>€{grandRevenue.toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                      <td style={{padding:"12px 16px",textAlign:"center"}}>
+                        <span style={{
+                          fontSize:13,fontWeight:800,
+                          color: grandProfit >= 0 ? "#059669" : "#DC2626",
+                          background: grandProfit >= 0 ? "#F0FDF4" : "#FEF2F2",
+                          padding:"4px 10px",borderRadius:6,
+                        }}>
+                          {grandProfit >= 0 ? "+" : ""}€{grandProfit.toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}
+                        </span>
+                      </td>
+                    </tr>
+                  </tfoot>
                 );
-              })}
-            </tbody>
-          </table>
-        </div>
+              })()}
+            </table>
+          </div>
+        </>
       )}
 
       {/* ── İŞÇİ: GÜNLÜK SAAT GİRİŞİ ── */}
@@ -317,17 +607,12 @@ export default function CostDashboard({ employees, isHR }) {
                   const isToday   = day.toDateString() === today.toDateString();
                   const dayLabel  = day.toLocaleString("en-US", { weekday:"short" });
 
-                  // Sadece o GÜN içinde aktif olan (başlamış ve henüz bitmemiş) projeleri göster
                   const activeTasksOnThisDay = assignedTasks.filter(t => {
                     const dayTime = day.getTime();
-                    
-                    // Başlangıç: Varsa Actual, yoksa Planned, o da yoksa Created_at
                     const start = t.actual_start || t.planned_start || t.created_at;
                     const startTime = new Date(start).setHours(0,0,0,0);
-                    
                     const end = t.actual_end || t.planned_end;
                     const endTime = end ? new Date(end).setHours(23,59,59,999) : Infinity;
-
                     return dayTime >= startTime && dayTime <= endTime;
                   });
 
@@ -351,7 +636,6 @@ export default function CostDashboard({ employees, isHR }) {
                       </div>
 
                       <div style={{maxHeight: 180, overflowY: "auto", paddingRight: 2}}>
-                        {/* ARTIK assignedTasks DEĞİL, activeTasksOnThisDay LİSTELENİYOR */}
                         {activeTasksOnThisDay.length === 0 ? (
                           <div style={{fontSize:9, color:"#D1D5DB", textAlign:"center", marginTop:10}}>No active tasks</div>
                         ) : (
@@ -391,7 +675,7 @@ export default function CostDashboard({ employees, isHR }) {
         </div>
       </div>
 
-      {/* ── HR: SALARY MODAL (With Cost History) ── */}
+      {/* ── HR: SALARY MODAL ── */}
       {showCostModal && selectedEmpHR && (
         <div style={{position:"fixed",inset:0,background:"rgba(17,24,39,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,backdropFilter:"blur(4px)"}}>
           <div style={{background:"#fff",borderRadius:16,padding:28,width:440,boxShadow:"0 20px 60px rgba(0,0,0,0.15)"}}>
@@ -399,7 +683,6 @@ export default function CostDashboard({ employees, isHR }) {
               <div style={{fontSize:10,color:"#9CA3AF",letterSpacing:"0.1em",fontWeight:600,marginBottom:2}}>MANAGE SALARY & HISTORY</div>
               <h3 style={{color:"#111827",margin:0,fontSize:18,fontWeight:700}}>{selectedEmpHR.name}</h3>
             </div>
-            
             <div style={{marginBottom:14}}>
               <label style={{display:"block",fontSize:11,color:"#374151",fontWeight:600,marginBottom:6}}>NEW ANNUAL GROSS (€)</label>
               <input type="number" step="1000" value={newCost.annual_gross} onChange={e => setNewCost(p => ({...p, annual_gross: e.target.value}))} placeholder="e.g. 45000" style={inp} />
@@ -408,8 +691,6 @@ export default function CostDashboard({ employees, isHR }) {
               <label style={{display:"block",fontSize:11,color:"#374151",fontWeight:600,marginBottom:6}}>VALID FROM DATE</label>
               <input type="date" value={newCost.valid_from} onChange={e => setNewCost(p => ({...p, valid_from: e.target.value}))} style={inp} />
             </div>
-            
-            {/* COST HISTORY LİSTESİ BURADA */}
             {(selectedEmpHR.cost_history || []).length > 0 && (
               <div style={{marginBottom:20, background:"#F9FAFB", borderRadius:10, padding:16, border:"1px solid #E5E7EB"}}>
                 <div style={{fontSize:11, fontWeight:700, color:"#6B7280", marginBottom:10, letterSpacing:"0.05em"}}>COST HISTORY</div>
@@ -423,7 +704,6 @@ export default function CostDashboard({ employees, isHR }) {
                 </div>
               </div>
             )}
-
             <div style={{display:"flex",gap:10}}>
               <button onClick={handleAddCost} style={{flex:1,padding:11,background:"#2563EB",color:"#fff",border:"none",borderRadius:8,fontWeight:600,cursor:"pointer"}}>Update Salary</button>
               <button onClick={() => { setShowCostModal(false); setSelectedEmpHR(null); }} style={{flex:1,padding:11,background:"#F9FAFB",color:"#374151",border:"1.5px solid #E5E7EB",borderRadius:8,fontWeight:600,cursor:"pointer"}}>Cancel</button>
@@ -432,6 +712,7 @@ export default function CostDashboard({ employees, isHR }) {
         </div>
       )}
 
+      {/* ── HR: OVERTIME MODAL ── */}
       {showOvertimeModal && selectedEmpHR && (
          <div style={{position:"fixed",inset:0,background:"rgba(17,24,39,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,backdropFilter:"blur(4px)"}}>
            <div style={{background:"#fff",borderRadius:16,padding:28,width:440,boxShadow:"0 20px 60px rgba(0,0,0,0.15)"}}>
