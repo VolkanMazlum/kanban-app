@@ -1,58 +1,20 @@
 const BASE = "/api";
-let loginPromise = null; // YENİ: Kilit değişkenimiz
 
 async function req(path, options = {}) {
-  let token = sessionStorage.getItem('token');
-  
-  if (!token && !path.startsWith('/login')) {
-    // Eğer devam eden bir login işlemi yoksa başlat
-    if (!loginPromise) {
-      loginPromise = fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: import.meta.env.VITE_AUTH_USERNAME,
-          password: import.meta.env.VITE_AUTH_PASSWORD
-        })
-      }).then(async (res) => {
-        if (!res.ok) throw new Error('Login failed');
-        const data = await res.json();
-        sessionStorage.setItem('token', data.token);
-        return data.token;
-      }).finally(() => {
-        loginPromise = null; // İşlem bitince kilidi aç
-      });
-    }
-    
-    // Diğer istekler ilk isteğin bitmesini bekler
-    try {
-      token = await loginPromise;
-    } catch (error) {
-      console.error('Login error:', error);
-      throw new Error('Authentication required');
-    }
-  }
-  
-  const defaultHeaders = {
-    "Content-Type": "application/json",
-    "Authorization": token ? `Bearer ${token}` : ''
-  };
-  
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
-      ...defaultHeaders,
+      "Content-Type": "application/json",
       ...(options.headers || {}),
     },
   });
-  
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `HTTP ${res.status}`);
   }
   return res.json();
 }
-
 
 export const getTasks        = (params = {}) => req(`/tasks${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""}`);
 export const getTask         = (id) => req(`/tasks/${id}`);
@@ -61,36 +23,36 @@ export const updateTask      = (id, data) => req(`/tasks/${id}`, { method: "PUT"
 export const patchTaskStatus = (id, status) => req(`/tasks/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
 export const deleteTask      = (id) => req(`/tasks/${id}`,  { method: "DELETE" });
 
-export const getEmployees    = ()       => req("/employees");
+export const getEmployees    = ()           => req("/employees");
 export const createEmployee  = (name, role) => req("/employees", { method: "POST", body: JSON.stringify({ name, role }) });
-export const deleteEmployee  = (id)    => req(`/employees/${id}`, { method: "DELETE" });
+export const deleteEmployee  = (id)         => req(`/employees/${id}`, { method: "DELETE" });
 
-//export const getKPI          = ()       => req("/kpi");
 export const getKPI = () => {
   const hrAuth = sessionStorage.getItem("hrAuth");
   const headers = hrAuth ? { "X-HR-Auth": hrAuth } : {};
   return req("/kpi", { headers });
 };
 
-export const getTimeLogs     = (params = {}) => req(`/time-logs${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""}`);
-export const logTime         = (data) => req("/time-logs", { method: "POST", body: JSON.stringify(data) });
+export const getTimeLogs = (params = {}) => req(`/time-logs${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""}`);
+export const logTime     = (data) => req("/time-logs", { method: "POST", body: JSON.stringify(data) });
 
-export const getPhaseTemplates  = () => req("/phase-templates");
-export const getTaskPhases      = (taskId) => req(`/tasks/${taskId}/phases`);
-export const saveTaskPhases     = (taskId, phases) => req(`/tasks/${taskId}/phases`, {
+export const getPhaseTemplates = () => req("/phase-templates");
+export const getTaskPhases     = (taskId) => req(`/tasks/${taskId}/phases`);
+export const saveTaskPhases    = (taskId, phases) => req(`/tasks/${taskId}/phases`, {
   method: "POST",
   body: JSON.stringify({ phases })
 });
-export const updatePhase        = (taskId, id, data) => req(`/tasks/${taskId}/phases/${id}`, {
+export const updatePhase = (taskId, id, data) => req(`/tasks/${taskId}/phases/${id}`, {
   method: "PATCH",
   body: JSON.stringify(data)
 });
-export const getSettings        = () => req("/settings");
-export const updateSetting       = (key, value) => req(`/settings/${key}`, {
+
+export const getSettings   = () => req("/settings");
+export const updateSetting = (key, value) => req(`/settings/${key}`, {
   method: "PATCH",
   body: JSON.stringify({ value })
 });
-//export const getWorkloadMonthly = (year, month) => req(`/kpi/workload-monthly?year=${year}&month=${month}`);
+
 export const getMonthlyWorkload = (year, month) => {
   const hrAuth = sessionStorage.getItem("hrAuth");
   const headers = hrAuth ? { "X-HR-Auth": hrAuth } : {};
@@ -111,23 +73,26 @@ export const addEmployeeCost = (employeeId, data) => {
     headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
   });
 };
+
 export const saveWorkHours = (data) => req("/work-hours", { method: "POST", body: JSON.stringify(data) });
-export const getWorkHours = (employeeId, year, month) => req(`/work-hours/${employeeId}?year=${year}&month=${month}`);
+export const getWorkHours  = (employeeId, year, month) => req(`/work-hours/${employeeId}?year=${year}&month=${month}`);
+
 export const getOvertimeCosts = (employeeId, year) => {
   const hrAuth = sessionStorage.getItem("hrAuth");
-  return req(`/costs/${employeeId}/overtime?year=${year}`, { 
-    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {} 
+  return req(`/costs/${employeeId}/overtime?year=${year}`, {
+    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
   });
 };
 
 export const saveOvertimeCost = (employeeId, data) => {
   const hrAuth = sessionStorage.getItem("hrAuth");
   return req(`/costs/${employeeId}/overtime`, {
-    method: "POST", 
+    method: "POST",
     body: JSON.stringify(data),
     headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
   });
 };
+
 export const getTaskFinances = (year) => {
   const hrAuth = sessionStorage.getItem("hrAuth");
   const url = year ? `/task-finances?year=${year}` : "/task-finances";
@@ -142,7 +107,8 @@ export const saveTaskRevenue = (taskId, data) => {
     headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
   });
 };
-export const savePhaseMonthlyHours = (phaseId, data) => 
+
+export const savePhaseMonthlyHours = (phaseId, data) =>
   req(`/phases/${phaseId}/monthly-hours`, { method: "POST", body: JSON.stringify(data) });
-export const getPhaseMonthlyHours = (phaseId) => 
+export const getPhaseMonthlyHours = (phaseId) =>
   req(`/phases/${phaseId}/monthly-hours`);

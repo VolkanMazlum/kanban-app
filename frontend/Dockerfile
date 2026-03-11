@@ -12,9 +12,9 @@ FROM nginx:alpine
 
 # Remove default nginx config
 RUN rm /etc/nginx/conf.d/default.conf
-
+RUN apk add --no-cache apache2-utils gettext
 # Add custom config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf.template
 
 # Copy built app
 COPY --from=builder /app/dist /usr/share/nginx/html
