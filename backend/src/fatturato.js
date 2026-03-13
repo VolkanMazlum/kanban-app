@@ -58,11 +58,12 @@ module.exports = (app, query, authenticateHR) => {
         FROM commesse c
         JOIN commessa_clients cc ON c.id = cc.commessa_id
         JOIN fatturato_lines fl ON cc.id = fl.commessa_client_id
-        WHERE c.task_id IS NOT NULL AND ($1::text IS NULL OR c.comm_number LIKE $1 || '-%' OR c.comm_number IS NULL)
+        WHERE c.task_id IS NOT NULL
         GROUP BY c.task_id
       `);
       res.json(result.rows);
     } catch (err) {
+      console.error("GET /fatturato/by-task error:", err);
       res.status(500).json({ error: "Database error" });
     }
   });
