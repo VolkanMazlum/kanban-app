@@ -2,30 +2,15 @@ import { useState, useEffect } from "react";
 import Avatar from "./Avatar.jsx";
 import * as api from "../api.js";
 
-const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const ANNUAL_HOURS = 2000;
+// Sabitleri ve yardımcı fonksiyonları ayırdığımız dosyalardan çekiyoruz
+import { 
+  MONTHS, GENERAL_COST_FIELDS, EMPTY_LINE, EMPTY_CLIENT, EMPTY_FORM, inpStyle 
+} from "../constants/costConstants.js";
+import { getDaysInMonth } from "../utils/costUtils.js";
 
-const GENERAL_COST_FIELDS = [
-  { key: "rent",       label: "Rent",            icon: "🏢", color: "#6366F1" },
-  { key: "operating",  label: "Operating Cost",  icon: "⚙️",  color: "#F59E0B" },
-  { key: "equipment",  label: "Equipment",       icon: "🔧", color: "#10B981" },
-  { key: "unexpected", label: "Unexpected Cost", icon: "⚠️",  color: "#EF4444" },
-];
-
-// FATTURATO İÇİN BOŞ FORM YAPILARI
-const EMPTY_LINE = { attivita: "", descrizione: "", valore_ordine: "", fatturato_amount: "", rimanente_probabile: "", proforma: "", invoice_date: "", note: "" };
-const EMPTY_CLIENT = { client_id: "", n_cliente: "", n_ordine: "", preventivo: "", ordine: "", n_ordine_zucchetti: "", voce_bilancio: "", lines: [{...EMPTY_LINE}] };
-const EMPTY_FORM = { task_id: "", comm_number: "", name: "", clients: [{...EMPTY_CLIENT}] };
-
-function getDaysInMonth(year, month) {
-  const days = [];
-  const date = new Date(year, month - 1, 1);
-  while (date.getMonth() === month - 1) {
-    days.push(new Date(date));
-    date.setDate(date.getDate() + 1);
-  }
-  return days;
-}
+// Dışarı çıkardığımız Alt Bileşenler (Önceki adımda oluşturduklarımız)
+import EmployeeCostsTab from "./EmployeeCostsTab.jsx";
+import TimesheetTab from "./TimesheetTab.jsx";
 
 export default function CostDashboard({ employees, isHR }) {
   const currentYear  = new Date().getFullYear();
@@ -39,7 +24,7 @@ export default function CostDashboard({ employees, isHR }) {
   const [costs, setCosts]                 = useState([]);
   const [loadingCosts, setLoadingCosts]   = useState(false);
   
-  // ÇALIŞAN MALİYETLERİ & MESAİ STATE
+  // ── ÇALIŞAN MALİYETLERİ & MESAİ STATE ──
   const [showCostModal, setShowCostModal] = useState(false);
   const [selectedEmpHR, setSelectedEmpHR] = useState(null);
   const [newCost, setNewCost]             = useState({ annual_gross: "", valid_from: new Date().toISOString().slice(0,10) });
@@ -47,8 +32,8 @@ export default function CostDashboard({ employees, isHR }) {
   const [overtimeData, setOvertimeData]           = useState([]);
   const [overtimeInput, setOvertimeInput]         = useState({ month: currentMonth, amount: "" });
 
+  // ── TIMESHEET & TASK STATE ──
   const [finances, setFinances] = useState({ tasks: [], task_hours: [] });
-
   const [allTasks, setAllTasks]           = useState([]);
   const [selectedEmp, setSelectedEmp]     = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
@@ -76,6 +61,7 @@ export default function CostDashboard({ employees, isHR }) {
   const [clientForm, setClientForm]         = useState({ name:"", vat_number:"", contact_email:"", phone:"", address:"", notes:"" });
   const [savingClient, setSavingClient]     = useState(false);
 
+  // ── USE EFFECTS ──
   useEffect(() => {
     api.getTasks().then(setAllTasks).catch(console.error);
   }, []);
@@ -139,6 +125,7 @@ export default function CostDashboard({ employees, isHR }) {
     }).catch(console.error);
   }, [selectedEmp, selectedYear, selectedMonth]);
 
+  // ── HANDLERS ──
   const handleDaySave = async (taskId, date, hours, note) => {
     if (!selectedEmp) return;
     setSaving(true);
@@ -214,6 +201,7 @@ export default function CostDashboard({ employees, isHR }) {
   const addLineToClient = (cIdx) => { const newClients = [...fattForm.clients]; newClients[cIdx].lines.push({ ...EMPTY_LINE }); setFattForm({ ...fattForm, clients: newClients }); };
   const removeLineFromClient = (cIdx, lIdx) => { const newClients = [...fattForm.clients]; newClients[cIdx].lines.splice(lIdx, 1); setFattForm({ ...fattForm, clients: newClients }); };
   const handleLineChange = (cIdx, lIdx, field, val) => { const newClients = [...fattForm.clients]; newClients[cIdx].lines[lIdx][field] = val; setFattForm({ ...fattForm, clients: newClients }); };
+  
   const handleSaveFatt = async () => {
     setSavingFatt(true);
     try {
@@ -242,6 +230,7 @@ export default function CostDashboard({ employees, isHR }) {
     setSavingClient(false);
   };
 
+  // ── HESAPLAMALAR ──
   const totalGeneralCost = GENERAL_COST_FIELDS.reduce((sum, f) => sum + (generalCosts[f.key] || 0), 0);
   const totalWeight = finances.tasks.reduce((sum, t) => sum + (parseFloat(taskWeights[t.id]) || 0), 0);
 
@@ -250,22 +239,12 @@ export default function CostDashboard({ employees, isHR }) {
     const w = parseFloat(taskWeights[taskId]) || 0;
     return (w / totalWeight) * totalGeneralCost;
   };
-  
   const getFattByTask = (taskId) => fatturatoByTask.find(r => r.task_id === taskId) || null;
-
-  const days = getDaysInMonth(selectedYear, selectedMonth);
-  const assignedTasks = allTasks.filter(t => t.phases?.some(phase => phase.assignee_hours?.some(a => a.id === selectedEmp?.id)));
-
-  let totalWorkerHours = 0;
-  Object.values(dailyHours).forEach(taskMap => {
-    Object.values(taskMap).forEach(d => { totalWorkerHours += (parseFloat(d.hours) || 0); });
-  });
-
-  const inp = { border: "1.5px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: "#111827", fontFamily: "'Inter',sans-serif", width: "100%", outline: "none" };
 
   return (
     <div style={{padding:"28px 32px",overflowY:"auto",height:"calc(100vh - 65px)",fontFamily:"'Inter',sans-serif",background:"#F9FAFB"}}>
 
+      {/* ── HEADER ── */}
       <div style={{marginBottom:24, display: "flex", justifyContent: "space-between", alignItems: "center"}}>
         <div>
           <div style={{display: "flex", alignItems: "center", gap: 12, marginBottom: 4}}>
@@ -291,58 +270,21 @@ export default function CostDashboard({ employees, isHR }) {
         )}
       </div>
 
-      {/* ── HR: ÇALIŞAN MALİYETLERİ ── */}
+      {/* ── HR: ÇALIŞAN MALİYETLERİ (Ayrılmış Bileşen) ── */}
       {isHR && hrTab === "employees" && (
-        <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",overflow:"hidden",marginBottom:24}}>
-          {loadingCosts ? (
-            <div style={{padding:32,textAlign:"center",color:"#9CA3AF",fontSize:13}}>Loading...</div>
-          ) : (
-            <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead>
-                <tr style={{background:"#F9FAFB"}}>
-                  {["Employee","Annual Gross", "Overtime (h)", "Total Hours","Rate (Theory)","Rate (Dynamic)","Valid From","Actions"].map(header => (
-                    <th key={header} style={{padding:"10px 16px",fontSize:11,fontWeight:700,color:"#6B7280",textAlign:header==="Employee"?"left":"center",letterSpacing:"0.05em"}}>{header.toUpperCase()}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {costs.map((emp, i) => {
-                  const gross = parseFloat(emp.current_annual_gross) || 0;
-                  const actualHours = parseFloat(emp.actual_hours_this_year) || 0;
-                  const overtimeHours = parseFloat(emp.overtime_hours_this_year) || 0; 
-                  const hasHistory = (emp.cost_history || []).length > 1;
-
-                  return (
-                    <tr key={emp.id} style={{borderTop:"1px solid #F3F4F6"}}>
-                      <td style={{padding:"12px 16px"}}><div style={{display:"flex",alignItems:"center",gap:10}}><Avatar name={emp.name} size={32} idx={i}/><span style={{fontSize:13,fontWeight:600}}>{emp.name}</span></div></td>
-                      <td style={{padding:"12px 16px",textAlign:"center",fontSize:13,fontWeight:600}}>
-                         <div style={{display:"flex", alignItems:"center", justifyContent:"center", gap:4}}>
-                            {gross > 0 ? `€${gross.toLocaleString("it-IT")}` : "—"}
-                            {hasHistory && <span title="Has Salary History" style={{fontSize:10, cursor:"help"}}>📜</span>}
-                         </div>
-                      </td>
-                      <td style={{padding:"12px 16px",textAlign:"center",fontSize:13,fontWeight:600,color:"#DC2626"}}>{overtimeHours > 0 ? `${overtimeHours}h` : "—"}</td>
-                      <td style={{padding:"12px 16px",textAlign:"center",fontSize:13,fontWeight:600,color:actualHours>0?"#059669":"#D1D5DB"}}>{actualHours > 0 ? `${actualHours.toFixed(1)}h` : "—"}</td>
-                      <td style={{padding:"12px 16px",textAlign:"center"}}><span style={{background:"#EFF6FF",color:"#2563EB",padding:"3px 10px",borderRadius:6,fontSize:12,fontWeight:700}}>€{emp.hourly_rate_theoretical}/h</span></td>
-                      <td style={{padding:"12px 16px",textAlign:"center"}}><span style={{background:"#F0FDF4",color:"#059669",padding:"3px 10px",borderRadius:6,fontSize:12,fontWeight:700}}>€{emp.hourly_rate_dynamic}/h</span></td>
-                      <td style={{padding:"12px 16px",textAlign:"center",fontSize:12,color:"#6B7280"}}>{emp.current_valid_from || "—"}</td>
-                      <td style={{padding:"12px 16px",textAlign:"center"}}>
-                        <button onClick={() => { setSelectedEmpHR(emp); setShowCostModal(true); }} style={{background:"#F3F4F6",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer",marginRight:4}}>Salary</button>
-                        <button onClick={() => loadOvertime(emp)} style={{background:"#FEF2F2",color:"#DC2626",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer"}}>Overtime</button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+        <EmployeeCostsTab 
+          costs={costs} 
+          loadingCosts={loadingCosts} 
+          setSelectedEmpHR={setSelectedEmpHR} 
+          setShowCostModal={setShowCostModal} 
+          loadOvertime={loadOvertime} 
+        />
       )}
 
       {/* ── HR: PROJE FİNANSMANI ── */}
       {isHR && hrTab === "projects" && (
         <>
-          {/* ── GENEL GİDERLER PANELİ ── */}
+          {/* GENEL GİDERLER PANELİ */}
           <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",padding:"20px 24px",marginBottom:20}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
               <div>
@@ -373,25 +315,15 @@ export default function CostDashboard({ employees, isHR }) {
                   <div style={{position:"relative"}}>
                     <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:13,color:"#9CA3AF",pointerEvents:"none"}}>€</span>
                     <input
-                      type="number"
-                      step="100"
-                      min="0"
-                      value={generalCostsInput[field.key]}
+                      type="number" step="100" min="0" value={generalCostsInput[field.key]}
                       onChange={e => setGeneralCostsInput(p => ({ ...p, [field.key]: e.target.value }))}
                       onBlur={e => handleSaveGeneralCost(field.key, e.target.value)}
                       placeholder="0"
                       style={{
-                        width:"100%",
-                        border:`1.5px solid ${generalCosts[field.key] > 0 ? field.color + "66" : "#E5E7EB"}`,
-                        borderRadius:8,
-                        padding:"8px 10px 8px 24px",
-                        fontSize:14,
-                        fontWeight:700,
-                        color: generalCosts[field.key] > 0 ? field.color : "#374151",
-                        background:"#fff",
-                        outline:"none",
-                        boxSizing:"border-box",
-                        fontFamily:"'Inter',sans-serif",
+                        width:"100%", border:`1.5px solid ${generalCosts[field.key] > 0 ? field.color + "66" : "#E5E7EB"}`,
+                        borderRadius:8, padding:"8px 10px 8px 24px", fontSize:14, fontWeight:700,
+                        color: generalCosts[field.key] > 0 ? field.color : "#374151", background:"#fff",
+                        outline:"none", boxSizing:"border-box", fontFamily:"'Inter',sans-serif",
                       }}
                     />
                   </div>
@@ -420,7 +352,7 @@ export default function CostDashboard({ employees, isHR }) {
             )}
           </div>
 
-          {/* ── PROJE TABLOSU ── */}
+          {/* PROJE TABLOSU */}
           <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",overflow:"hidden",marginBottom:24}}>
             <table style={{width:"100%",borderCollapse:"collapse"}}>
               <thead>
@@ -497,10 +429,8 @@ export default function CostDashboard({ employees, isHR }) {
                           {totalCost > 0 ? `- €${totalCost.toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}` : "—"}
                         </span>
                       </td>
-
                       <td style={{padding:"14px 16px",textAlign:"center",color:"#6366F1",fontWeight:600}}>{valoreOrdine > 0 ? `€${valoreOrdine.toLocaleString()}` : "—"}</td>
                       <td style={{padding:"14px 16px",textAlign:"center",color:"#059669",fontWeight:700}}>{fatturato > 0 ? `€${fatturato.toLocaleString()}` : "—"}</td>
-
                       <td style={{padding:"14px 16px",textAlign:"center"}}>
                         {fatturato > 0 || totalCost > 0 ? (
                           <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
@@ -561,7 +491,7 @@ export default function CostDashboard({ employees, isHR }) {
         </>
       )}
 
-      {/* ── FATTURATO SEKMESİ (3-TIER HİYERARŞİ) ── */}
+      {/* ── FATTURATO SEKMESİ ── */}
       {isHR && hrTab === "fatturato" && (
         <div style={{marginBottom:24}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -586,7 +516,6 @@ export default function CostDashboard({ employees, isHR }) {
                       <tr key={comm.id} style={{borderBottom:"2px solid #E5E7EB"}}><td style={{padding:"12px 14px",fontWeight:700}}>{comm.comm_number}</td><td style={{padding:"12px 14px"}}>{comm.task_title}</td><td style={{padding:"12px 14px"}}><button onClick={() => openEditFatt(comm)}>Edit</button></td><td colSpan={10} style={{color:"#9CA3AF",padding:"12px"}}>No clients added.</td></tr>
                     ) : comm.clients.map((client, cIdx) => {
                       const clientLines = client.lines?.length > 0 ? client.lines : [{}];
-                      
                       return clientLines.map((line, lIdx) => {
                         const isFirstComm = !commRendered; commRendered = true;
                         const isFirstCli = lIdx === 0;
@@ -598,10 +527,7 @@ export default function CostDashboard({ employees, isHR }) {
                               <>
                                 <td rowSpan={totalLines} style={{padding:"12px 14px",fontWeight:800,color:"#4F46E5",verticalAlign:"top",borderRight:"1px solid #E5E7EB",background:"#FAFAFA"}}>{comm.comm_number || "—"}</td>
                                 <td rowSpan={totalLines} style={{padding:"12px 14px",fontWeight:600,color:"#111827",verticalAlign:"top",maxWidth:150,background:"#FAFAFA"}}>{comm.name ? (
-                                    <div>
-                                      <div style={{fontWeight:700}}>{comm.name}</div>
-                                      <div style={{fontSize:11,color:"#9CA3AF"}}>{comm.task_title || "—"}</div>
-                                    </div>
+                                    <div><div style={{fontWeight:700}}>{comm.name}</div><div style={{fontSize:11,color:"#9CA3AF"}}>{comm.task_title || "—"}</div></div>
                                   ) : (comm.task_title || "—")}
                                 </td>
                                 <td rowSpan={totalLines} style={{padding:"12px 14px",verticalAlign:"top",borderRight:"2px solid #E5E7EB",background:"#FAFAFA"}}>
@@ -638,136 +564,23 @@ export default function CostDashboard({ employees, isHR }) {
         </div>
       )}
 
-      {/* ── İŞÇİ: GÜNLÜK SAAT GİRİŞİ ── */}
-      <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",overflow:"hidden"}}>
-        <div style={{padding:"18px 24px",borderBottom:"1px solid #F3F4F6"}}>
-          <h3 style={{fontSize:14,fontWeight:700,color:"#111827",margin:"0 0 2px"}}>Daily Work Hours — {selectedYear}</h3>
-          <p style={{fontSize:12,color:"#6B7280",margin:0}}>Select your name and log hours for assigned projects</p>
-        </div>
-
-        <div style={{padding:24}}>
-          <div style={{marginBottom:20,display:"flex",gap:16,alignItems:"flex-end",flexWrap:"wrap"}}>
-            <div style={{flex:"0 0 240px"}}>
-              <label style={{fontSize:11,color:"#374151",fontWeight:600,marginBottom:6,display:"block",letterSpacing:"0.05em"}}>SELECT EMPLOYEE</label>
-              <select
-                value={selectedEmp?.id || ""}
-                onChange={e => { setSelectedEmp(employees.find(emp => String(emp.id) === e.target.value) || null); setDailyHours({}); }}
-                style={{background:"#F9FAFB",border:"1.5px solid #E5E7EB",borderRadius:8,padding:"8px 12px",fontSize:13,width:"100%",color:"#374151",fontFamily:"'Inter',sans-serif"}}
-              >
-                <option value="">— Select —</option>
-                {employees.map(e => <option key={e.id} value={String(e.id)}>{e.name}</option>)}
-              </select>
-            </div>
-
-            <div style={{flex:1}}>
-              <label style={{fontSize:11,color:"#374151",fontWeight:600,marginBottom:6,display:"block",letterSpacing:"0.05em"}}>MONTH</label>
-              <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                {MONTHS.map((m, idx) => {
-                  const mn = idx + 1; 
-                  const isPast = selectedYear < currentYear || (selectedYear === currentYear && mn <= currentMonth);
-                  return (
-                    <button key={mn} onClick={() => isPast && setSelectedMonth(mn)}
-                      style={{
-                        padding:"5px 10px", borderRadius:6, border:"none", cursor: isPast ? "pointer" : "default", fontSize:12, fontWeight:600,
-                        background: selectedMonth === mn ? "#2563EB" : isPast ? "#F3F4F6" : "#F9FAFB",
-                        color: selectedMonth === mn ? "#fff" : isPast ? "#374151" : "#D1D5DB", transition:"all 0.15s"
-                      }}
-                    >{m}</button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {selectedEmp ? (
-            <>
-              <div style={{marginBottom:16,padding:"10px 16px",background:"#F0F7FF",borderRadius:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:12,color:"#374151",fontWeight:500}}>Total hours logged — {MONTHS[selectedMonth-1]} {selectedYear}</span>
-                <span style={{fontSize:16,fontWeight:700,color:"#2563EB"}}>{totalWorkerHours.toFixed(1)}h</span>
-              </div>
-
-              <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:8}}>
-                {Array.from({length: (days[0].getDay() + 6) % 7}).map((_, i) => (
-                  <div key={`empty-${i}`} />
-                ))}
-                {days.map(day => {
-                  const dateStr   = day.toISOString().slice(0,10);
-                  const isPast    = day <= today;
-                  const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-                  const isToday   = day.toDateString() === today.toDateString();
-                  const dayLabel  = day.toLocaleString("en-US", { weekday:"short" });
-
-                  const activeTasksOnThisDay = assignedTasks.filter(t => {
-                    const dayTime = day.getTime();
-                    const start = t.actual_start || t.planned_start || t.created_at;
-                    const startTime = new Date(start).setHours(0,0,0,0);
-                    const end = t.actual_end || t.planned_end;
-                    const endTime = end ? new Date(end).setHours(23,59,59,999) : Infinity;
-                    return dayTime >= startTime && dayTime <= endTime;
-                  });
-
-                  const dayTotal = assignedTasks.reduce((sum, t) => sum + (parseFloat(dailyHours[t.id]?.[dateStr]?.hours) || 0), 0);
-                  const hasHours = dayTotal > 0;
-
-                  return (
-                    <div key={dateStr} style={{
-                      background: isWeekend ? "#F9FAFB" : hasHours ? "#F0FDF4" : "#fff",
-                      borderRadius:8, padding:"8px 8px 10px",
-                      border:`1.5px solid ${isToday ? "#2563EB" : hasHours ? "#86EFAC" : isWeekend ? "#F3F4F6" : "#E5E7EB"}`,
-                      opacity: isPast ? 1 : 0.35,
-                      display: "flex", flexDirection: "column", minHeight: 120
-                    }}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8, paddingBottom: 6, borderBottom: "1px dashed #E5E7EB"}}>
-                        <span style={{fontSize:9,fontWeight:700,color:isWeekend?"#D1D5DB":isToday?"#2563EB":"#9CA3AF"}}>{dayLabel}</span>
-                        <div style={{display: "flex", gap: 6, alignItems: "center"}}>
-                            {hasHours && <span style={{fontSize:10, fontWeight:700, color:"#059669"}}>{dayTotal}h</span>}
-                            <span style={{fontSize:13,fontWeight:700,color:isWeekend?"#D1D5DB":isToday?"#2563EB":"#111827"}}>{day.getDate()}</span>
-                        </div>
-                      </div>
-
-                      <div style={{maxHeight: 180, overflowY: "auto", paddingRight: 2}}>
-                        {activeTasksOnThisDay.length === 0 ? (
-                          <div style={{fontSize:9, color:"#D1D5DB", textAlign:"center", marginTop:10}}>No active tasks</div>
-                        ) : (
-                          activeTasksOnThisDay.map(task => {
-                            const entry = dailyHours[task.id]?.[dateStr] || { hours: "", note: "" };
-                            return (
-                              <div key={task.id} style={{marginBottom: 8}}>
-                                <div style={{fontSize:9, fontWeight:600, color:"#4B5563", marginBottom: 3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}} title={task.title}>
-                                  {task.title}
-                                </div>
-                                <input
-                                  type="number" min="0" max="24" step="0.5" disabled={!isPast || isWeekend}
-                                  value={entry.hours || ""}
-                                  onChange={e => setDailyHours(p => ({...p, [task.id]: {...(p[task.id]||{}), [dateStr]: {...(p[task.id]?.[dateStr]||{}), hours: e.target.value}}}))}
-                                  onBlur={e => isPast && !isWeekend && handleDaySave(task.id, dateStr, e.target.value, entry.note)}
-                                  placeholder="h"
-                                  style={{
-                                    width:"100%", border:`1px solid ${entry.hours ? "#86EFAC" : "#E5E7EB"}`,
-                                    borderRadius:4, padding:"4px 6px", fontSize:11, textAlign:"right",
-                                    background: isWeekend ? "#F3F4F6" : "#fff", color:"#111827", outline:"none"
-                                  }}
-                                />
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              {saving && <div style={{marginTop:12,textAlign:"right",fontSize:11,color:"#9CA3AF"}}>Saving...</div>}
-            </>
-          ) : (
-            <div style={{padding:"32px 0",textAlign:"center",color:"#9CA3AF",fontSize:13}}>Select an employee to log hours</div>
-          )}
-        </div>
-      </div>
+      {/* ── İŞÇİ: TIMESHEET (Ayrılmış Bileşen) ── */}
+      <TimesheetTab 
+        employees={employees}
+        allTasks={allTasks}
+        selectedYear={selectedYear}
+        selectedMonth={selectedMonth}
+        setSelectedMonth={setSelectedMonth}
+        selectedEmp={selectedEmp}
+        setSelectedEmp={setSelectedEmp}
+        dailyHours={dailyHours}
+        setDailyHours={setDailyHours}
+        handleDaySave={handleDaySave}
+        saving={saving}
+      />
 
       {/* ── MODALS ── */}
-
-      {/* 1. FATTURATO MODAL (3-Tier Form) */}
+      {/* 1. FATTURATO MODAL */}
       {showFattModal && (
         <div style={{position:"fixed",inset:0,background:"rgba(17,24,39,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,backdropFilter:"blur(4px)",padding:"40px 0"}}>
           <div style={{background:"#fff",borderRadius:16,padding:28,width:960,boxShadow:"0 20px 60px rgba(0,0,0,0.15)",maxHeight:"100%",overflowY:"auto"}}>
@@ -779,12 +592,9 @@ export default function CostDashboard({ employees, isHR }) {
             <div style={{background:"#F0FDF4",padding:16,borderRadius:8,border:"1px solid #BBF7D0",marginBottom:20}}>
               <h4 style={{margin:"0 0 12px",fontSize:11,fontWeight:800,color:"#166534"}}>1. COMMESSA (PROJECT ROOT)</h4>
               <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:16}}>
-                <div><label style={{fontSize:10,fontWeight:700}}>Comm. Number</label><input value={fattForm.comm_number} onChange={e=>setFattForm({...fattForm,comm_number:e.target.value})} style={inp} placeholder="e.g. 25-003"/></div>
-                <div>
-                  <label style={{fontSize:10,fontWeight:700}}>Commessa Name</label>
-                  <input value={fattForm.name||""} onChange={e=>setFattForm({...fattForm,name:e.target.value})} style={inp} placeholder="es. HOTEL DIANA MAJESTIC"/>
-                </div>
-                <div><label style={{fontSize:10,fontWeight:700}}>Linked Task</label><select value={fattForm.task_id} onChange={e=>setFattForm({...fattForm,task_id:e.target.value})} style={inp}><option value="">— Not Linked —</option>{allTasks.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}</select></div>
+                <div><label style={{fontSize:10,fontWeight:700}}>Comm. Number</label><input value={fattForm.comm_number} onChange={e=>setFattForm({...fattForm,comm_number:e.target.value})} style={inpStyle} placeholder="e.g. 25-003"/></div>
+                <div><label style={{fontSize:10,fontWeight:700}}>Commessa Name</label><input value={fattForm.name||""} onChange={e=>setFattForm({...fattForm,name:e.target.value})} style={inpStyle} placeholder="es. HOTEL DIANA MAJESTIC"/></div>
+                <div><label style={{fontSize:10,fontWeight:700}}>Linked Task</label><select value={fattForm.task_id} onChange={e=>setFattForm({...fattForm,task_id:e.target.value})} style={inpStyle}><option value="">— Not Linked —</option>{allTasks.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}</select></div>
               </div>
             </div>
 
@@ -799,16 +609,16 @@ export default function CostDashboard({ employees, isHR }) {
                   {fattForm.clients.length > 1 && <button onClick={() => removeClientBlock(cIdx)} style={{position:"absolute",top:16,right:16,background:"#FEF2F2",color:"#DC2626",border:"none",padding:"4px 8px",borderRadius:6,fontSize:10,fontWeight:700,cursor:"pointer"}}>Remove Client</button>}
                   
                   <div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:12,marginBottom:12,paddingRight:60}}>
-                    <div><label style={{fontSize:10,fontWeight:700}}>N. Cliente</label><input value={client.n_cliente} onChange={e=>handleClientChange(cIdx, "n_cliente", e.target.value)} style={inp} placeholder="00"/></div>
+                    <div><label style={{fontSize:10,fontWeight:700}}>N. Cliente</label><input value={client.n_cliente} onChange={e=>handleClientChange(cIdx, "n_cliente", e.target.value)} style={inpStyle} placeholder="00"/></div>
                     <div>
                       <label style={{fontSize:10,fontWeight:700}}>Client Profile</label>
                       <div style={{display:"flex",gap:4}}>
-                        <select value={client.client_id} onChange={e=>handleClientChange(cIdx, "client_id", e.target.value)} style={{...inp,padding:"6px",flex:1}}><option value="">— Select —</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                        <select value={client.client_id} onChange={e=>handleClientChange(cIdx, "client_id", e.target.value)} style={{...inpStyle,padding:"6px",flex:1}}><option value="">— Select —</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
                         <button onClick={() => setShowClientModal(true)} style={{padding:"6px 10px",background:"#E5E7EB",border:"none",borderRadius:6,fontSize:11,fontWeight:700,cursor:"pointer"}}>+</button>
                       </div>
                     </div>
-                    <div><label style={{fontSize:10,fontWeight:700}}>Preventivo</label><input value={client.preventivo} onChange={e=>handleClientChange(cIdx, "preventivo", e.target.value)} style={inp}/></div>
-                    <div><label style={{fontSize:10,fontWeight:700}}>Ordine Desc.</label><input value={client.ordine} onChange={e=>handleClientChange(cIdx, "ordine", e.target.value)} style={inp}/></div>
+                    <div><label style={{fontSize:10,fontWeight:700}}>Preventivo</label><input value={client.preventivo} onChange={e=>handleClientChange(cIdx, "preventivo", e.target.value)} style={inpStyle}/></div>
+                    <div><label style={{fontSize:10,fontWeight:700}}>Ordine Desc.</label><input value={client.ordine} onChange={e=>handleClientChange(cIdx, "ordine", e.target.value)} style={inpStyle}/></div>
                   </div>
 
                   <div style={{marginTop:16,borderTop:"1px dashed #D1D5DB",paddingTop:12}}>
@@ -818,11 +628,11 @@ export default function CostDashboard({ employees, isHR }) {
                     </div>
                     {client.lines.map((line, lIdx) => (
                       <div key={lIdx} style={{display:"flex",gap:6,marginBottom:6}}>
-                        <div style={{flex:2}}><input placeholder="Attività" value={line.attivita} onChange={e=>handleLineChange(cIdx, lIdx, "attivita", e.target.value)} style={{...inp,padding:"6px"}}/></div>
-                        <div style={{flex:1}}><input type="number" placeholder="Valore €" value={line.valore_ordine} onChange={e=>handleLineChange(cIdx, lIdx, "valore_ordine", e.target.value)} style={{...inp,padding:"6px"}}/></div>
-                        <div style={{flex:1}}><input type="number" placeholder="Fatturato €" value={line.fatturato_amount} onChange={e=>handleLineChange(cIdx, lIdx, "fatturato_amount", e.target.value)} style={{...inp,padding:"6px"}}/></div>
-                        <div style={{flex:1}}><input type="number" placeholder="Rim. Prob. €" value={line.rimanente_probabile} onChange={e=>handleLineChange(cIdx, lIdx, "rimanente_probabile", e.target.value)} style={{...inp,padding:"6px"}}/></div>
-                        <div style={{flex:1}}><input type="number" placeholder="Proforma €" value={line.proforma} onChange={e=>handleLineChange(cIdx, lIdx, "proforma", e.target.value)} style={{...inp,padding:"6px"}}/></div>
+                        <div style={{flex:2}}><input placeholder="Attività" value={line.attivita} onChange={e=>handleLineChange(cIdx, lIdx, "attivita", e.target.value)} style={{...inpStyle,padding:"6px"}}/></div>
+                        <div style={{flex:1}}><input type="number" placeholder="Valore €" value={line.valore_ordine} onChange={e=>handleLineChange(cIdx, lIdx, "valore_ordine", e.target.value)} style={{...inpStyle,padding:"6px"}}/></div>
+                        <div style={{flex:1}}><input type="number" placeholder="Fatturato €" value={line.fatturato_amount} onChange={e=>handleLineChange(cIdx, lIdx, "fatturato_amount", e.target.value)} style={{...inpStyle,padding:"6px"}}/></div>
+                        <div style={{flex:1}}><input type="number" placeholder="Rim. Prob. €" value={line.rimanente_probabile} onChange={e=>handleLineChange(cIdx, lIdx, "rimanente_probabile", e.target.value)} style={{...inpStyle,padding:"6px"}}/></div>
+                        <div style={{flex:1}}><input type="number" placeholder="Proforma €" value={line.proforma} onChange={e=>handleLineChange(cIdx, lIdx, "proforma", e.target.value)} style={{...inpStyle,padding:"6px"}}/></div>
                         <button onClick={() => removeLineFromClient(cIdx, lIdx)} disabled={client.lines.length===1} style={{background:"#F3F4F6",color:"#DC2626",border:"none",padding:"6px 10px",borderRadius:6,cursor:client.lines.length>1?"pointer":"not-allowed"}}>✕</button>
                       </div>
                     ))}
@@ -836,15 +646,15 @@ export default function CostDashboard({ employees, isHR }) {
         </div>
       )}
 
-      {/* 2. YENİ MÜŞTERİ EKLME MODALI */}
+      {/* 2. YENİ MÜŞTERİ EKLEME MODALI */}
       {showClientModal && (
         <div style={{position:"fixed",inset:0,background:"rgba(17,24,39,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:400,backdropFilter:"blur(4px)"}}>
           <div style={{background:"#fff",borderRadius:16,padding:28,width:400,boxShadow:"0 20px 60px rgba(0,0,0,0.15)"}}>
-            <h3 style={{margin:"0 0 20px",fontSize:18,fontWeight:700}}>Add New Client Database Entry</h3>
-            <div style={{marginBottom:14}}><label style={{fontSize:11,fontWeight:600,marginBottom:6,display:"block"}}>CLIENT NAME</label><input value={clientForm.name} onChange={e=>setClientForm({...clientForm,name:e.target.value})} style={inp} placeholder="e.g. Comune di Milano"/></div>
-            <div style={{marginBottom:24}}><label style={{fontSize:11,fontWeight:600,marginBottom:6,display:"block"}}>VAT NUMBER (P.IVA)</label><input value={clientForm.vat_number} onChange={e=>setClientForm({...clientForm,vat_number:e.target.value})} style={inp}/></div>
+            <h3 style={{margin:"0 0 20px",fontSize:18,fontWeight:700}}>Add New Client</h3>
+            <div style={{marginBottom:14}}><label style={{fontSize:11,fontWeight:600,marginBottom:6,display:"block"}}>CLIENT NAME</label><input value={clientForm.name} onChange={e=>setClientForm({...clientForm,name:e.target.value})} style={inpStyle} placeholder="e.g. Comune di Milano"/></div>
+            <div style={{marginBottom:24}}><label style={{fontSize:11,fontWeight:600,marginBottom:6,display:"block"}}>VAT NUMBER (P.IVA)</label><input value={clientForm.vat_number} onChange={e=>setClientForm({...clientForm,vat_number:e.target.value})} style={inpStyle}/></div>
             <div style={{display:"flex",gap:10}}>
-              <button onClick={handleSaveClient} disabled={savingClient} style={{flex:1,padding:11,background:"#2563EB",color:"#fff",border:"none",borderRadius:8,fontWeight:600,cursor:"pointer"}}>{savingClient ? "Saving..." : "Save to Database"}</button>
+              <button onClick={handleSaveClient} disabled={savingClient} style={{flex:1,padding:11,background:"#2563EB",color:"#fff",border:"none",borderRadius:8,fontWeight:600,cursor:"pointer"}}>{savingClient ? "Saving..." : "Save"}</button>
               <button onClick={() => setShowClientModal(false)} style={{flex:1,padding:11,background:"#F9FAFB",color:"#374151",border:"1.5px solid #E5E7EB",borderRadius:8,fontWeight:600,cursor:"pointer"}}>Cancel</button>
             </div>
           </div>
@@ -861,11 +671,11 @@ export default function CostDashboard({ employees, isHR }) {
             </div>
             <div style={{marginBottom:14}}>
               <label style={{display:"block",fontSize:11,color:"#374151",fontWeight:600,marginBottom:6}}>NEW ANNUAL GROSS (€)</label>
-              <input type="number" step="1000" value={newCost.annual_gross} onChange={e => setNewCost(p => ({...p, annual_gross: e.target.value}))} placeholder="e.g. 45000" style={inp} />
+              <input type="number" step="1000" value={newCost.annual_gross} onChange={e => setNewCost(p => ({...p, annual_gross: e.target.value}))} placeholder="e.g. 45000" style={inpStyle} />
             </div>
             <div style={{marginBottom:20}}>
               <label style={{display:"block",fontSize:11,color:"#374151",fontWeight:600,marginBottom:6}}>VALID FROM DATE</label>
-              <input type="date" value={newCost.valid_from} onChange={e => setNewCost(p => ({...p, valid_from: e.target.value}))} style={inp} />
+              <input type="date" value={newCost.valid_from} onChange={e => setNewCost(p => ({...p, valid_from: e.target.value}))} style={inpStyle} />
             </div>
             {(selectedEmpHR.cost_history || []).length > 0 && (
               <div style={{marginBottom:20, background:"#F9FAFB", borderRadius:10, padding:16, border:"1px solid #E5E7EB"}}>
@@ -899,11 +709,11 @@ export default function CostDashboard({ employees, isHR }) {
               <div style={{display:"flex",gap:10,marginBottom:20}}>
                 <div style={{flex:1}}>
                   <label style={{display:"block",fontSize:11,fontWeight:600,marginBottom:6,color:"#374151"}}>MONTH</label>
-                  <select value={overtimeInput.month} onChange={e => setOvertimeInput(p => ({...p, month: e.target.value}))} style={inp}>{MONTHS.map((m, i) => <option key={m} value={i+1}>{m}</option>)}</select>
+                  <select value={overtimeInput.month} onChange={e => setOvertimeInput(p => ({...p, month: e.target.value}))} style={inpStyle}>{MONTHS.map((m, i) => <option key={m} value={i+1}>{m}</option>)}</select>
                 </div>
                 <div style={{flex:1}}>
                   <label style={{display:"block",fontSize:11,fontWeight:600,marginBottom:6,color:"#374151"}}>OVERTIME HOURS</label>
-                  <input type="number" step="0.5" value={overtimeInput.amount} onChange={e => setOvertimeInput(p => ({...p, amount: e.target.value}))} style={inp} />
+                  <input type="number" step="0.5" value={overtimeInput.amount} onChange={e => setOvertimeInput(p => ({...p, amount: e.target.value}))} style={inpStyle} />
                 </div>
                 <div style={{display:"flex",alignItems:"flex-end"}}><button onClick={handleAddOvertime} style={{padding:"10px 14px",background:"#10B981",color:"#fff",border:"none",borderRadius:8,fontWeight:600,cursor:"pointer",fontSize:16}}>+</button></div>
               </div>
@@ -919,6 +729,7 @@ export default function CostDashboard({ employees, isHR }) {
            </div>
          </div>
       )}
+
     </div>
   );
 }
