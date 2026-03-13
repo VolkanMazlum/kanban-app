@@ -187,12 +187,7 @@ CREATE INDEX IF NOT EXISTS idx_employee_costs_employee_id ON employee_costs(empl
 CREATE INDEX IF NOT EXISTS idx_employee_overtime_emp_year ON employee_overtime_costs(employee_id, year);
 
 -- ==============================================================================
--- 8. FATTURATO (Proje Faturaları - Hiyerarşik Yapı)
--- ==============================================================================
-
--- ==============================================================================
--- YENİ: CLIENTS (Müşteriler) TABLOSU
--- (commessa_clients tablosundan önce oluşturulmalı!)
+-- CLIENTS 
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS clients (
   id SERIAL PRIMARY KEY,
