@@ -70,9 +70,6 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
     setPhases(p => p.map((ph, i) => {
       if (i !== idx) return ph;
       const updated = { ...ph, [key]: val };
-      if (key === "status" && val === "done") {
-        updated.end_date = new Date().toISOString().slice(0, 10);
-      }
       return updated;
     }));
   };
