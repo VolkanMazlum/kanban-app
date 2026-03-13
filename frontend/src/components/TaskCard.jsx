@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { COLUMNS, TOPIC_STYLE } from "../constants/index.js";
 import Avatar from "./Avatar.jsx";
-
+import ConfirmDialog from "./ConfirmDialog.jsx";
 export default function TaskCard({ task, onDragStart, onEdit, onDelete }) {
   const [hovered, setHovered] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const isOverdue = task.deadline && new Date(task.deadline) < new Date() && task.status !== "done";
+  
   
   // Combine task assignees and phase assignees to get a unique list for the card
   const phases = task.phases || [];
@@ -70,7 +72,7 @@ export default function TaskCard({ task, onDragStart, onEdit, onDelete }) {
 
           <div style={{ display:"flex", gap:4, opacity:hovered?1:0, transition:"opacity 0.15s" }}>
             <button onClick={() => onEdit(task)} style={{ background:"#F3F4F6", border:"none", borderRadius:5, padding:"3px 8px", color:"#374151", cursor:"pointer", fontSize:11, fontWeight:500 }}>Edit</button>
-            <button onClick={() => onDelete(task.id)} style={{ background:"#FEF2F2", border:"none", borderRadius:5, padding:"3px 8px", color:"#DC2626", cursor:"pointer", fontSize:11, fontWeight:500 }}>✕</button>
+            <button onClick={() => setShowConfirm(true)} style={{ background:"#FEF2F2", border:"none", borderRadius:5, padding:"3px 8px", color:"#DC2626", cursor:"pointer", fontSize:11, fontWeight:500 }}>✕</button>
           </div>
         </div>
 
@@ -201,6 +203,18 @@ export default function TaskCard({ task, onDragStart, onEdit, onDelete }) {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={showConfirm}
+        onClose={() => setShowConfirm(false)}
+        onConfirm={() => {
+          setShowConfirm(false);
+          onDelete(task.id);
+        }}
+        title="Delete Task"
+        message={`Are you sure you want to delete the task "${task.title}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+      />
     </div>
   );
 }

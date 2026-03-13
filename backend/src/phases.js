@@ -56,6 +56,9 @@ module.exports = (app, query) => {
       await query("DELETE FROM task_phases WHERE task_id = $1", [taskId]);
       if (phases && phases.length > 0) {
         for (const ph of phases) {
+          // Calculate total estimated hours from assignee hours
+          const totalEstimatedHours = (ph.assignee_hours || []).reduce((sum, assignee) => sum + (parseFloat(assignee.estimated_hours) || 0), 0);
+          
           const result = await query(
             `INSERT INTO task_phases (task_id, name, position, start_date, note, end_date, status, topic_source, estimated_hours)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
@@ -64,7 +67,7 @@ module.exports = (app, query) => {
               ph.start_date || null, ph.note || null,
               ph.end_date || null,
               ph.status || "pending", ph.topic_source || null,
-              ph.estimated_hours || null
+              totalEstimatedHours || null
             ]
           );
           const phaseId = result.rows[0].id;

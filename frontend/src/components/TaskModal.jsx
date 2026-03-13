@@ -238,14 +238,10 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
                           </div>
 
                           <div style={{marginBottom:8}}>
-                            <label style={{fontSize:10,color:"#9CA3AF",fontWeight:600}}>PHASE ESTIMATED HOURS</label>
-                            <input
-                              type="number" min="0" step="0.5"
-                              value={ph.estimated_hours || ""}
-                              onChange={e=>updatePhase(idx,"estimated_hours", e.target.value ? parseFloat(e.target.value) : null)}
-                              style={{...inp,marginTop:4,padding:"6px 10px"}}
-                              placeholder="e.g. 16"
-                            />
+                            <label style={{fontSize:10,color:"#9CA3AF",fontWeight:600}}>TOTAL ESTIMATED HOURS</label>
+                            <div style={{...inp,marginTop:4,padding:"6px 10px",background:"#F3F4F6",color:"#374151",fontWeight:600}}>
+                              {(ph.assignee_hours || []).reduce((total, assignee) => total + (parseFloat(assignee.estimated_hours) || 0), 0).toFixed(1)}h
+                            </div>
                           </div>
                           
                           <div style={{ marginTop: 8, marginBottom: 12 }}>

@@ -631,8 +631,6 @@ export default function CostDashboard({ employees, isHR }) {
                         <div style={{flex:2}}><input placeholder="Attività" value={line.attivita} onChange={e=>handleLineChange(cIdx, lIdx, "attivita", e.target.value)} style={{...inpStyle,padding:"6px"}}/></div>
                         <div style={{flex:1}}><input type="number" placeholder="Valore €" value={line.valore_ordine} onChange={e=>handleLineChange(cIdx, lIdx, "valore_ordine", e.target.value)} style={{...inpStyle,padding:"6px"}}/></div>
                         <div style={{flex:1}}><input type="number" placeholder="Fatturato €" value={line.fatturato_amount} onChange={e=>handleLineChange(cIdx, lIdx, "fatturato_amount", e.target.value)} style={{...inpStyle,padding:"6px"}}/></div>
-                        <div style={{flex:1}}><input type="number" placeholder="Rim. Prob. €" value={line.rimanente_probabile} onChange={e=>handleLineChange(cIdx, lIdx, "rimanente_probabile", e.target.value)} style={{...inpStyle,padding:"6px"}}/></div>
-                        <div style={{flex:1}}><input type="number" placeholder="Proforma €" value={line.proforma} onChange={e=>handleLineChange(cIdx, lIdx, "proforma", e.target.value)} style={{...inpStyle,padding:"6px"}}/></div>
                         <button onClick={() => removeLineFromClient(cIdx, lIdx)} disabled={client.lines.length===1} style={{background:"#F3F4F6",color:"#DC2626",border:"none",padding:"6px 10px",borderRadius:6,cursor:client.lines.length>1?"pointer":"not-allowed"}}>✕</button>
                       </div>
                     ))}
