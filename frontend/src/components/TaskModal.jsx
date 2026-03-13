@@ -205,14 +205,12 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
 
                 return (
                   <div key={topicName} style={{ border: `1px solid ${ts.border}`, borderRadius: 8, overflow: "hidden" }}>
-                    {/* Category Header */}
                     <div style={{ background: ts.bg, padding: "8px 12px", borderBottom: `1px solid ${ts.border}` }}>
                       <span style={{ fontSize: 11, fontWeight: 700, color: ts.text, letterSpacing: "0.05em" }}>
                         {topicName.toUpperCase()}
                       </span>
                     </div>
                     
-                    {/* Phase Cards */}
                     <div style={{ padding: "8px", display: "flex", flexDirection: "column", gap: 8, background: "#F9FAFB" }}>
                       {topicPhases.map(({ ph, idx }) => (
                         <div key={idx} style={{background:"#fff",borderRadius:6,padding:"10px",border:"1px solid #E5E7EB"}}>
@@ -255,7 +253,6 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
                             />
                           </div>
 
-                          {/* MOVED INSIDE THE PHASE LOOP: Phase Assignees & Hours */}
                           <div style={{background:"#F9FAFB", border:"1px solid #E5E7EB", padding: "8px", borderRadius: 6}}>
                             <label style={{fontSize:10,color:"#374151",fontWeight:700,marginBottom:8,display:"block"}}>ASSIGNEES & HOURS FOR THIS PHASE</label>
                             {(!ph.start_date || !ph.end_date) && (
@@ -272,7 +269,6 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
 
                                 return (
                                   <div key={emp.id}>
-                                    {/* Kişi seç */}
                                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
                                       <button type="button" onClick={() => {
                                         const current = ph.assignee_hours || [];
@@ -296,7 +292,6 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
                                       )}
                                     </div>
 
-                                    {/* Aylık saat inputları */}
                                     {isSelected && phaseMonths.length > 0 && (
                                       <div style={{marginLeft:30,display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
                                         {phaseMonths.map(({year, month}) => {

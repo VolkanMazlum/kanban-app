@@ -38,7 +38,35 @@ module.exports = (app, query) => {
               ) ORDER BY tp.position), '[]')
               FROM task_phases tp
               WHERE tp.task_id = t.id
-            ) AS phases
+            ) AS phases,
+            (
+              SELECT json_build_object(
+                'id', c.id,
+                'comm_number', c.comm_number,
+                'name', c.name,
+                'clients', COALESCE((
+                  SELECT json_agg(json_build_object(
+                    'client_id', cc.client_id,
+                    'n_cliente', cc.n_cliente,
+                    'client_name', cl.name,
+                    'lines', COALESCE((
+                      SELECT json_agg(json_build_object(
+                        'attivita', fl.attivita,
+                        'valore_ordine', fl.valore_ordine,
+                        'fatturato_amount', fl.fatturato_amount
+                      ))
+                      FROM fatturato_lines fl WHERE fl.commessa_client_id = cc.id
+                    ), '[]'::json)
+                  ))
+                  FROM commessa_clients cc
+                  LEFT JOIN clients cl ON cc.client_id = cl.id
+                  WHERE cc.commessa_id = c.id
+                ), '[]'::json)
+              )
+              FROM commesse c
+              WHERE c.task_id = t.id
+              LIMIT 1
+            ) AS commessa
       FROM tasks t
       LEFT JOIN task_assignees ta ON t.id = ta.task_id
       LEFT JOIN employees e ON ta.employee_id = e.id
@@ -110,7 +138,35 @@ module.exports = (app, query) => {
                     ), '[]')
                  FROM task_phases tp
                  WHERE tp.task_id = t.id
-               ) AS phases
+               ) AS phases,
+               (
+                 SELECT json_build_object(
+                   'id', c.id,
+                   'comm_number', c.comm_number,
+                   'name', c.name,
+                   'clients', COALESCE((
+                     SELECT json_agg(json_build_object(
+                       'client_id', cc.client_id,
+                       'n_cliente', cc.n_cliente,
+                       'client_name', cl.name,
+                       'lines', COALESCE((
+                         SELECT json_agg(json_build_object(
+                           'attivita', fl.attivita,
+                           'valore_ordine', fl.valore_ordine,
+                           'fatturato_amount', fl.fatturato_amount
+                         ))
+                         FROM fatturato_lines fl WHERE fl.commessa_client_id = cc.id
+                       ), '[]'::json)
+                     ))
+                     FROM commessa_clients cc
+                     LEFT JOIN clients cl ON cc.client_id = cl.id
+                     WHERE cc.commessa_id = c.id
+                   ), '[]'::json)
+                 )
+                 FROM commesse c
+                 WHERE c.task_id = t.id
+                 LIMIT 1
+               ) AS commessa
         FROM tasks t 
         LEFT JOIN task_assignees ta ON t.id = ta.task_id
         LEFT JOIN employees e ON ta.employee_id = e.id
@@ -296,7 +352,7 @@ module.exports = (app, query) => {
 
         // 4. Update Phases (Delete old, insert new)
         if (phases !== undefined) {
-          await query("DELETE FROM task_phases WHERE task_id = $1", [id]); // This deletes phase_assignees too via CASCADE
+          await query("DELETE FROM task_phases WHERE task_id = $1", [id]); 
           
           if (phases.length > 0) {
             for (let i = 0; i < phases.length; i++) {
@@ -319,7 +375,6 @@ module.exports = (app, query) => {
               
               const newPhaseId = phaseResult.rows[0].id;
 
-              // NEW: Insert Phase Assignees & Hours
               if (ph.assignee_hours && ph.assignee_hours.length > 0) {
                 for (const ah of ph.assignee_hours) {
                   await query(

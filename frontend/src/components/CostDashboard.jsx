@@ -61,6 +61,11 @@ export default function CostDashboard({ employees, isHR }) {
   const [clientForm, setClientForm]         = useState({ name:"", vat_number:"", contact_email:"", phone:"", address:"", notes:"" });
   const [savingClient, setSavingClient]     = useState(false);
 
+
+  //──── FATTURATO VE CLIENT STATE FILTRELEME ─────
+  const [fattFilterClient, setFattFilterClient] = useState("");
+
+
   // ── USE EFFECTS ──
   useEffect(() => {
     api.getTasks().then(setAllTasks).catch(console.error);
@@ -187,14 +192,51 @@ export default function CostDashboard({ employees, isHR }) {
   const openNewFatt = () => { setEditingFatt(null); setFattForm(EMPTY_FORM); setShowFattModal(true); };
   const openEditFatt = (row) => {
     setEditingFatt(row);
+    const linkedTask = allTasks.find(t => t.id === row.task_id);
+    
+    let initialClients = row.clients && row.clients.length > 0 ? row.clients.map(c => ({
+      ...c, lines: c.lines && c.lines.length > 0 ? c.lines : [{ ...EMPTY_LINE }]
+    })) : [{ ...EMPTY_CLIENT }];
+    if (linkedTask && linkedTask.phases) {
+      const relevantPhases = linkedTask.phases.filter(ph => ph.status === 'active' || ph.status === 'done');
+      
+      initialClients = initialClients.map(client => {
+        // Bu müşterinin mevcut aktivitelerini bul
+        const existingActivities = new Set(client.lines.map(l => l.attivita));
+        // Müşteride OLMAYAN yeni fazları bul
+        const missingPhases = relevantPhases.filter(ph => !existingActivities.has(ph.name));
+        
+        if (missingPhases.length > 0) {
+          const linesToAdd = missingPhases.map(ph => ({ ...EMPTY_LINE, attivita: ph.name }));
+          // Tamamen boş olan varsayılan satırları temizle ki liste çirkin görünmesin
+          const filteredLines = client.lines.filter(l => l.attivita || l.valore_ordine || l.fatturato_amount);
+          
+          return {
+            ...client,
+            lines: [...(filteredLines.length > 0 ? filteredLines : []), ...linesToAdd]
+          };
+        }
+        return client;
+      });
+    }
+
     setFattForm({
-      task_id: row.task_id || "", comm_number: row.comm_number || "", name: row.name || "",
-      clients: row.clients && row.clients.length > 0 ? row.clients.map(c => ({
-        ...c, lines: c.lines && c.lines.length > 0 ? c.lines : [{ ...EMPTY_LINE }]
-      })) : [{ ...EMPTY_CLIENT }]
+      task_id: row.task_id || "", 
+      comm_number: row.comm_number || "", 
+      name: row.name || "",
+      clients: initialClients
     });
     setShowFattModal(true);
   };
+
+  const filteredFatturatoList = fattFilterClient
+    ? fatturatoList.map(comm => ({
+        ...comm,
+        // Sadece seçili müşteriye ait satırları tut
+        clients: comm.clients.filter(c => String(c.client_id) === String(fattFilterClient))
+      })).filter(comm => comm.clients.length > 0) // İçi boşalan commessa'ları listeden çıkar
+    : fatturatoList;
+
   const addClientBlock = () => setFattForm({ ...fattForm, clients: [...fattForm.clients, { ...EMPTY_CLIENT }] });
   const removeClientBlock = (cIdx) => { const newClients = [...fattForm.clients]; newClients.splice(cIdx, 1); setFattForm({ ...fattForm, clients: newClients }); };
   const handleClientChange = (cIdx, field, val) => { const newClients = [...fattForm.clients]; newClients[cIdx][field] = val; setFattForm({ ...fattForm, clients: newClients }); };
@@ -494,13 +536,35 @@ export default function CostDashboard({ employees, isHR }) {
       {/* ── FATTURATO SEKMESİ ── */}
       {isHR && hrTab === "fatturato" && (
         <div style={{marginBottom:24}}>
+          
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-            <div><div style={{fontSize:10,color:"#9CA3AF",fontWeight:700,letterSpacing:"0.1em",marginBottom:2}}>HR ONLY — {selectedYear}</div><h3 style={{margin:0,fontSize:16,fontWeight:700,color:"#111827"}}>Fatturato / Revenue Register</h3></div>
-            <button onClick={openNewFatt} style={{background:"#2563EB",color:"#fff",border:"none",borderRadius:8,padding:"10px 18px",fontWeight:600,fontSize:13,cursor:"pointer"}}>+ New Commessa</button>
+            <div>
+              <div style={{fontSize:10,color:"#9CA3AF",fontWeight:700,letterSpacing:"0.1em",marginBottom:2}}>HR ONLY — {selectedYear}</div>
+              <h3 style={{margin:0,fontSize:16,fontWeight:700,color:"#111827"}}>Fatturato / Revenue Register</h3>
+            </div>
+
+            {/* FİLTRE VE YENİ EKLEME BUTONU YANYANA */}
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <select
+                value={fattFilterClient}
+                onChange={e => setFattFilterClient(e.target.value)}
+                style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #D1D5DB", fontSize: 13, fontWeight: 600, color: "#374151", background: "#fff", cursor: "pointer", outline: "none" }}
+              >
+                <option value="">All Clients (Tümü)</option>
+                {clients.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              
+              <button onClick={openNewFatt} style={{background:"#2563EB",color:"#fff",border:"none",borderRadius:8,padding:"10px 18px",fontWeight:600,fontSize:13,cursor:"pointer"}}>
+                + New Commessa
+              </button>
+            </div>
           </div>
 
           <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",overflowX:"auto"}}>
-            {fatturatoList.length === 0 ? <div style={{padding:40,textAlign:"center",color:"#9CA3AF",fontSize:13}}>No entries for {selectedYear}.</div> : (
+            {/* DÜZELTME: fatturatoList yerine filteredFatturatoList kullanıyoruz */}
+            {filteredFatturatoList.length === 0 ? <div style={{padding:40,textAlign:"center",color:"#9CA3AF",fontSize:13}}>No entries found.</div> : (
               <table style={{width:"100%",borderCollapse:"collapse",minWidth:1200}}>
                 <thead>
                   <tr style={{background:"#F9FAFB"}}>
@@ -508,7 +572,8 @@ export default function CostDashboard({ employees, isHR }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {fatturatoList.map((comm) => {
+                  {/* DÜZELTME: fatturatoList yerine filteredFatturatoList kullanıyoruz */}
+                  {filteredFatturatoList.map((comm) => {
                     const totalLines = comm.clients.reduce((sum, c) => sum + (c.lines?.length || 1), 0) || 1;
                     let commRendered = false;
 
@@ -594,8 +659,72 @@ export default function CostDashboard({ employees, isHR }) {
               <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:16}}>
                 <div><label style={{fontSize:10,fontWeight:700}}>Comm. Number</label><input value={fattForm.comm_number} onChange={e=>setFattForm({...fattForm,comm_number:e.target.value})} style={inpStyle} placeholder="e.g. 25-003"/></div>
                 <div><label style={{fontSize:10,fontWeight:700}}>Commessa Name</label><input value={fattForm.name||""} onChange={e=>setFattForm({...fattForm,name:e.target.value})} style={inpStyle} placeholder="es. HOTEL DIANA MAJESTIC"/></div>
-                <div><label style={{fontSize:10,fontWeight:700}}>Linked Task</label><select value={fattForm.task_id} onChange={e=>setFattForm({...fattForm,task_id:e.target.value})} style={inpStyle}><option value="">— Not Linked —</option>{allTasks.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}</select></div>
-              </div>
+                <div>
+                  <label style={{fontSize:10,fontWeight:700}}>Linked Task</label>
+                  <select 
+                    value={fattForm.task_id} 
+                    onChange={e => {
+                      const selectedTaskId = e.target.value;
+                      const oldTaskId = fattForm.task_id; // Formda o an seçili olan eski task_id
+                      
+                      const oldTask = allTasks.find(t => String(t.id) === String(oldTaskId));
+                      const selectedTask = allTasks.find(t => String(t.id) === String(selectedTaskId));
+                      
+                      // Önceki task'ın faz isimlerini bir kümede (Set) tutalım ki kolayca bulup silelim
+                      const oldPhaseNames = new Set(oldTask?.phases?.map(p => p.name) || []);
+                      
+                      let newClients = fattForm.clients.map(client => {
+                        // 1. ADIM: Eski task'tan gelen fazları temizle
+                        let cleanedLines = client.lines.filter(l => {
+                          const isFromOldTask = oldPhaseNames.has(l.attivita);
+                          // Eğer satıra herhangi bir finansal tutar yazılmışsa güvenliğe al (silme)
+                          const hasFinancialData = parseFloat(l.valore_ordine) > 0 || parseFloat(l.fatturato_amount) > 0;
+                          
+                          if (isFromOldTask && !hasFinancialData) {
+                            return false; // Eski task'tan gelmiş ve içi boşsa, listeden ÇIKAR
+                          }
+                          return true; // Diğerlerini TUT
+                        });
+
+                        // 2. ADIM: Yeni seçilen Task'ın aktif/bitmiş fazlarını EKLE
+                        if (selectedTask && selectedTask.phases) {
+                          const relevantPhases = selectedTask.phases.filter(ph => ph.status === 'active' || ph.status === 'done');
+                          const existingActivities = new Set(cleanedLines.map(l => l.attivita));
+                          const missingPhases = relevantPhases.filter(ph => !existingActivities.has(ph.name));
+                          
+                          if (missingPhases.length > 0) {
+                            const linesToAdd = missingPhases.map(ph => ({ ...EMPTY_LINE, attivita: ph.name }));
+                            // Boş varsayılan satırları temizle ki çirkin görünmesin
+                            cleanedLines = cleanedLines.filter(l => l.attivita || l.valore_ordine || l.fatturato_amount);
+                            cleanedLines = [...(cleanedLines.length > 0 ? cleanedLines : []), ...linesToAdd];
+                          }
+                        }
+                        
+                        // Eğer her şey silindiyse ve liste tamamen boş kaldıysa, 1 adet boş varsayılan satır koy
+                        if (cleanedLines.length === 0) {
+                          cleanedLines = [{ ...EMPTY_LINE }];
+                        }
+
+                        return {
+                          ...client,
+                          lines: cleanedLines
+                        };
+                      });
+
+                      setFattForm({
+                        ...fattForm, 
+                        task_id: selectedTaskId,
+                        name: selectedTask ? selectedTask.title : fattForm.name,
+                        clients: newClients
+                      });
+                    }} 
+                    style={inpStyle}
+                  >
+                    <option value="">— Not Linked —</option>
+                    {allTasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+                  </select>
+                </div>
+                </div>
             </div>
 
             <div style={{marginBottom:24}}>

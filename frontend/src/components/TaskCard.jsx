@@ -2,11 +2,11 @@ import { useState } from "react";
 import { COLUMNS, TOPIC_STYLE } from "../constants/index.js";
 import Avatar from "./Avatar.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
+
 export default function TaskCard({ task, onDragStart, onEdit, onDelete }) {
   const [hovered, setHovered] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const isOverdue = task.deadline && new Date(task.deadline) < new Date() && task.status !== "done";
-  
   
   // Combine task assignees and phase assignees to get a unique list for the card
   const phases = task.phases || [];
@@ -14,7 +14,6 @@ export default function TaskCard({ task, onDragStart, onEdit, onDelete }) {
   
   (task.assignees || []).forEach(a => allAssigneesMap.set(a.id, a));
   phases.forEach(ph => {
-    // Check both assignees and assignee_hours to cover all bases depending on backend response
     const phAssignees = ph.assignees || ph.assignee_hours || []; 
     phAssignees.forEach(a => allAssigneesMap.set(a.id, a));
   });
@@ -60,6 +59,14 @@ export default function TaskCard({ task, onDragStart, onEdit, onDelete }) {
                     {task.label}
                   </span>
               )}            
+              
+              {/* Commessa Badge */}
+              {task.commessa && task.commessa.comm_number && (
+                  <span style={{ fontSize:10, fontWeight:700, color:"#059669", background:"#D1FAE5", border:"1px solid #A7F3D0", padding:"2px 6px", borderRadius:4 }}>
+                    Comm: {task.commessa.comm_number}
+                  </span>
+              )}
+              
             {topics.map(t => {
               const ts = TOPIC_STYLE[t] || { bg: "#F3F4F6", text: "#374151", border: "#E5E7EB" };
               return (
@@ -124,7 +131,6 @@ export default function TaskCard({ task, onDragStart, onEdit, onDelete }) {
                           if (ph.status === "pending") return null; 
                           const phColor = ph.status==="done"?"#059669":ph.status==="active"?"#F59E0B":"#6B7280";
                           
-                          // Get assignees specifically for this phase to show next to it
                           const specificAssignees = ph.assignees || ph.assignee_hours || [];
 
                           return (
@@ -136,7 +142,6 @@ export default function TaskCard({ task, onDragStart, onEdit, onDelete }) {
                                 </span>
                               </div>
                               <div style={{ display: "flex", alignItems: "center", gap: 6}}>
-                                 {/* Show mini avatars next to phase if expanded */}
                                 {specificAssignees.length > 0 && (
                                    <div style={{ display: "flex" }}>
                                     {specificAssignees.slice(0, 2).map((a, i) => (
