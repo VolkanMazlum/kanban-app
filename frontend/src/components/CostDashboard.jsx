@@ -380,7 +380,7 @@ export default function CostDashboard({ employees, isHR }) {
                   let labourCost = 0; let totalHours = 0;
                   tHours.forEach(th => {
                     const emp = costs.find(e => e.id === th.employee_id);
-                    const rate = emp ? parseFloat(emp.hourly_rate_dynamic) : 0;
+                    const rate = emp ? parseFloat(emp.hourly_rate_theoretical) : 0;
                     labourCost += (parseFloat(th.total_hours) * rate);
                     totalHours += parseFloat(th.total_hours);
                   });
@@ -453,7 +453,7 @@ export default function CostDashboard({ employees, isHR }) {
                   const tHours = finances.task_hours.filter(th => th.task_id === task.id);
                   tHours.forEach(th => {
                     const emp = costs.find(e => e.id === th.employee_id);
-                    const rate = emp ? parseFloat(emp.hourly_rate_dynamic) : 0;
+                    const rate = emp ? parseFloat(emp.hourly_rate_theoretical) : 0;
                     grandLabour += parseFloat(th.total_hours) * rate;
                     grandHours  += parseFloat(th.total_hours);
                   });
