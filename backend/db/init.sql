@@ -258,13 +258,141 @@ INSERT INTO employees (name) VALUES
 ON CONFLICT DO NOTHING;
 
 INSERT INTO phase_templates (topic, name, position) VALUES
-  ('MEP', 'Feasibility study', 0), ('MEP', 'Due Diligence', 1), ('MEP', 'Preliminary design', 2), ('MEP', 'Final design', 3), ('MEP', 'Executive design', 4), ('MEP', 'BIM modelling', 5), ('MEP', 'Work supervision', 6), ('MEP', 'Functional tests', 7),
-  ('ENERGY', 'APE', 0), ('ENERGY', 'Energy diagnosis', 1),
-  ('SUSTAINABILITY', 'LEED', 0), ('SUSTAINABILITY', 'BREEAM', 1), ('SUSTAINABILITY', 'WELL', 2), ('SUSTAINABILITY', 'WIREDSCORE', 3), ('SUSTAINABILITY', 'CRREM', 4), ('SUSTAINABILITY', 'EU Taxonomy', 5), ('SUSTAINABILITY', 'CAM', 6), ('SUSTAINABILITY', 'LCA', 7), ('SUSTAINABILITY', 'GRESB', 8), ('SUSTAINABILITY', 'FITWEL', 9),
-  ('ACUSTIC', 'Preliminary design', 0), ('ACUSTIC', 'Final design', 1), ('ACUSTIC', 'Executive design', 2), ('ACUSTIC', 'Work supervision', 3), ('ACUSTIC', 'Acustic Tests', 4), ('ACUSTIC', 'Acustic Tests assistance', 5),
-  ('VVF', 'Preliminary design', 0), ('VVF', 'Final design', 1), ('VVF', 'Executive design', 2), ('VVF', 'Work supervision', 3), ('VVF', 'VVF Tests', 4), ('VVF', 'VVF Tests assistance', 5),
-  ('STRUCTURE', 'Preliminary design', 0), ('STRUCTURE', 'Final design', 1), ('STRUCTURE', 'Executive design', 2), ('STRUCTURE', 'Work supervision', 3), ('STRUCTURE', 'Structural Tests', 4), ('STRUCTURE', 'Structural Tests assistance', 5),
-  ('GEOTHERMAL', 'Preliminary design', 0), ('GEOTHERMAL', 'Final design', 1), ('GEOTHERMAL', 'Executive design', 2), ('GEOTHERMAL', 'Work supervision', 3), ('GEOTHERMAL', 'Geothermal Tests', 4),
-  ('HYDRAULIC INVARIANCE', 'Hydraulic invariance', 0),
-  ('CONTINUOUS COMMISSIONING', 'Development of a virtual simulation of the plant building to train the algorithm', 0), ('CONTINUOUS COMMISSIONING', 'Development and release of the AI-Eco algorithm adapted to the specific project', 1), ('CONTINUOUS COMMISSIONING', 'Continuous Commissioning of the AI-Eco algorithm – Ongoing monitoring activities', 2)
+  -- MEP
+  ('MEP', 'Studio di Fattibilità', 0), 
+  ('MEP', 'Due Diligence', 1), 
+  ('MEP', 'Progetto Preliminare', 2), 
+  ('MEP', 'Progetto Definitivo per Permessi', 3), 
+  ('MEP', 'Progetto Definitivo', 4), 
+  ('MEP', 'Progetto Definitivo per Appalto', 5), 
+  ('MEP', 'Progetto Esecutivo per Appalto', 6), 
+  ('MEP', 'BIM modelling', 7), 
+  ('MEP', 'Direzione lavori Impianti', 8), 
+  ('MEP', 'Assistenza ai Collaudi MEP', 9), 
+  ('MEP', 'Collaudi tecnico-funzionali MEP', 10),
+
+  -- ENERGY
+  ('ENERGY', 'APE', 0), 
+  ('ENERGY', 'Legge 10/91', 1), 
+  ('ENERGY', 'Diagnosi Energetica', 2),
+
+  -- SUSTAINABILITY (LEED)
+  ('SUSTAINABILITY', 'LEED', 0),
+  ('SUSTAINABILITY', 'LEED - Pre-Assessment', 1),
+  ('SUSTAINABILITY', 'LEED - Fase di progettazione', 2),
+  ('SUSTAINABILITY', 'LEED - Fase di costruzione', 3),
+  ('SUSTAINABILITY', 'LEED - CxA Base', 4),
+  ('SUSTAINABILITY', 'LEED - CxA Avanzato impianti', 5),
+  ('SUSTAINABILITY', 'LEED - CxA Avanzato involucro', 6),
+  ('SUSTAINABILITY', 'LEED - Daylighting', 7),
+  ('SUSTAINABILITY', 'LEED - Relazione di processo integrato', 8),
+  ('SUSTAINABILITY', 'LEED - Analisi del sito', 9),
+  ('SUSTAINABILITY', 'LEED - Consulenza acustica', 10),
+  ('SUSTAINABILITY', 'LEED - Analisi LCA materiali', 11),
+  
+  -- SUSTAINABILITY (BREEAM)
+  ('SUSTAINABILITY', 'BREEAM', 12),
+  ('SUSTAINABILITY', 'BREEAM - Design stage', 13),
+  ('SUSTAINABILITY', 'BREEAM - Construction stage', 14),
+  ('SUSTAINABILITY', 'BREEAM - Post Construction stage', 15),
+  ('SUSTAINABILITY', 'BREEAM - Suitable Qualified Ecologist (LE04/05)', 16),
+  ('SUSTAINABILITY', 'BREEAM - Modellazione L10 + energia di processo (ENE01)', 17),
+  ('SUSTAINABILITY', 'BREEAM - Life Cycle Assessment dell''edificio (MAT01)', 18),
+  ('SUSTAINABILITY', 'BREEAM - Elemental Life Cycle Cost dell''edificio (MAN02)', 19),
+  ('SUSTAINABILITY', 'BREEAM - Component Level LCC Plan (MAN02)', 20),
+  ('SUSTAINABILITY', 'BREEAM - Analisi flussi verticali (ENE06)', 21),
+  ('SUSTAINABILITY', 'BREEAM - Commissioning e Handover (MAN04)', 22),
+  ('SUSTAINABILITY', 'BREEAM - Commissioning dell''involucro (MAN04)', 23),
+  ('SUSTAINABILITY', 'BREEAM - Seasonal Commissioning e Aftercare (MAN05)', 24),
+  ('SUSTAINABILITY', 'BREEAM - Comfort e adattabilità camb. climatici (HEA04)', 25),
+  ('SUSTAINABILITY', 'BREEAM - Risk Assessment (HEA07)', 26),
+  ('SUSTAINABILITY', 'BREEAM - Tempi ritorno precipitazioni e gestione acque (POL03)', 27),
+  ('SUSTAINABILITY', 'BREEAM - Material Efficiency Analysis (MAT06)', 28),
+  ('SUSTAINABILITY', 'BREEAM - Adattamento al cambiamento climatico (WST05)', 29),
+  ('SUSTAINABILITY', 'BREEAM - Passive Design Analysis (ENE04)', 30),
+
+  -- SUSTAINABILITY (WELL)
+  ('SUSTAINABILITY', 'WELL', 31),
+  ('SUSTAINABILITY', 'WELL - Pre-Assessment', 32),
+  ('SUSTAINABILITY', 'WELL - Fase di progettazione', 33),
+  ('SUSTAINABILITY', 'WELL - Fase di costruzione', 34),
+  ('SUSTAINABILITY', 'WELL - Fase di performance verification', 35),
+  ('SUSTAINABILITY', 'WELL - Commissioning dell''involucro', 36),
+  ('SUSTAINABILITY', 'WELL - Daylighting', 37),
+  ('SUSTAINABILITY', 'WELL - PTA (Performance Test Agent)', 38),
+  ('SUSTAINABILITY', 'WELL - WELL Performance Rating', 39),
+  ('SUSTAINABILITY', 'WELL - monitoraggio e ricertificazione WELL', 40),
+
+  -- SUSTAINABILITY (WIREDSCORE)
+  ('SUSTAINABILITY', 'WIREDSCORE', 41),
+  ('SUSTAINABILITY', 'WIREDSCORE - Pre-Assessment', 42),
+  ('SUSTAINABILITY', 'WIREDSCORE - Consulenza per lvl certified', 43),
+  ('SUSTAINABILITY', 'WIREDSCORE - Incremento per lvl silver', 44),
+  ('SUSTAINABILITY', 'WIREDSCORE - Incremento per lvl gold', 45),
+  ('SUSTAINABILITY', 'WIREDSCORE - Incremento per lvl platinum', 46),
+
+  -- SUSTAINABILITY (ALTRI)
+  ('SUSTAINABILITY', 'CRREM', 47), 
+  ('SUSTAINABILITY', 'EU Taxonomy', 48), 
+  ('SUSTAINABILITY', 'CAM', 49), 
+  ('SUSTAINABILITY', 'LCA', 50), 
+  ('SUSTAINABILITY', 'GRESB', 51), 
+  ('SUSTAINABILITY', 'FITWEL', 52),
+
+  -- ACUSTIC
+  ('ACUSTIC', 'Studio di Fattibilità', 0), 
+  ('ACUSTIC', 'Due Diligence', 1), 
+  ('ACUSTIC', 'Progetto Preliminare', 2), 
+  ('ACUSTIC', 'Progetto Definitivo per Permessi', 3), 
+  ('ACUSTIC', 'Progetto Definitivo', 4), 
+  ('ACUSTIC', 'Progetto Definitivo per Appalto', 5), 
+  ('ACUSTIC', 'Progetto Esecutivo per Appalto', 6), 
+  ('ACUSTIC', 'Direzione lavori Impianti', 7), 
+  ('ACUSTIC', 'Assistenza ai Collaudi Acustici', 8), 
+  ('ACUSTIC', 'Collaudi tecnico-funzionali Acustici', 9),
+
+  -- VVF
+  ('VVF', 'Studio di Fattibilità', 0), 
+  ('VVF', 'Due Diligence', 1), 
+  ('VVF', 'Progetto Preliminare', 2), 
+  ('VVF', 'Progetto Definitivo per Permessi', 3), 
+  ('VVF', 'Progetto Definitivo', 4), 
+  ('VVF', 'Progetto Definitivo per Appalto', 5), 
+  ('VVF', 'Progetto Esecutivo per Appalto', 6), 
+  ('VVF', 'Direzione lavori Impianti', 7), 
+  ('VVF', 'Assistenza ai Collaudi VVF', 8), 
+  ('VVF', 'Collaudi tecnico-funzionali VVF', 9),
+
+  -- STRUCTURE
+  ('STRUCTURE', 'Studio di Fattibilità', 0), 
+  ('STRUCTURE', 'Due Diligence', 1), 
+  ('STRUCTURE', 'Progetto Preliminare', 2), 
+  ('STRUCTURE', 'Progetto Definitivo per Permessi', 3), 
+  ('STRUCTURE', 'Progetto Definitivo', 4), 
+  ('STRUCTURE', 'Progetto Definitivo per Appalto', 5), 
+  ('STRUCTURE', 'Progetto Esecutivo per Appalto', 6), 
+  ('STRUCTURE', 'Direzione lavori Impianti', 7), 
+  ('STRUCTURE', 'Assistenza ai Collaudi Strutture', 8), 
+  ('STRUCTURE', 'Collaudi tecnico-funzionali Strutture', 9),
+
+  -- GEOTHERMAL
+  ('GEOTHERMAL', 'Studio di Fattibilità', 0), 
+  ('GEOTHERMAL', 'Due Diligence', 1), 
+  ('GEOTHERMAL', 'Progetto Preliminare', 2), 
+  ('GEOTHERMAL', 'Progetto Definitivo per Permessi', 3), 
+  ('GEOTHERMAL', 'Progetto Definitivo', 4), 
+  ('GEOTHERMAL', 'Progetto Definitivo per Appalto', 5), 
+  ('GEOTHERMAL', 'Progetto Esecutivo per Appalto', 6), 
+  ('GEOTHERMAL', 'Direzione lavori Impianti', 7), 
+  ('GEOTHERMAL', 'Assistenza ai Collaudi Geotermici', 8), 
+  ('GEOTHERMAL', 'Collaudi tecnico-funzionali Geotermici', 9),
+
+  -- HYDRAULIC INVARIANCE
+  ('HYDRAULIC INVARIANCE', 'Invarianza Idraulica', 0),
+
+  -- CONTINUOUS COMMISSIONING
+  ('CONTINUOUS COMMISSIONING', 'Sviluppo Simulazione per allenamento algoritmo AI-Eco', 0), 
+  ('CONTINUOUS COMMISSIONING', 'Sviluppo e rilascio dell''algoritmo AI-Eco', 1), 
+  ('CONTINUOUS COMMISSIONING', 'Continuous Commissioning ed Ongoing monitoring activities', 2)
+
 ON CONFLICT DO NOTHING;
