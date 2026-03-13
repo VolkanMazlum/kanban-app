@@ -19,6 +19,16 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
   const [phaseTemplates, setPhaseTemplates] = useState({});
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
+  // Keeping the active phase
+  const [activeTopicTab, setActiveTopicTab] = useState(form.topics[0] || "");
+  useEffect(() => {
+    if (form.topics.length > 0 && !form.topics.includes(activeTopicTab)) {
+      setActiveTopicTab(form.topics[0]);
+    } else if (form.topics.length === 0) {
+      setActiveTopicTab("");
+    }
+  }, [form.topics, activeTopicTab]);
+
   useEffect(() => {
     api.getPhaseTemplates().then(templates => {
       setPhaseTemplates(templates);
@@ -189,25 +199,51 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
         </div>
 
         {/* PHASES BLOCK */}
-        {phases.length > 0 && (
+        {phases.length > 0 && form.topics.length > 0 && (
           <div style={{marginBottom:24}}>
             <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:8,fontWeight:600,letterSpacing:"0.05em"}}>PROJECT PHASES</label>
             
+            {/* New Category Tabs */}
+            <div style={{display:"flex", gap:8, marginBottom:16, flexWrap:"wrap", borderBottom:"1px solid #E5E7EB", paddingBottom:8}}>
+              {form.topics.map(t => {
+                const isActive = activeTopicTab === t;
+                const ts = TOPIC_STYLE[t] || { bg: "#F3F4F6", text: "#374151", border: "#E5E7EB" };
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setActiveTopicTab(t)}
+                    style={{
+                      padding: "6px 14px", borderRadius: "6px 6px 0 0", border: "none", fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.2s",
+                      background: isActive ? ts.bg : "transparent",
+                      color: isActive ? ts.text : "#6B7280",
+                      borderBottom: isActive ? `3px solid ${ts.border}` : "3px solid transparent",
+                    }}
+                  >
+                    {t.toUpperCase()}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/*Show solo activated phase*/}
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
-              {form.topics.map(topicName => {
+              {(() => {
+                const topicName = activeTopicTab;
+                if (!topicName) return null;
+
                 const ts = TOPIC_STYLE[topicName] || { text: "#374151", bg: "#F3F4F6", border: "#E5E7EB" };
-                
                 const topicPhases = phases
                   .map((ph, i) => ({ ph, idx: i }))
                   .filter(item => item.ph.topic_source === topicName);
 
-                if (topicPhases.length === 0) return null;
+                if (topicPhases.length === 0) return <div style={{fontSize:11, color:"#9CA3AF"}}>No phases mapped to this category.</div>;
 
                 return (
-                  <div key={topicName} style={{ border: `1px solid ${ts.border}`, borderRadius: 8, overflow: "hidden" }}>
+                  <div style={{ border: `1px solid ${ts.border}`, borderRadius: 8, overflow: "hidden", animation: "fadeIn 0.3s ease-in-out" }}>
                     <div style={{ background: ts.bg, padding: "8px 12px", borderBottom: `1px solid ${ts.border}` }}>
                       <span style={{ fontSize: 11, fontWeight: 700, color: ts.text, letterSpacing: "0.05em" }}>
-                        {topicName.toUpperCase()}
+                        {topicName.toUpperCase()} PHASES
                       </span>
                     </div>
                     
@@ -335,7 +371,7 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
                     </div>
                   </div>
                 );
-              })}
+              })()}
             </div>
           </div>
         )}
