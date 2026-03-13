@@ -543,7 +543,6 @@ export default function CostDashboard({ employees, isHR }) {
               <h3 style={{margin:0,fontSize:16,fontWeight:700,color:"#111827"}}>Fatturato / Revenue Register</h3>
             </div>
 
-            {/* FİLTRE VE YENİ EKLEME BUTONU YANYANA */}
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
               <select
                 value={fattFilterClient}
@@ -563,7 +562,6 @@ export default function CostDashboard({ employees, isHR }) {
           </div>
 
           <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",overflowX:"auto"}}>
-            {/* DÜZELTME: fatturatoList yerine filteredFatturatoList kullanıyoruz */}
             {filteredFatturatoList.length === 0 ? <div style={{padding:40,textAlign:"center",color:"#9CA3AF",fontSize:13}}>No entries found.</div> : (
               <table style={{width:"100%",borderCollapse:"collapse",minWidth:1200}}>
                 <thead>
@@ -572,7 +570,6 @@ export default function CostDashboard({ employees, isHR }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {/* DÜZELTME: fatturatoList yerine filteredFatturatoList kullanıyoruz */}
                   {filteredFatturatoList.map((comm) => {
                     const totalLines = comm.clients.reduce((sum, c) => sum + (c.lines?.length || 1), 0) || 1;
                     let commRendered = false;
@@ -630,7 +627,7 @@ export default function CostDashboard({ employees, isHR }) {
       )}
 
       {/* ── İŞÇİ: TIMESHEET (Ayrılmış Bileşen) ── */}
-      <TimesheetTab 
+      {hrTab === "employees" && (<TimesheetTab 
         employees={employees}
         allTasks={allTasks}
         selectedYear={selectedYear}
@@ -642,7 +639,7 @@ export default function CostDashboard({ employees, isHR }) {
         setDailyHours={setDailyHours}
         handleDaySave={handleDaySave}
         saving={saving}
-      />
+      />)}
 
       {/* ── MODALS ── */}
       {/* 1. FATTURATO MODAL */}
