@@ -112,3 +112,79 @@ export const savePhaseMonthlyHours = (phaseId, data) =>
   req(`/phases/${phaseId}/monthly-hours`, { method: "POST", body: JSON.stringify(data) });
 export const getPhaseMonthlyHours = (phaseId) =>
   req(`/phases/${phaseId}/monthly-hours`);
+
+// ── FATTURATO ──
+export const getFatturato = (year) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  const url = year ? `/fatturato?year=${year}` : "/fatturato";
+  return req(url, { headers: hrAuth ? { "X-HR-Auth": hrAuth } : {} });
+};
+
+export const getFatturatoByTask = (year) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  const url = year ? `/fatturato/by-task?year=${year}` : "/fatturato/by-task";
+  return req(url, { headers: hrAuth ? { "X-HR-Auth": hrAuth } : {} });
+};
+
+export const createFatturato = (data) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  return req("/fatturato", {
+    method: "POST",
+    body: JSON.stringify(data),
+    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+  });
+};
+
+export const updateFatturato = (id, data) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  return req(`/fatturato/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+  });
+};
+
+export const deleteFatturato = (id) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  return req(`/fatturato/${id}`, {
+    method: "DELETE",
+    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+  });
+};
+
+// ── CLIENTS ──
+export const getClients = () => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  return req("/clients", { headers: hrAuth ? { "X-HR-Auth": hrAuth } : {} });
+};
+
+export const getClient = (id) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  return req(`/clients/${id}`, { headers: hrAuth ? { "X-HR-Auth": hrAuth } : {} });
+};
+
+export const createClient = (data) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  return req("/clients", {
+    method: "POST",
+    body: JSON.stringify(data),
+    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+  });
+};
+
+export const updateClient = (id, data) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  return req(`/clients/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+  });
+};
+
+export const deleteClient = (id) => {
+  const hrAuth = sessionStorage.getItem("hrAuth");
+  return req(`/clients/${id}`, {
+    method: "DELETE",
+    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+  });
+};

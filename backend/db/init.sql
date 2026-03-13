@@ -187,6 +187,74 @@ CREATE INDEX IF NOT EXISTS idx_employee_costs_employee_id ON employee_costs(empl
 CREATE INDEX IF NOT EXISTS idx_employee_overtime_emp_year ON employee_overtime_costs(employee_id, year);
 
 -- ==============================================================================
+-- 8. FATTURATO (Proje Faturaları - Hiyerarşik Yapı)
+-- ==============================================================================
+
+-- ==============================================================================
+-- YENİ: CLIENTS (Müşteriler) TABLOSU
+-- (commessa_clients tablosundan önce oluşturulmalı!)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS clients (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  vat_number VARCHAR(100),
+  contact_email VARCHAR(255),
+  phone VARCHAR(50),
+  address TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+
+-- ==============================================================================
+-- 8. FATTURATO (3-Tier Hiyerarşik Yapı: Commessa -> Client -> Lines)
+-- ==============================================================================
+DROP TABLE IF EXISTS fatturato_lines CASCADE;
+DROP TABLE IF EXISTS commessa_clients CASCADE;
+DROP TABLE IF EXISTS commesse CASCADE;
+DROP TABLE IF EXISTS fatturato CASCADE; 
+
+-- 1. KATMAN: Ana İş/Proje (Commessa)
+CREATE TABLE IF NOT EXISTS commesse (
+  id SERIAL PRIMARY KEY,
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  name VARCHAR(255),
+  comm_number VARCHAR(50) UNIQUE, -- Örn: 25-003
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. KATMAN: O işe bağlı Müşteriler (Clients)
+CREATE TABLE IF NOT EXISTS commessa_clients (
+  id SERIAL PRIMARY KEY,
+  commessa_id INTEGER NOT NULL REFERENCES commesse(id) ON DELETE CASCADE,
+  client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+  n_cliente VARCHAR(10),          -- Örn: 00, 01, 02
+  n_ordine VARCHAR(50),           
+  preventivo VARCHAR(250),        -- PR 002-25
+  ordine TEXT,                    -- "incarico del 5-2-2025"
+  n_ordine_zucchetti VARCHAR(50),
+  voce_bilancio VARCHAR(100)
+);
+
+-- 3. KATMAN: O müşteriye bağlı Aktiviteler (Lines)
+CREATE TABLE IF NOT EXISTS fatturato_lines (
+  id SERIAL PRIMARY KEY,
+  commessa_client_id INTEGER NOT NULL REFERENCES commessa_clients(id) ON DELETE CASCADE,
+  attivita TEXT,          -- "progettazione preliminare"
+  descrizione TEXT,               
+  valore_ordine NUMERIC(12,2) DEFAULT 0,
+  fatturato_amount NUMERIC(12,2) DEFAULT 0,
+  rimanente_probabile NUMERIC(12,2) DEFAULT 0,  
+  proforma NUMERIC(12,2) DEFAULT 0,
+  invoice_date DATE,
+  note TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_commesse_task ON commesse(task_id);
+CREATE INDEX IF NOT EXISTS idx_commessa_clients_comm ON commessa_clients(commessa_id);
+
+-- ==============================================================================
 -- 7. SEED DATA (Başlangıç Verileri)
 -- ==============================================================================
 

@@ -58,6 +58,7 @@ require('./timeLogs')(app, query);
 require('./phases')(app, query);
 require("./settings")(app, query);
 require("./costs")(app, query, authenticateHR);
+require("./fatturato")(app, query, authenticateHR); 
 
 // Login endpoint artık gerekmiyor ama kaldırmak istersen diye yorum satırı
 // require('./login').login
