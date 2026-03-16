@@ -166,3 +166,11 @@ export const deleteClient = (id) => {
     method: "DELETE"
   });
 };
+
+// ── USERS ──
+export const getUsers = () => req("/users");
+export const createUser = (data) => req("/users", { method: "POST", body: JSON.stringify(data) });
+export const updateUser = (id, data) => req(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+
+// ── AUDIT LOGS ──
+export const getAuditLogs = (limit = 100) => req(`/audit-logs?limit=${limit}`);

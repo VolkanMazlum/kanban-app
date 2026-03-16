@@ -1,6 +1,7 @@
-module.exports = (app, query, authenticateHR) => {
+const { logAudit, getAuditContext } = require("./auditLog");
 
-  app.post("/api/work-hours", async (req, res) => {
+module.exports = (app, query, authenticate, authenticateHR) => {
+  app.post("/api/work-hours", authenticate, async (req, res) => {
     const { employee_id, task_id, date, hours, note } = req.body;
     try {
       const result = await query(
@@ -14,7 +15,7 @@ module.exports = (app, query, authenticateHR) => {
     } catch (err) { res.status(500).json({ error: "Database error" }); }
   });
 
-  app.get("/api/work-hours/:employeeId", async (req, res) => {
+  app.get("/api/work-hours/:employeeId", authenticate, async (req, res) => {
     const { year, month } = req.query;
     try {
       const result = await query(

@@ -1,7 +1,8 @@
 const { taskSchema, taskUpdateSchema } = require("./validation");
 const { z } = require("zod");
+const { logAudit, getAuditContext } = require("./auditLog");
 
-module.exports = (app, query) => {
+module.exports = (app, query, authenticate) => {
   // ── Tasks ──────────────────────────────────────────────────────
   app.get("/api/tasks", async (req, res) => {
     try {
@@ -179,7 +180,7 @@ module.exports = (app, query) => {
     } catch (err) { res.status(500).json({ error: "Database error" }); }
   });
 
-  app.post("/api/tasks", async (req, res) => {
+  app.post("/api/tasks", authenticate, async (req, res) => {
     const { title, description, label, topics, assignee_ids, deadline, status, position,
             planned_start, planned_end, actual_start, actual_end, estimated_hours, phases } = req.body;
     
@@ -196,7 +197,7 @@ module.exports = (app, query) => {
       } = validatedData;
     
       try {
-        await query("BEGIN");
+        // await query("BEGIN");
         
         // 1. Create main task 
         const taskResult = await query(
@@ -209,6 +210,10 @@ module.exports = (app, query) => {
         newTask.assignees = [];
         newTask.topics = [];
         newTask.phases = [];
+
+        // Audit log: task created
+        const ctx = getAuditContext(req);
+        logAudit(query, { ...ctx, action: 'CREATE', entityType: 'task', entityId: newTask.id, details: { title: newTask.title } });
         
         // 2. Save assignees
         if (validatedAssigneeIds && validatedAssigneeIds.length > 0) {
@@ -265,10 +270,10 @@ module.exports = (app, query) => {
           newTask.phases = phases;
         }
         
-        await query("COMMIT");
+        // await query("COMMIT");
         res.status(201).json(newTask);
       } catch (err) {
-        await query("ROLLBACK");
+        // await query("ROLLBACK");
         console.error("POST /tasks Error:", err);
         res.status(500).json({ error: "Database error" });
       }
@@ -281,7 +286,7 @@ module.exports = (app, query) => {
     }
   });
 
-  app.put("/api/tasks/:id", async (req, res) => {
+  app.put("/api/tasks/:id", authenticate, async (req, res) => {
     const { id } = req.params;
     const { title, description, label, topics, assignee_ids, deadline, status, position,
             planned_start, planned_end, actual_start, actual_end, estimated_hours, phases } = req.body;
@@ -299,11 +304,11 @@ module.exports = (app, query) => {
       } = validatedData;
     
       try {
-        await query("BEGIN");
+        // await query("BEGIN");
         
         const existing = await query("SELECT * FROM tasks WHERE id = $1", [id]);
         if (!existing.rows.length) {
-          await query("ROLLBACK");
+          // await query("ROLLBACK");
           return res.status(404).json({ error: "Task not found" });
         }
         const t = existing.rows[0];
@@ -322,6 +327,10 @@ module.exports = (app, query) => {
         );
         const updatedTask = taskResult.rows[0];
         updatedTask.assignees = [];
+
+        // Audit log: task updated
+        const ctx = getAuditContext(req);
+        logAudit(query, { ...ctx, action: 'UPDATE', entityType: 'task', entityId: updatedTask.id, details: { title: updatedTask.title } });
 
         // 2. Update Assignees
         if (validatedAssigneeIds !== undefined) {
@@ -387,10 +396,10 @@ module.exports = (app, query) => {
           }
         }
 
-        await query("COMMIT");
+        // await query("COMMIT");
         res.json(updatedTask);
       } catch (err) {
-        await query("ROLLBACK");
+        // await query("ROLLBACK");
         console.error("PUT /tasks Error:", err);
         res.status(500).json({ error: "Database error" });
       }
@@ -403,7 +412,7 @@ module.exports = (app, query) => {
     }
   });
 
-  app.patch("/api/tasks/:id/status", async (req, res) => {
+  app.patch("/api/tasks/:id/status", authenticate, async (req, res) => {
     const { status } = req.body;
     try {
       const validatedData = z.object({
@@ -462,6 +471,10 @@ module.exports = (app, query) => {
             WHERE task_id = $1 
           `, [req.params.id]);
         }
+
+        // Audit log: status changed
+        const ctx = getAuditContext(req);
+        logAudit(query, { ...ctx, action: 'STATUS_CHANGE', entityType: 'task', entityId: parseInt(req.params.id), details: { newStatus: validatedStatus } });
         
         res.json(result.rows[0]);
 
@@ -475,10 +488,15 @@ module.exports = (app, query) => {
     }
   });
 
-  app.delete("/api/tasks/:id", async (req, res) => {
+  app.delete("/api/tasks/:id", authenticate, async (req, res) => {
     try {
-      const result = await query("DELETE FROM tasks WHERE id=$1 RETURNING id", [req.params.id]);
+      const result = await query("DELETE FROM tasks WHERE id=$1 RETURNING id, title", [req.params.id]);
       if (!result.rows.length) return res.status(404).json({ error: "Task not found" });
+
+      // Audit log: task deleted
+      const ctx = getAuditContext(req);
+      logAudit(query, { ...ctx, action: 'DELETE', entityType: 'task', entityId: result.rows[0].id, details: { title: result.rows[0].title } });
+
       res.json({ success: true, id: result.rows[0].id });
     } catch (err) { res.status(500).json({ error: "Database error" }); }
   });

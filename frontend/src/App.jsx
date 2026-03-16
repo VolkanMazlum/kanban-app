@@ -29,6 +29,7 @@ export default function App() {
 
   const token = localStorage.getItem("token");
   const isHR = localStorage.getItem("isHR") === "true";
+  const userName = localStorage.getItem("userName") || "User";
   const isAuthenticated = !!token;
 
   useEffect(() => {
@@ -72,6 +73,8 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("isHR");
+    localStorage.removeItem("role");
+    localStorage.removeItem("userName");
     navigate("/login");
   };
 
@@ -196,13 +199,20 @@ export default function App() {
                 transition:"all 0.15s",
               }}>{tab.label}</button>
             ))}
-
-            <button onClick={handleLogout} style={{
-              background:"#FEF2F2", border:"1.5px solid #FECACA",
-              borderRadius:8, padding:"6px 14px", color:"#DC2626",
-              fontSize:12, cursor:"pointer", fontWeight:600, marginLeft: 12
-            }}>Logout</button>
           </div>
+        </div>
+
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",background:"#F3F4F6",borderRadius:8}}>
+            <div style={{width:28,height:28,borderRadius:"50%",background:"#2563EB",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700}}>{userName.charAt(0).toUpperCase()}</div>
+            <span style={{fontSize:13,fontWeight:600,color:"#374151"}}>{userName}</span>
+            {isHR && <span style={{fontSize:10,fontWeight:700,color:"#2563EB",background:"#EFF6FF",padding:"2px 6px",borderRadius:4}}>HR</span>}
+          </div>
+          <button onClick={handleLogout} style={{
+            background:"#FEF2F2", border:"1.5px solid #FECACA",
+            borderRadius:8, padding:"6px 14px", color:"#DC2626",
+            fontSize:12, cursor:"pointer", fontWeight:600
+          }}>Logout</button>
         </div>
 
         {location.pathname === "/" && (

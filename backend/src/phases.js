@@ -1,4 +1,4 @@
-module.exports = (app, query) => {
+module.exports = (app, query, authenticate) => {
 
   app.get("/api/phase-templates", async (req, res) => {
     try {
@@ -48,11 +48,11 @@ module.exports = (app, query) => {
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: "Database error" }); }
 });
-  app.post("/api/tasks/:taskId/phases", async (req, res) => {
+  app.post("/api/tasks/:taskId/phases", authenticate, async (req, res) => {
     const { taskId } = req.params;
     const { phases } = req.body;
     try {
-      await query("BEGIN");
+      // await query("BEGIN");
       await query("DELETE FROM task_phases WHERE task_id = $1", [taskId]);
       if (phases && phases.length > 0) {
         for (const ph of phases) {
@@ -100,20 +100,20 @@ module.exports = (app, query) => {
           }
         }
       }
-      await query("COMMIT");
+      // await query("COMMIT");
       res.status(201).json({ success: true });
     } catch (err) {
-      await query("ROLLBACK");
+      // await query("ROLLBACK");
       console.error("POST /phases error:", err);
       res.status(500).json({ error: "Database error" });
     }
   });
 
-  app.patch("/api/phases/:id", async (req, res) => {
+  app.patch("/api/phases/:id", authenticate, async (req, res) => {
     const { id } = req.params;
     const { status, start_date, end_date, estimated_hours, assignee_ids } = req.body;
     try {
-      await query("BEGIN");
+      // await query("BEGIN");
       let finalEndDate = end_date;
       if (status === "done" && !end_date) {
         finalEndDate = new Date().toISOString().slice(0, 10);
@@ -128,7 +128,7 @@ module.exports = (app, query) => {
         [status || null, start_date || null, finalEndDate || null, estimated_hours || null, id]
       );
       if (!result.rows.length) {
-        await query("ROLLBACK");
+        // await query("ROLLBACK");
         return res.status(404).json({ error: "Phase not found" });
       }
       if (assignee_ids !== undefined) {
@@ -140,16 +140,16 @@ module.exports = (app, query) => {
           );
         }
       }
-      await query("COMMIT");
+      // await query("COMMIT");
       res.json(result.rows[0]);
     } catch (err) {
-      await query("ROLLBACK");
+      // await query("ROLLBACK");
       res.status(500).json({ error: "Database error" });
     }
   });
 
   // Aylık saatleri kaydet
-app.post("/api/phases/:phaseId/monthly-hours", async (req, res) => {
+app.post("/api/phases/:phaseId/monthly-hours", authenticate, async (req, res) => {
   const { phaseId } = req.params;
   const { employee_id, year, month, hours } = req.body;
   try {

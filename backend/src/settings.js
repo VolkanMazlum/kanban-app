@@ -1,4 +1,4 @@
-module.exports = (app, query) => {
+module.exports = (app, query, authenticate) => {
     app.get("/api/settings", async (req, res) => {
         try {
             const result = await query("SELECT key, value FROM settings");  
@@ -12,7 +12,7 @@ module.exports = (app, query) => {
             res.status(500).json({ error: "Database error" });
         }
     });
-    app.patch("/api/settings/:key", async (req, res) => {
+    app.patch("/api/settings/:key", authenticate, async (req, res) => {
         const { key } = req.params;
         const { value } = req.body;
         try {

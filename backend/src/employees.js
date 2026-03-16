@@ -1,6 +1,6 @@
 const { employeeSchema } = require("./validation");
 
-module.exports = (app, query) => {
+module.exports = (app, query, authenticate) => {
   app.get("/api/employees", async (req, res) => {
     try {
       const result = await query("SELECT * FROM employees WHERE is_active = TRUE ORDER BY name ASC");
@@ -8,7 +8,7 @@ module.exports = (app, query) => {
     } catch (err) { res.status(500).json({ error: "Database error" }); }
   });
 
-  app.post("/api/employees", async (req, res) => {
+  app.post("/api/employees", authenticate, async (req, res) => {
     const { name } = req.body;
     
     // Validate input using Zod schema
@@ -30,7 +30,7 @@ module.exports = (app, query) => {
     }
   });
 
-  app.delete("/api/employees/:id", async (req, res) => {
+  app.delete("/api/employees/:id", authenticate, async (req, res) => {
     try {
       // ON DELETE CASCADE sayesinde çalışanı silince ara tablodaki atamaları da otomatik silinecek
       await query("UPDATE employees SET is_active = FALSE WHERE id = $1", [req.params.id]);

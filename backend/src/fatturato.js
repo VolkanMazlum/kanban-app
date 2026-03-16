@@ -1,4 +1,6 @@
-module.exports = (app, query, authenticateHR) => {
+const { logAudit, getAuditContext } = require("./auditLog");
+
+module.exports = (app, query, authenticate, authenticateHR) => {
 
   app.get("/api/fatturato", authenticateHR, async (req, res) => {
     try {
@@ -98,6 +100,11 @@ module.exports = (app, query, authenticateHR) => {
         }
       }
       await query("COMMIT");
+
+      // Audit log: commessa created
+      const ctx = getAuditContext(req);
+      logAudit(query, { ...ctx, action: 'CREATE', entityType: 'commessa', entityId: commId, details: { comm_number, name } });
+
       res.status(201).json({ success: true });
     } catch (err) {
       await query("ROLLBACK");
@@ -135,6 +142,11 @@ module.exports = (app, query, authenticateHR) => {
         }
       }
       await query("COMMIT");
+
+      // Audit log: commessa updated
+      const ctx = getAuditContext(req);
+      logAudit(query, { ...ctx, action: 'UPDATE', entityType: 'commessa', entityId: parseInt(commId), details: { comm_number, name } });
+
       res.json({ success: true });
     } catch (err) {
       await query("ROLLBACK");
@@ -145,7 +157,12 @@ module.exports = (app, query, authenticateHR) => {
 
   app.delete("/api/fatturato/:id", authenticateHR, async (req, res) => {
     try {
-      await query(`DELETE FROM commesse WHERE id = $1`, [req.params.id]); // Cascade ile hepsi silinir
+      await query(`DELETE FROM commesse WHERE id = $1`, [req.params.id]);
+
+      // Audit log: commessa deleted
+      const ctx = getAuditContext(req);
+      logAudit(query, { ...ctx, action: 'DELETE', entityType: 'commessa', entityId: parseInt(req.params.id) });
+
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: "Database error" });

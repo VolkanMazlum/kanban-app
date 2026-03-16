@@ -7,7 +7,6 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [roleMode, setRoleMode] = useState("standard"); // 'standard' | 'hr'
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
@@ -16,18 +15,12 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      // If HR, username is implied to be 'hr'
-      const payload = roleMode === "hr" ? { username: "hr", password } : { username, password };
-
-      const res = await api.login(payload);
+      const res = await api.login({ username, password });
       if (res.success && res.token) {
-        // Store JWT token securely
         localStorage.setItem("token", res.token);
-        // Store role to conditional render HR tabs
         localStorage.setItem("role", res.role);
         localStorage.setItem("isHR", res.role === "hr" ? "true" : "false");
-
-        // Redirect to main board
+        localStorage.setItem("userName", res.name || username);
         navigate("/");
       }
     } catch (err) {
@@ -63,63 +56,33 @@ export default function Login() {
           <p style={{ fontSize: 12, color: "#6B7280", fontWeight: 600, letterSpacing: "0.06em", marginTop: 4 }}>PROJECT MANAGEMENT</p>
         </div>
 
-        {/* Role Toggle */}
-        <div style={{ display: "flex", background: "#F3F4F6", borderRadius: 8, padding: 4, marginBottom: 24 }}>
-          <button
-            type="button"
-            onClick={() => { setRoleMode("standard"); setError(null); }}
-            style={{
-              flex: 1, padding: "8px 16px", border: "none", borderRadius: 6,
-              background: roleMode === "standard" ? "#fff" : "transparent",
-              color: roleMode === "standard" ? "#111827" : "#6B7280",
-              fontWeight: 600, fontSize: 13, cursor: "pointer",
-              boxShadow: roleMode === "standard" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
-              transition: "all 0.2s"
-            }}
-          >Standard</button>
-          <button
-            type="button"
-            onClick={() => { setRoleMode("hr"); setError(null); }}
-            style={{
-              flex: 1, padding: "8px 16px", border: "none", borderRadius: 6,
-              background: roleMode === "hr" ? "#fff" : "transparent",
-              color: roleMode === "hr" ? "#111827" : "#6B7280",
-              fontWeight: 600, fontSize: 13, cursor: "pointer",
-              boxShadow: roleMode === "hr" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
-              transition: "all 0.2s"
-            }}
-          >Admin</button>
-        </div>
-
         <form onSubmit={handleLogin}>
-          {roleMode === "standard" && (
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 8 }}>USERNAME</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
-                required={roleMode === "standard"}
-                style={{
-                  width: "100%", padding: "12px 16px", borderRadius: 8,
-                  border: "1.5px solid #E5E7EB", fontSize: 14, outline: "none",
-                  fontFamily: "'Inter', sans-serif"
-                }}
-              />
-            </div>
-          )}
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 8 }}>USERNAME</label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter your username"
+              required
+              autoComplete="username"
+              style={{
+                width: "100%", padding: "12px 16px", borderRadius: 8,
+                border: "1.5px solid #E5E7EB", fontSize: 14, outline: "none",
+                fontFamily: "'Inter', sans-serif"
+              }}
+            />
+          </div>
 
           <div style={{ marginBottom: 24 }}>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 8 }}>
-              {roleMode === "hr" ? "MASTER PASSWORD" : "PASSWORD"}
-            </label>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 8 }}>PASSWORD</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
               required
+              autoComplete="current-password"
               style={{
                 width: "100%", padding: "12px 16px", borderRadius: 8,
                 border: "1.5px solid #E5E7EB", fontSize: 14, outline: "none",

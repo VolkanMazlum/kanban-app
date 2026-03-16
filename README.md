@@ -144,10 +144,8 @@ DATABASE_URL=postgresql://user:pass@db:5432/db
 
 # Backend Authentication
 PORT=4000
-AUTH_USERNAME=...
-AUTH_PASSWORD_HASH=...
-HR_PASSWORD=...
-INTERNAL_SECRET=...
+JWT_SECRET=...                # Secret for token signing
+INTERNAL_SECRET=...           # Secret for X-Internal-Auth headers
 FRONTEND_URL=http://localhost:5173
 ```
 
@@ -214,6 +212,15 @@ All endpoints are prefixed with `/api` and require **JWT Bearer Token Authentica
 | GET | `/api/task-finances?year=` *(HR protected)* | Retrieve revenue per task for a given year and aggregated work‑hours per employee |
 | POST | `/api/task-finances/:taskId` *(HR protected)* | Set or update revenue for a task (`revenue`) |
 
+### User Management & Audit *(HR Only)*
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/users` | List all registered accounts |
+| POST | `/api/users` | Create a new user with bcrypt-hashed password |
+| PATCH | `/api/users/:id` | Update user details (name, role, password, status) |
+| GET | `/api/audit-logs` | Retrieve recent activity logs (Who, What, When, IP) |
+
 ---
 
 ## 🌟 Features
@@ -222,7 +229,9 @@ All endpoints are prefixed with `/api` and require **JWT Bearer Token Authentica
 - **Phase templates** for reusable workflows.
 - **KPI Dashboards & Gantt Charts** for project visualization.
 - **Time-tracking (start/stop)** for fine-grained work logging.
-- **Secure Role-Based Access** via JWT (Standard & Admin/HR roles) with a unified login portal.
+- **Secure Role-Based Access** via JWT with individual accounts (`standard` & `hr` roles) stored in the database.
+- **Bcrypt Password Protection** for all user credentials.
+- **Audit Logging** – Complete traceability for all creates, edits, and deletes with a dedicated admin viewer.
 - **Private HR Finance Dashboard** for tracking work hours, overtime, employee costs, and company overheads.
 - **Financial Module (Fatturato)** tracking client revenue, invoices, and remaining budgets.
 - **Containerised** one-click deployment with Docker Compose.

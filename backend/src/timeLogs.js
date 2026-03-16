@@ -9,7 +9,7 @@ const timeLogSchema = z.object({
   note: z.string().optional()
 });
 
-module.exports = (app, query) => {
+module.exports = (app, query, authenticate) => {
   // Get all time logs
   app.get("/api/time-logs", async (req, res) => {
     try {
@@ -65,7 +65,7 @@ module.exports = (app, query) => {
   });
 
   // Start a new time log (started_at will be set to now)
-  app.post("/api/time-logs/start", async (req, res) => {
+  app.post("/api/time-logs/start", authenticate, async (req, res) => {
     const { task_id, employee_id, note } = req.body;
     
     // Validate input
@@ -100,7 +100,7 @@ module.exports = (app, query) => {
   });
 
   // Stop a time log (set ended_at to now)
-  app.patch("/api/time-logs/:id/stop", async (req, res) => {
+  app.patch("/api/time-logs/:id/stop", authenticate, async (req, res) => {
     try {
       const result = await query(
         "UPDATE task_time_logs SET ended_at=NOW() WHERE id=$1 AND ended_at IS NULL RETURNING *",
@@ -115,7 +115,7 @@ module.exports = (app, query) => {
   });
 
   // Create a complete time log (with both started_at and ended_at)
-  app.post("/api/time-logs", async (req, res) => {
+  app.post("/api/time-logs", authenticate, async (req, res) => {
     const { task_id, employee_id, started_at, ended_at, note } = req.body;
     
     // Validate input
@@ -151,7 +151,7 @@ module.exports = (app, query) => {
   });
 
   // Update a time log
-  app.put("/api/time-logs/:id", async (req, res) => {
+  app.put("/api/time-logs/:id", authenticate, async (req, res) => {
     const { task_id, employee_id, started_at, ended_at, note } = req.body;
     
     // Validate input
@@ -225,7 +225,7 @@ module.exports = (app, query) => {
   });
 
   // Delete a time log
-  app.delete("/api/time-logs/:id", async (req, res) => {
+  app.delete("/api/time-logs/:id", authenticate, async (req, res) => {
     try {
       const result = await query("DELETE FROM task_time_logs WHERE id=$1 RETURNING id", [req.params.id]);
       if (!result.rows.length) return res.status(404).json({ error: "Time log not found" });

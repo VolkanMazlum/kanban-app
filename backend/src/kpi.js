@@ -1,4 +1,4 @@
-module.exports = (app, query) => {
+module.exports = (app, query, authenticate) => {
   // ── KPIs ──────────────────────────────────────────────────────
   app.get("/api/kpi", async (req, res) => {
     try {

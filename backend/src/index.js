@@ -7,6 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
+const { seedUsers } = require("./seed");
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -39,6 +40,9 @@ pool.connect()
 
 const query = (text, params) => pool.query(text, params);
 
+// Seed default users on startup
+seedUsers(query).then(() => console.log(" User seeding complete")).catch(err => console.error(" Seed error:", err.message));
+
 // Health check endpoint (no authentication required)
 app.get("/health", (req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
 
@@ -58,16 +62,18 @@ const authLimiter = rateLimit({
 });
 
 // Import and initialize route modules
-app.post('/api/login', authLimiter, require('./login').login);
+// login.js now exports a factory function that takes `query`
+app.post('/api/login', authLimiter, require('./login').login(query));
 
-require('./tasks')(app, query);
-require('./employees')(app, query);
-require('./kpi')(app, query);
-require('./timeLogs')(app, query);
-require('./phases')(app, query);
-require("./settings")(app, query);
-require("./costs")(app, query, authenticateHR);
-require("./fatturato")(app, query, authenticateHR);
+require('./tasks')(app, query, authenticate);
+require('./employees')(app, query, authenticate);
+require('./kpi')(app, query, authenticate);
+require('./timeLogs')(app, query, authenticate);
+require('./phases')(app, query, authenticate);
+require("./settings")(app, query, authenticate);
+require("./costs")(app, query, authenticate, authenticateHR);
+require("./fatturato")(app, query, authenticate, authenticateHR);
+require("./users")(app, query, authenticateHR);
 
 app.get("/", (req, res) => res.send("Welcome to the TEKSER API!"));
 

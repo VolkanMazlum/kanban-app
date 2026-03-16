@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import ProjectFinances from "./ProjectFinances.jsx";
 import FatturatoDashboard from "./FatturatoDashboard.jsx";
 import ClientsManager from "./ClientsManager.jsx";
+import UserManager from "./UserManager.jsx";
 import { useLocation, useNavigate } from "react-router-dom";
 
 export default function HRFinanceDashboard({ isHR }) {
@@ -48,6 +49,17 @@ export default function HRFinanceDashboard({ isHR }) {
         >
           👥 Clients Directory
         </button>
+        <button
+          onClick={() => setActiveTab("users")}
+          style={{
+            padding: "8px 16px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer",
+            background: activeTab === "users" ? "#FEF3C7" : "transparent",
+            color: activeTab === "users" ? "#92400E" : "#6B7280",
+            transition: "all 0.15s"
+          }}
+        >
+          🔐 Users & Audit
+        </button>
       </div>
 
       {/* Render Active View */}
@@ -55,6 +67,7 @@ export default function HRFinanceDashboard({ isHR }) {
         {activeTab === "finances" && <ProjectFinances isHR={isHR} />}
         {activeTab === "fatturato" && <FatturatoDashboard isHR={isHR} />}
         {activeTab === "clients" && <ClientsManager isHR={isHR} />}
+        {activeTab === "users" && <UserManager isHR={isHR} />}
       </div>
     </div>
   );
