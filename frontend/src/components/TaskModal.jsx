@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import * as api from "../api.js";
+import * as api from "../api";
 import { COLUMNS, TOPICS, TOPIC_STYLE, inp } from "../constants/index.js";
 import Avatar from "./Avatar.jsx";
 

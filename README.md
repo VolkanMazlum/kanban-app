@@ -44,36 +44,26 @@ kanban-app/
 │   ├── Dockerfile
 │   ├── package.json
 │   └── src/
-│       ├── index.js            # Server entry point
-│       ├── auth.js             # JWT auth middleware (Standard & HR roles)
-│       ├── employees.js        # Employee CRUD
-│       ├── kpi.js              # KPI endpoint
-│       ├── phases.js           # Phase & template logic
-│       ├── settings.js         # Settings & Config endpoints
-│       ├── tasks.js            # Full task CRUD with phases & topics
-│       ├── timeLogs.js         # Time-tracking endpoints
-│       ├── costs.js            # Work-hours, cost calculations, overtime
-│       ├── fatturato.js        # Revenue, invoicing, and client management
-│       ├── validation.js       # Zod schemas
-│       ├── login.js            # JWT login endpoints
+│       ├── index.js            # Server entry point (wires everything)
+│       ├── config/             # Configuration (DB connection, etc.)
+│       ├── middleware/         # Auth, JWT, Validation, Audit Logging
+│       ├── routes/             # All API domain routes (tasks, users, etc.)
+│       ├── services/           # Background services (seeding, sync)
 │       └── db/
-│           └── init.sql        # DB schema & seed data
+│           └── init.sql        # DB schema
 ├── frontend/                   # React SPA
 │   ├── Dockerfile
 │   ├── package.json
 │   ├── vite.config.js
 │   └── src/
-│       ├── App.jsx
-│       ├── api.js              # API client wrapper
-│       ├── components/
-│       │   ├── HRFinanceDashboard.jsx
-│       │   ├── FatturatoDashboard.jsx
-│       │   ├── ProjectFinances.jsx
-│       │   ├── ClientsManager.jsx
-│       │   ├── Login.jsx
-│       │   └── …
-│       └── constants/
-│           └── index.js
+│       ├── App.jsx             # Main routing & state
+│       ├── api/                # Modular API layer (index.js)
+│       ├── pages/              # View components (Login, Dashboards, Gantt)
+│       ├── components/         # Reusable UI components
+│       ├── constants/          # Business logic constants
+│       ├── hooks/              # Custom React hooks
+│       ├── layouts/            # Layout wrappers
+│       └── utils/              # Calculation & parsing utilities
 └── .env                        # Shared env vars (Docker secrets)
 ```
 

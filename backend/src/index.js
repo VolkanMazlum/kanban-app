@@ -1,13 +1,24 @@
 const express = require("express");
 const cors = require("cors");
-const { Pool } = require("pg");
-const { authenticate, authenticateHR } = require("./auth");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 require('dotenv').config();
+
+// 1. Config & Bootstrap
+const { query } = require("./config/db");
+const { seedUsers } = require("./services/seed");
+const { authenticate, authenticateHR } = require("./middleware/auth");
+
 const app = express();
 const PORT = process.env.PORT || 4000;
-const rateLimit = require("express-rate-limit");
-const helmet = require("helmet");
-const { seedUsers } = require("./seed");
+
+// 2. Middlewares
+const REQUIRED_ENV = ["JWT_SECRET", "INTERNAL_SECRET", "FRONTEND_URL"];
+const missingEnv = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missingEnv.length > 0) {
+  console.error(`FATAL: Missing required environment variables: ${missingEnv.join(", ")}`);
+  process.exit(1);
+}
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -15,9 +26,7 @@ const limiter = rateLimit({
   message: { error: "Too many requests, please try again later." }
 });
 
-// true yerine 1 — sadece bir hop ötedeki proxy'ye (nginx) güven
 app.set("trust proxy", 1);
-
 app.use(helmet());
 app.use(cors({
   origin: process.env.FRONTEND_URL,
@@ -25,55 +34,47 @@ app.use(cors({
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization", "X-HR-Auth"]
 }));
-
 app.use(express.json({ limit: "50kb" }));
 app.use(limiter);
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: false,
+// Auth Limiter for Login
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: "Too many login attempts, please try again later." }
 });
 
-pool.connect()
-  .then(client => { console.log(" PostgreSQL connected"); client.release(); })
-  .catch(err => console.error(" PostgreSQL error:", err.message));
-
-const query = (text, params) => pool.query(text, params);
-
-// Seed default users on startup
-seedUsers(query).then(() => console.log(" User seeding complete")).catch(err => console.error(" Seed error:", err.message));
-
-// Health check endpoint (no authentication required)
-app.get("/health", (req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
-
-// Apply X-Internal-Auth check to all API routes
+// Internal Secret Guard (Hardened)
 app.use('/api', (req, res, next) => {
-  if (req.headers['x-internal-auth'] !== process.env.INTERNAL_SECRET) {
+  const secret = process.env.INTERNAL_SECRET;
+  const header = req.headers['x-internal-auth'];
+  
+  if (!secret || header !== secret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   next();
 });
 
-// Import and configure rate limiters
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 login requests per `window`
-  message: { error: "Too many login attempts, please try again later." }
-});
+// 3. Routes & Logic
+// Seed default users on startup
+seedUsers(query)
+  .then(() => console.log(" User seeding complete"))
+  .catch(err => console.error(" Seed error:", err.message));
 
-// Import and initialize route modules
-// login.js now exports a factory function that takes `query`
-app.post('/api/login', authLimiter, require('./login').login(query));
+app.get("/health", (req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
 
-require('./tasks')(app, query, authenticate);
-require('./employees')(app, query, authenticate, authenticateHR);
-require('./kpi')(app, query, authenticate);
-require('./timeLogs')(app, query, authenticate);
-require('./phases')(app, query, authenticate);
-require("./settings")(app, query, authenticate);
-require("./costs")(app, query, authenticate, authenticateHR);
-require("./fatturato")(app, query, authenticate, authenticateHR);
-require("./users")(app, query, authenticateHR);
+// Route Modules
+app.post('/api/login', authLimiter, require('./routes/login').login(query));
+
+require('./routes/tasks')(app, query, authenticate);
+require('./routes/employees')(app, query, authenticate, authenticateHR);
+require('./routes/kpi')(app, query, authenticate);
+require('./routes/timeLogs')(app, query, authenticate);
+require('./routes/phases')(app, query, authenticate);
+require("./routes/settings")(app, query, authenticate);
+require("./routes/costs")(app, query, authenticate, authenticateHR);
+require("./routes/fatturato")(app, query, authenticate, authenticateHR);
+require("./routes/users")(app, query, authenticateHR);
 
 app.get("/", (req, res) => res.send("Welcome to the TEKSER API!"));
 

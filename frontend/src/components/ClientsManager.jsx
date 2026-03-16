@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import * as api from "../api.js";
+import * as api from "../api";
 import { inpStyle } from "../constants/costConstants.js";
 
 const EMPTY_CLIENT = { name: "", vat_number: "", contact_email: "", phone: "", address: "", notes: "" };

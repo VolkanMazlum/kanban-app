@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { TOPIC_STYLE } from "../constants/index.js";
-import Avatar from "./Avatar.jsx";
+import Avatar from "../components/Avatar.jsx";
 
 const STATUS_COLOR = { new:"#2563EB", process:"#059669", blocked:"#DC2626", done:"#7C3AED" };
 const ROW_HEIGHT = 56; // Ana görev satırı yüksekliği

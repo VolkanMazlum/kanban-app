@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import * as api from "../api.js";
+import * as api from "../api";
 import { GENERAL_COST_FIELDS } from "../constants/costConstants.js";
 
 export default function ProjectFinances({ isHR }) {

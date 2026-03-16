@@ -1,7 +1,7 @@
 import { TOPIC_STYLE } from "../constants/index.js";
-import Avatar from "./Avatar.jsx";
+import Avatar from "../components/Avatar.jsx";
 import { useState, useEffect } from "react";
-import * as api from "../api.js";
+import * as api from "../api";
 
 function MiniGantt({ phases, monthStart, monthEnd }) {
   const start  = new Date(monthStart);

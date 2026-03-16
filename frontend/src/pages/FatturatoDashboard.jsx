@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import * as api from "../api.js";
+import * as api from "../api";
 import { EMPTY_LINE, EMPTY_CLIENT, EMPTY_FORM, inpStyle } from "../constants/costConstants.js";
 
 export default function FatturatoDashboard({ isHR }) {

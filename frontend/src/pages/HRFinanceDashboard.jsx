@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import ProjectFinances from "./ProjectFinances.jsx";
+import ProjectFinances from "../components/ProjectFinances.jsx";
 import FatturatoDashboard from "./FatturatoDashboard.jsx";
-import ClientsManager from "./ClientsManager.jsx";
-import UserManager from "./UserManager.jsx";
+import ClientsManager from "../components/ClientsManager.jsx";
+import UserManager from "../components/UserManager.jsx";
 import { useLocation, useNavigate } from "react-router-dom";
 
 export default function HRFinanceDashboard({ isHR, onRefresh }) {

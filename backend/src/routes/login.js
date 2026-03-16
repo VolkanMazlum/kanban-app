@@ -1,4 +1,4 @@
-const { generateToken } = require('./jwt');
+const { generateToken } = require('../middleware/jwt');
 const bcrypt = require('bcrypt');
 
 const login = (query) => async (req, res) => {

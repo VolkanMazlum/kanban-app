@@ -1,5 +1,5 @@
 const bcrypt = require('bcrypt');
-const { authenticateHR } = require('./auth');
+const { authenticateHR } = require('../middleware/auth');
 
 module.exports = (app, query) => {
   // GET /api/users — List all users (HR only)

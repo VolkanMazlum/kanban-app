@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import * as api from "../api.js";
+import * as api from "../api";
 
 export default function UserManager({ isHR, onUserAdded }) {
   const [users, setUsers] = useState([]);

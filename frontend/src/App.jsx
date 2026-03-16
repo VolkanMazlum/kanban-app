@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
-import * as api from "./api.js";
+import * as api from "./api";
 import { COLUMNS } from "./constants/index.js";
 import Toast from "./components/Toast.jsx";
 import TaskModal from "./components/TaskModal.jsx";
 import TaskCard from "./components/TaskCard.jsx";
 import EmployeeManager from "./components/EmployeeManager.jsx";
-import GanttChart from "./components/GanttChart.jsx";
-import KPIDashboard from "./components/KPIDashboard.jsx";
+import GanttChart from "./pages/GanttChart.jsx";
+import KPIDashboard from "./pages/KPIDashboard.jsx";
 import CostDashboard from "./components/CostDashboard.jsx";
-import HRFinanceDashboard from "./components/HRFinanceDashboard.jsx";
-import Login from "./components/Login.jsx";
+import HRFinanceDashboard from "./pages/HRFinanceDashboard.jsx";
+import Login from "./pages/Login.jsx";
 
 export default function App() {
   const [tasks, setTasks]         = useState([]);

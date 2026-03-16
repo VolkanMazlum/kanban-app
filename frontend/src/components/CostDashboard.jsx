@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import * as api from "../api.js";
+import * as api from "../api";
 import EmployeeCostsTab from "./EmployeeCostsTab.jsx";
 import TimesheetTab from "./TimesheetTab.jsx";
 import { MONTHS } from "../constants/costConstants.js";
