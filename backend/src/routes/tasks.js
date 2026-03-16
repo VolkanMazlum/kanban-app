@@ -87,7 +87,17 @@ module.exports = (app, query, authenticate) => {
       
       sql += " GROUP BY t.id ORDER BY t.status, t.position ASC, t.created_at ASC";
       const result = await query(sql, params);
-      res.json(result.rows);
+      
+      // Security: Strip sensitive commessa data for non-HR users
+      const tasks = result.rows.map(t => {
+        if (req.user.role !== 'hr') {
+          const { commessa, ...stripped } = t;
+          return stripped;
+        }
+        return t;
+      });
+      
+      res.json(tasks);
     } catch (err) { 
       console.error("GET /tasks Error:", err);
       res.status(500).json({ error: "Database error" }); 
@@ -176,7 +186,15 @@ module.exports = (app, query, authenticate) => {
       `;
       const result = await query(sql, [req.params.id]);
       if (!result.rows.length) return res.status(404).json({ error: "Task not found" });
-      res.json(result.rows[0]);
+      
+      const task = result.rows[0];
+      
+      // Security: Strip sensitive commessa data for non-HR users
+      if (req.user.role !== 'hr') {
+        delete task.commessa;
+      }
+      
+      res.json(task);
     } catch (err) { res.status(500).json({ error: "Database error" }); }
   });
 
