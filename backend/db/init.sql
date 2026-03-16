@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS employees (
   id SERIAL PRIMARY KEY,
-  name VARCHAR(100) NOT NULL,
+  name VARCHAR(100) UNIQUE NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   is_active BOOLEAN DEFAULT TRUE
 );
@@ -286,10 +286,6 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, enti
 -- ==============================================================================
 -- 8. SEED DATA (Başlangıç Verileri)
 -- ==============================================================================
-
-INSERT INTO employees (name) VALUES
-  ('Marco R.'), ('Sofia B.'), ('Luca M.'), ('Giulia F.'), ('Andrea C.')
-ON CONFLICT DO NOTHING;
 
 INSERT INTO phase_templates (topic, name, position) VALUES
   -- MEP

@@ -5,7 +5,7 @@ import ClientsManager from "./ClientsManager.jsx";
 import UserManager from "./UserManager.jsx";
 import { useLocation, useNavigate } from "react-router-dom";
 
-export default function HRFinanceDashboard({ isHR }) {
+export default function HRFinanceDashboard({ isHR, onRefresh }) {
   const [activeTab, setActiveTab] = useState("finances");
 
   if (!isHR) {
@@ -67,7 +67,7 @@ export default function HRFinanceDashboard({ isHR }) {
         {activeTab === "finances" && <ProjectFinances isHR={isHR} />}
         {activeTab === "fatturato" && <FatturatoDashboard isHR={isHR} />}
         {activeTab === "clients" && <ClientsManager isHR={isHR} />}
-        {activeTab === "users" && <UserManager isHR={isHR} />}
+        {activeTab === "users" && <UserManager isHR={isHR} onUserAdded={onRefresh} />}
       </div>
     </div>
   );

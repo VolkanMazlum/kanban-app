@@ -18,7 +18,22 @@ async function seedUsers(query) {
         'INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4)',
         [u.email, u.name, hash, u.role]
       );
-      console.log(`  ✔ Seeded user: ${u.email} (${u.role})`);
+      console.log(`  ✔ Seeded user: ${u.email}`);
+    }
+  }
+  
+  // New: Sync ALL existing users to employees table (Self-healing)
+  console.log("  ⚙  Checking all users for employee sync...");
+  const allUsers = await query('SELECT name, is_active FROM users');
+  for (const user of allUsers.rows) {
+    const trimmedName = user.name.trim();
+    const empExists = await query('SELECT id FROM employees WHERE name = $1', [trimmedName]);
+    if (empExists.rows.length === 0) {
+      await query('INSERT INTO employees (name, is_active) VALUES ($1, $2)', [trimmedName, user.is_active]);
+      console.log(`  ✔ Repaired sync for user: ${trimmedName}`);
+    } else {
+      // Sync status even if exists
+      await query('UPDATE employees SET is_active = $1 WHERE name = $2', [user.is_active, trimmedName]);
     }
   }
 }

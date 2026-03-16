@@ -15,17 +15,8 @@ export default function EmployeeManager({ employees, onAdd, onDelete, onClose })
           </div>
           <button onClick={onClose} style={{background:"#F3F4F6",border:"none",borderRadius:8,width:32,height:32,cursor:"pointer",color:"#6B7280",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
         </div>
-        <div style={{display:"flex",gap:8,marginBottom:8}}>
-          <input value={name} onChange={e=>setName(e.target.value)} placeholder="Full name..." style={{...inp,flex:1}} />
-        </div>
-        <div style={{display:"flex",gap:8,marginBottom:20}}>
-          <input value={role} onChange={e=>setRole(e.target.value)} placeholder="Role / title (optional)..." style={{...inp,flex:1}}
-            onKeyDown={e=>e.key==="Enter"&&name.trim()&&(onAdd(name,role),setName(""),setRole(""))} />
-          <button onClick={()=>{if(name.trim()){onAdd(name,role);setName("");setRole("");}}}
-            style={{background:"#2563EB",color:"#fff",border:"none",borderRadius:8,padding:"0 16px",fontFamily:"'Inter',sans-serif",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>Add</button>
-        </div>
-        <div style={{maxHeight:280,overflowY:"auto"}}>
-          {employees.map((emp,i)=>(
+        <div style={{maxHeight:400,overflowY:"auto"}}>
+          {employees.filter(e => e.is_active !== false).map((emp,i)=>(
             <div key={emp.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid #F3F4F6"}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 <Avatar name={emp.name} size={32} idx={i} />
@@ -34,7 +25,6 @@ export default function EmployeeManager({ employees, onAdd, onDelete, onClose })
                   {emp.role&&<div style={{fontSize:11,color:"#9CA3AF"}}>{emp.role}</div>}
                 </div>
               </div>
-              <button onClick={()=>onDelete(emp.id)} style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:6,padding:"4px 10px",color:"#DC2626",cursor:"pointer",fontSize:12,fontWeight:500}}>Remove</button>
             </div>
           ))}
         </div>

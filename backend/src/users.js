@@ -34,10 +34,22 @@ module.exports = (app, query) => {
       }
 
       const hash = await bcrypt.hash(password, 10);
+      
+      // Use a transaction if possible, but for now simple sequential
       const result = await query(
         'INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role, is_active, created_at',
         [email, name, hash, userRole]
       );
+
+      const trimmedName = name.trim();
+      // Sync with employees table: Check if exists first (safer than ON CONFLICT if UNIQUE constraint is missing)
+      const empExists = await query('SELECT id FROM employees WHERE name = $1', [trimmedName]);
+      if (empExists.rows.length > 0) {
+        await query('UPDATE employees SET is_active = TRUE WHERE name = $1', [trimmedName]);
+      } else {
+        await query('INSERT INTO employees (name, is_active) VALUES ($1, TRUE)', [trimmedName]);
+      }
+
       res.status(201).json(result.rows[0]);
     } catch (err) {
       console.error('POST /users error:', err);
@@ -78,6 +90,12 @@ module.exports = (app, query) => {
 
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Sync is_active status with employees table if it was updated
+      if (is_active !== undefined) {
+        const userName = result.rows[0].name;
+        await query('UPDATE employees SET is_active = $1 WHERE name = $2', [is_active, userName]);
       }
 
       res.json(result.rows[0]);

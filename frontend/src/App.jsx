@@ -45,12 +45,12 @@ export default function App() {
     setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3000);
   }, []);
 
-  const loadAll = useCallback(async () => {
+  const loadAll = useCallback(async (silent = false) => {
     if (!isAuthenticated) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const [t, e, k] = await Promise.all([
         api.getTasks(), 
@@ -65,7 +65,7 @@ export default function App() {
         localStorage.removeItem("isHR");
         navigate("/login");
       }
-    } finally { setLoading(false); }
+    } finally { if (!silent) setLoading(false); }
   }, [isAuthenticated, isHR, navigate]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
@@ -299,7 +299,7 @@ export default function App() {
             {/* HR Only Routes */}
             {isHR && (
               <>
-                <Route path="/finances" element={<HRFinanceDashboard isHR={isHR} />} />
+                <Route path="/finances" element={<HRFinanceDashboard isHR={isHR} onRefresh={loadAll} />} />
                 <Route path="/kpi" element={<KPIDashboard kpi={kpi} employees={employees} tasks={tasks} />} />
               </>
             )}

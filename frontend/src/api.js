@@ -34,7 +34,7 @@ export const updateTask      = (id, data) => req(`/tasks/${id}`, { method: "PUT"
 export const patchTaskStatus = (id, status) => req(`/tasks/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
 export const deleteTask      = (id) => req(`/tasks/${id}`,  { method: "DELETE" });
 
-export const getEmployees    = ()           => req("/employees");
+export const getEmployees    = ()           => req(`/employees?t=${Date.now()}`);
 export const createEmployee  = (name, role) => req("/employees", { method: "POST", body: JSON.stringify({ name, role }) });
 export const deleteEmployee  = (id)         => req(`/employees/${id}`, { method: "DELETE" });
 

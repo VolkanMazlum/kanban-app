@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import * as api from "../api.js";
 
-export default function UserManager({ isHR }) {
+export default function UserManager({ isHR, onUserAdded }) {
   const [users, setUsers] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [activeTab, setActiveTab] = useState("users"); // 'users' | 'logs'
@@ -26,6 +26,8 @@ export default function UserManager({ isHR }) {
     return <div style={{ padding: 40, textAlign: "center", color: "#6B7280" }}>Unauthorized.</div>;
   }
 
+  const refreshUsers = () => api.getUsers().then(setUsers).catch(console.error);
+
   const handleCreate = async () => {
     if (!form.email.trim() || !form.name.trim() || !form.password.trim()) {
       setError("All fields are required");
@@ -34,10 +36,11 @@ export default function UserManager({ isHR }) {
     setSaving(true);
     setError(null);
     try {
-      const newUser = await api.createUser(form);
-      setUsers(p => [...p, newUser]);
+      await api.createUser(form);
       setForm({ email: "", name: "", password: "", role: "standard" });
       setShowForm(false);
+      await refreshUsers();
+      if (onUserAdded) onUserAdded(true);
     } catch (err) {
       setError(err.message);
     }
@@ -46,15 +49,17 @@ export default function UserManager({ isHR }) {
 
   const handleToggleActive = async (user) => {
     try {
-      const updated = await api.updateUser(user.id, { is_active: !user.is_active });
-      setUsers(p => p.map(u => u.id === user.id ? updated : u));
+      await api.updateUser(user.id, { is_active: !user.is_active });
+      await refreshUsers();
+      if (onUserAdded) onUserAdded(true);
     } catch (err) { console.error(err); }
   };
 
   const handleRoleChange = async (user, newRole) => {
     try {
-      const updated = await api.updateUser(user.id, { role: newRole });
-      setUsers(p => p.map(u => u.id === user.id ? updated : u));
+      await api.updateUser(user.id, { role: newRole });
+      await refreshUsers();
+      if (onUserAdded) onUserAdded(true);
     } catch (err) { console.error(err); }
   };
 

@@ -66,7 +66,7 @@ const authLimiter = rateLimit({
 app.post('/api/login', authLimiter, require('./login').login(query));
 
 require('./tasks')(app, query, authenticate);
-require('./employees')(app, query, authenticate);
+require('./employees')(app, query, authenticate, authenticateHR);
 require('./kpi')(app, query, authenticate);
 require('./timeLogs')(app, query, authenticate);
 require('./phases')(app, query, authenticate);
