@@ -4,7 +4,7 @@ module.exports = (app, query, authenticateHR) => {
     try {
       // 1. Tüm Ana İşleri Çek
       const year = req.query.year;
-      const yearPrefix = year ? String(year).slice(2) : null; // "2025" → "25"
+      const yearPrefix = (year && year !== 'all') ? String(year).slice(2) : null; // "2025" → "25"
 
       const commRes = await query(`
         SELECT c.*, t.title AS task_title 

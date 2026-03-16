@@ -29,15 +29,17 @@ module.exports = (app, query, authenticateHR) => {
 
   // HR - Tüm çalışanların özeti (Yıla göre filtreli + 'hours' kullanılıyor + Tarih o yıla ait)
   app.get("/api/costs", authenticateHR, async (req, res) => {
-    const targetYear = parseInt(req.query.year) || new Date().getFullYear();
+    const isAllTime = req.query.year === 'all';
+    const targetYear = isAllTime ? null : (parseInt(req.query.year) || new Date().getFullYear());
+    
     try {
       const result = await query(`
         SELECT 
           e.id, e.name,
-          COALESCE((SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id AND ec.valid_from <= MAKE_DATE($1::int, 12, 31) ORDER BY ec.valid_from DESC LIMIT 1), 0) AS current_annual_gross,
-          (SELECT ec.valid_from::TEXT FROM employee_costs ec WHERE ec.employee_id = e.id AND ec.valid_from <= MAKE_DATE($1::int, 12, 31) ORDER BY ec.valid_from DESC LIMIT 1) AS current_valid_from,
-          COALESCE((SELECT SUM(wh.hours) FROM employee_work_hours wh WHERE wh.employee_id = e.id AND EXTRACT(YEAR FROM wh.date) = $1), 0) AS logged_hours,
-          COALESCE((SELECT SUM(hours) FROM employee_overtime_costs WHERE employee_id = e.id AND year = $1), 0) AS overtime_hours,
+          COALESCE((SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id AND ($1::int IS NULL OR ec.valid_from <= MAKE_DATE($1::int, 12, 31)) ORDER BY ec.valid_from DESC LIMIT 1), 0) AS current_annual_gross,
+          (SELECT ec.valid_from::TEXT FROM employee_costs ec WHERE ec.employee_id = e.id AND ($1::int IS NULL OR ec.valid_from <= MAKE_DATE($1::int, 12, 31)) ORDER BY ec.valid_from DESC LIMIT 1) AS current_valid_from,
+          COALESCE((SELECT SUM(wh.hours) FROM employee_work_hours wh WHERE wh.employee_id = e.id AND ($1::int IS NULL OR EXTRACT(YEAR FROM wh.date) = $1)), 0) AS logged_hours,
+          COALESCE((SELECT SUM(hours) FROM employee_overtime_costs WHERE employee_id = e.id AND ($1::int IS NULL OR year = $1)), 0) AS overtime_hours,
           COALESCE((SELECT json_agg(json_build_object('id', ec.id, 'annual_gross', ec.annual_gross, 'valid_from', ec.valid_from::TEXT) ORDER BY ec.valid_from DESC) FROM employee_costs ec WHERE ec.employee_id = e.id), '[]') AS cost_history
         FROM employees e 
         WHERE e.is_active = TRUE
@@ -113,24 +115,26 @@ module.exports = (app, query, authenticateHR) => {
 
   // --- PROJE / TASK FİNANSMANI (Yıl Aralıklarına Göre) ---
   app.get("/api/task-finances", authenticateHR, async (req, res) => {
-    const targetYear = parseInt(req.query.year) || new Date().getFullYear();
+    const isAllTime = req.query.year === 'all';
+    const targetYear = isAllTime ? null : (parseInt(req.query.year) || new Date().getFullYear());
     try {
-      // SADECE Seçili yılda aktif olan taskları getiriyoruz
+      // SADECE Seçili yılda aktif olan taskları getiriyoruz (yada All Time ise hepsi)
       const tasksRes = await query(`
         SELECT t.id, t.title, COALESCE(tr.revenue, 0) as revenue 
         FROM tasks t 
         LEFT JOIN task_revenues tr ON t.id = tr.task_id 
         WHERE 
-          (EXTRACT(YEAR FROM t.planned_start) <= $1 AND (t.planned_end IS NULL OR EXTRACT(YEAR FROM t.planned_end) >= $1))
-          OR 
-          (EXTRACT(YEAR FROM t.actual_start) <= $1 AND (t.actual_end IS NULL OR EXTRACT(YEAR FROM t.actual_end) >= $1))
+          $1::int IS NULL
+          OR (EXTRACT(YEAR FROM t.planned_start) <= $1 AND (t.planned_end IS NULL OR EXTRACT(YEAR FROM t.planned_end) >= $1))
+          OR (EXTRACT(YEAR FROM t.actual_start) <= $1 AND (t.actual_end IS NULL OR EXTRACT(YEAR FROM t.actual_end) >= $1))
+          OR (t.planned_start IS NULL AND t.actual_start IS NULL)
         ORDER BY t.created_at DESC
       `, [targetYear]);
       
       const hoursRes = await query(`
         SELECT task_id, employee_id, SUM(hours) as total_hours 
         FROM employee_work_hours 
-        WHERE task_id IS NOT NULL AND EXTRACT(YEAR FROM date) = $1
+        WHERE task_id IS NOT NULL AND ($1::int IS NULL OR EXTRACT(YEAR FROM date) = $1)
         GROUP BY task_id, employee_id
       `, [targetYear]);
 

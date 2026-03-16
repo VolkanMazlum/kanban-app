@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import * as api from "./api.js";
-import { COLUMNS, TOPIC_STYLE } from "./constants/index.js";
-import Avatar from "./components/Avatar.jsx";
+import { COLUMNS } from "./constants/index.js";
 import Toast from "./components/Toast.jsx";
 import TaskModal from "./components/TaskModal.jsx";
 import TaskCard from "./components/TaskCard.jsx";
@@ -9,12 +9,13 @@ import EmployeeManager from "./components/EmployeeManager.jsx";
 import GanttChart from "./components/GanttChart.jsx";
 import KPIDashboard from "./components/KPIDashboard.jsx";
 import CostDashboard from "./components/CostDashboard.jsx";
+import HRFinanceDashboard from "./components/HRFinanceDashboard.jsx";
+import Login from "./components/Login.jsx";
 
 export default function App() {
   const [tasks, setTasks]         = useState([]);
   const [employees, setEmployees] = useState([]);
   const [kpi, setKpi]             = useState(null);
-  const [view, setView]           = useState("board");
   const [filterEmpId, setFilter]  = useState("all");
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
@@ -23,43 +24,19 @@ export default function App() {
   const [toasts, setToasts]       = useState([]);
   const dragId = useRef(null);
 
-  const [isHR, setIsHR] = useState(() => {
-    return sessionStorage.getItem("hrAuth") !== null;
-  });
-  const [showHRLogin, setShowHRLogin] = useState(false);
-  const [hrError, setHRError] = useState("");
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const handleHRLogin = async (password) => {
-  try {
-    const hrAuth = btoa(`hr:${password}`);
-    
-    sessionStorage.setItem("hrAuth", hrAuth); 
-    
-    await api.getKPI(); 
-
-    setIsHR(true);
-    setShowHRLogin(false);
-    
-  } catch (err) {
-    console.error("HR login error:", err);
-    // Şifre yanlışsa veya hata verdiyse sessionStorage'dan sahte yetkiyi sil
-    sessionStorage.removeItem("hrAuth"); 
-    setHRError("Wrong password or connection error");
-  }
-};
+  const token = localStorage.getItem("token");
+  const isHR = localStorage.getItem("isHR") === "true";
+  const isAuthenticated = !!token;
 
   useEffect(() => {
-    const hrAuth = sessionStorage.getItem("hrAuth");
-    if (hrAuth) {
-      api.getKPI()
-        .then(() => setIsHR(true)) 
-        .catch((err) => {
-           console.error("HR Session check failed:", err);
-           sessionStorage.removeItem("hrAuth");
-           setIsHR(false);
-        });
+    // Redirect to login if not authenticated and not already on login page
+    if (!isAuthenticated && location.pathname !== "/login") {
+      navigate("/login");
     }
-  }, []);
+  }, [isAuthenticated, location.pathname, navigate]);
 
   const toast = useCallback((msg, type="success") => {
     const id = Date.now();
@@ -68,14 +45,35 @@ export default function App() {
   }, []);
 
   const loadAll = useCallback(async () => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     try {
-      const [t, e, k] = await Promise.all([api.getTasks(), api.getEmployees(), api.getKPI()]);
+      const [t, e, k] = await Promise.all([
+        api.getTasks(), 
+        api.getEmployees(), 
+        isHR ? api.getKPI() : Promise.resolve(null)
+      ]);
       setTasks(t); setEmployees(e); setKpi(k); setError(null);
-    } catch(err) { setError(err.message); }
-    finally { setLoading(false); }
-  }, []);
+    } catch(err) { 
+      setError(err.message);
+      if (err.message.includes("Token") || err.message.includes("Authentication required") || err.message.includes("Invalid or expired") || err.message.includes("401")) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("isHR");
+        navigate("/login");
+      }
+    } finally { setLoading(false); }
+  }, [isAuthenticated, isHR, navigate]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("isHR");
+    navigate("/login");
+  };
 
   const handleDrop = async (e, colId) => {
     e.preventDefault(); setDragOver(null);
@@ -83,7 +81,9 @@ export default function App() {
     setTasks(p => p.map(t => t.id === id ? {...t, status: colId} : t));
     try {
       await api.patchTaskStatus(id, colId);
-      const k = await api.getKPI(); setKpi(k);
+      if (isHR) {
+        const k = await api.getKPI(); setKpi(k);
+      }
     } catch(err) { toast(err.message, "error"); loadAll(); }
   };
 
@@ -102,7 +102,7 @@ export default function App() {
       if (phases && phases.length > 0 && savedTaskId) {
         await api.saveTaskPhases(savedTaskId, phases);
       }
-      const [t, k] = await Promise.all([api.getTasks(), api.getKPI()]);
+      const [t, k] = await Promise.all([api.getTasks(), isHR ? api.getKPI() : Promise.resolve(null)]);
       setTasks(t); setKpi(k);
       setModal(null);
     } catch(err) { toast(err.message, "error"); }
@@ -112,7 +112,9 @@ export default function App() {
     setTasks(p => p.filter(t => t.id !== id));
     try {
       await api.deleteTask(id);
-      const k = await api.getKPI(); setKpi(k);
+      if (isHR) {
+        const k = await api.getKPI(); setKpi(k);
+      }
       toast("Task deleted");
     } catch(err) { toast(err.message, "error"); loadAll(); }
   };
@@ -121,7 +123,9 @@ export default function App() {
     try {
       const e = await api.createEmployee(name, role);
       setEmployees(p => [...p, e]); toast(`${e.name} added`);
-      const k = await api.getKPI(); setKpi(k);
+      if (isHR) {
+        const k = await api.getKPI(); setKpi(k);
+      }
     } catch(err) { toast(err.message, "error"); }
   };
 
@@ -129,7 +133,7 @@ export default function App() {
     setEmployees(p => p.filter(e => e.id !== id));
     try {
       await api.deleteEmployee(id);
-      const [t, k] = await Promise.all([api.getTasks(), api.getKPI()]);
+      const [t, k] = await Promise.all([api.getTasks(), isHR ? api.getKPI() : Promise.resolve(null)]);
       setTasks(t); setKpi(k); toast("Member removed");
     } catch(err) { toast(err.message, "error"); loadAll(); }
   };
@@ -144,6 +148,21 @@ export default function App() {
         });
         return matchAssignee || matchPhase;
       });
+
+  if (location.pathname === "/login") {
+    return <Login onLoginSuccess={() => loadAll()} />;
+  }
+
+    const TABS = [
+      { id: "/", label: "📋 Board" },
+      { id: "/gantt", label: "📅 Gantt" },
+      { id: "/costs", label: "⏳ Timesheet & Labor" },
+      ...(isHR ? [
+        { id: "/finances", label: "📈 Finances & HR" },
+        { id: "/kpi", label: "📊 KPIs" }
+      ] : [])
+    ];
+
   return (
     <div style={{minHeight:"100vh",background:"#F9FAFB",fontFamily:"'Inter',sans-serif"}}>
       <style>{`
@@ -166,37 +185,27 @@ export default function App() {
             <div style={{fontSize:17,fontWeight:800,color:"#111827",letterSpacing:"-0.02em"}}>TEKSER</div>
             <div style={{fontSize:10,color:"#9CA3AF",fontWeight:600,letterSpacing:"0.06em"}}>S.R.L. — PROJECT MANAGEMENT</div>
           </div>
-          <div style={{display:"flex",background:"#F3F4F6",borderRadius:8,padding:3,marginLeft:20}}>
-            {[{id:"board",label:"📋  Board"},{id:"gantt",label:"📅  Gantt"},{id:"costs", label:"💰  Costs"} ,  ...(isHR ? [{id:"kpi",label:"📊  KPIs"}] : [])].map(tab=>(
-              <button key={tab.id} onClick={()=>setView(tab.id)} style={{
+          <div style={{display:"flex",background:"#F3F4F6",borderRadius:8,padding:3,marginLeft:20, flexWrap: "wrap"}}>
+            {TABS.map(tab=>(
+              <button key={tab.id} onClick={()=>navigate(tab.id)} style={{
                 padding:"6px 16px",borderRadius:6,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,
                 fontFamily:"'Inter',sans-serif",
-                background:view===tab.id?"#fff":"transparent",
-                color:view===tab.id?"#111827":"#6B7280",
-                boxShadow:view===tab.id?"0 1px 3px rgba(0,0,0,0.08)":"none",
+                background: location.pathname === tab.id ? "#fff" : "transparent",
+                color: location.pathname === tab.id ? "#111827" : "#6B7280",
+                boxShadow: location.pathname === tab.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
                 transition:"all 0.15s",
               }}>{tab.label}</button>
             ))}
 
-            {!isHR && (
-              <button onClick={()=>setShowHRLogin(true)} style={{
-                background:"#F9FAFB", border:"1.5px solid #E5E7EB",
-                borderRadius:8, padding:"7px 14px", color:"#6B7280",
-                fontSize:12, cursor:"pointer", fontWeight:600
-              }}>🔐 Private Area Login</button>
-            )}
-
-            {isHR && (
-              <button onClick={()=>{setIsHR(false);sessionStorage.removeItem("hrAuth");setView("board");}} style={{
-                background:"#FEF2F2", border:"1.5px solid #FECACA",
-                borderRadius:8, padding:"7px 14px", color:"#DC2626",
-                fontSize:12, cursor:"pointer", fontWeight:600
-              }}>Private Area Logout</button>
-            )}
+            <button onClick={handleLogout} style={{
+              background:"#FEF2F2", border:"1.5px solid #FECACA",
+              borderRadius:8, padding:"6px 14px", color:"#DC2626",
+              fontSize:12, cursor:"pointer", fontWeight:600, marginLeft: 12
+            }}>Logout</button>
           </div>
         </div>
 
-        {view==="board" && (
+        {location.pathname === "/" && (
           <div style={{display:"flex",gap:20}}>
             {COLUMNS.map(col=>(
               <div key={col.id} style={{textAlign:"center"}}>
@@ -208,7 +217,7 @@ export default function App() {
         )}
 
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          {view==="board" && (
+          {location.pathname === "/" && (
             <select value={filterEmpId} onChange={e=>setFilter(e.target.value)}
               style={{background:"#F9FAFB",border:"1.5px solid #E5E7EB",borderRadius:8,padding:"7px 12px",color:"#374151",fontSize:12,fontFamily:"'Inter',sans-serif",cursor:"pointer",fontWeight:500}}>
               <option value="all">All Members</option>
@@ -223,103 +232,77 @@ export default function App() {
       </div>
 
       {/* Content */}
-      {loading ? (
-        <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"calc(100vh - 65px)",flexDirection:"column",gap:12,color:"#9CA3AF",fontSize:13}}>
-          <div style={{width:32,height:32,border:"3px solid #E5E7EB",borderTop:"3px solid #2563EB",borderRadius:"50%",animation:"spin 0.7s linear infinite"}} />
-          Loading...
-        </div>
-      ) : error ? (
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"calc(100vh - 65px)",gap:12}}>
-          <div style={{color:"#DC2626",fontSize:14}}>⚠ {error}</div>
-          <button onClick={loadAll} style={{background:"#2563EB",color:"#fff",border:"none",borderRadius:8,padding:"8px 20px",fontFamily:"'Inter',sans-serif",fontSize:13,cursor:"pointer"}}>Retry</button>
-        </div>
-      ) : view==="costs" ? (
-        <CostDashboard employees={employees} isHR={isHR} />
-      ): view==="gantt" ? (
-        <GanttChart tasks={tasks} employees={employees} />
-      ) : view==="kpi" ? (
-        <KPIDashboard kpi={kpi} employees={employees} tasks={tasks} />
-      ) : (
-        <div style={{display:"flex",height:"calc(100vh - 65px)",overflow:"hidden"}}>
-          {COLUMNS.map((col, i) => {
-            const colTasks = filtered.filter(t => t.status === col.id);
-            const isDrop = dragOver === col.id;
-            return (
-              <div key={col.id}
-                onDragOver={e=>{e.preventDefault();setDragOver(col.id);}}
-                onDragLeave={()=>setDragOver(null)}
-                onDrop={e=>handleDrop(e,col.id)}
-                style={{borderRight:i<3?"1px solid #E5E7EB":"none",display:"flex",flexDirection:"column",background:isDrop?col.light:"#F9FAFB",transition:"background 0.15s",flex:1}}
-              >
-                <div style={{padding:"14px 16px 12px",borderBottom:`2px solid ${col.color}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <div style={{width:8,height:8,borderRadius:"50%",background:col.color}} />
-                    <span style={{fontSize:12,fontWeight:700,color:col.color,letterSpacing:"0.06em"}}>{col.label}</span>
-                  </div>
-                  <span style={{fontSize:12,color:col.color,background:col.light,border:`1px solid ${col.dot}`,padding:"1px 9px",borderRadius:10,fontWeight:700}}>{colTasks.length}</span>
-                </div>
-                <div style={{flex:1,overflowY:"auto",padding:14,minHeight:0}}>
-                  {colTasks.length === 0 && (
-                    <div style={{border:`2px dashed ${isDrop?col.color:"#E5E7EB"}`,borderRadius:10,padding:"28px 16px",textAlign:"center",color:isDrop?col.color:"#D1D5DB",fontSize:12,fontWeight:500,transition:"all 0.2s"}}>
-                      {isDrop?"Drop here ↓":"Drag tasks here"}
+      <div style={{ height: "calc(100vh - 65px)", overflow: "hidden" }}>
+        {loading ? (
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",flexDirection:"column",gap:12,color:"#9CA3AF",fontSize:13}}>
+            <div style={{width:32,height:32,border:"3px solid #E5E7EB",borderTop:"3px solid #2563EB",borderRadius:"50%",animation:"spin 0.7s linear infinite"}} />
+            Loading...
+          </div>
+        ) : error ? (
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:12}}>
+            <div style={{color:"#DC2626",fontSize:14}}>⚠ {error}</div>
+            <button onClick={loadAll} style={{background:"#2563EB",color:"#fff",border:"none",borderRadius:8,padding:"8px 20px",fontFamily:"'Inter',sans-serif",fontSize:13,cursor:"pointer"}}>Retry</button>
+          </div>
+        ) : (
+          <Routes>
+            <Route path="/" element={
+              <div style={{display:"flex",height:"100%",overflow:"hidden"}}>
+                {COLUMNS.map((col, i) => {
+                  const colTasks = filtered.filter(t => t.status === col.id);
+                  const isDrop = dragOver === col.id;
+                  return (
+                    <div key={col.id}
+                      onDragOver={e=>{e.preventDefault();setDragOver(col.id);}}
+                      onDragLeave={()=>setDragOver(null)}
+                      onDrop={e=>handleDrop(e,col.id)}
+                      style={{borderRight:i<3?"1px solid #E5E7EB":"none",display:"flex",flexDirection:"column",background:isDrop?col.light:"#F9FAFB",transition:"background 0.15s",flex:1}}
+                    >
+                      <div style={{padding:"14px 16px 12px",borderBottom:`2px solid ${col.color}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <div style={{width:8,height:8,borderRadius:"50%",background:col.color}} />
+                          <span style={{fontSize:12,fontWeight:700,color:col.color,letterSpacing:"0.06em"}}>{col.label}</span>
+                        </div>
+                        <span style={{fontSize:12,color:col.color,background:col.light,border:`1px solid ${col.dot}`,padding:"1px 9px",borderRadius:10,fontWeight:700}}>{colTasks.length}</span>
+                      </div>
+                      <div style={{flex:1,overflowY:"auto",padding:14,minHeight:0}}>
+                        {colTasks.length === 0 && (
+                          <div style={{border:`2px dashed ${isDrop?col.color:"#E5E7EB"}`,borderRadius:10,padding:"28px 16px",textAlign:"center",color:isDrop?col.color:"#D1D5DB",fontSize:12,fontWeight:500,transition:"all 0.2s"}}>
+                            {isDrop?"Drop here ↓":"Drag tasks here"}
+                          </div>
+                        )}
+                        {colTasks.map(task=>(
+                          <TaskCard key={task.id} task={task}
+                            onDragStart={(e,id)=>{dragId.current=id;}}
+                            onEdit={t=>setModal({type:"task",task:t})}
+                            onDelete={handleDelete}
+                          />
+                        ))}
+                      </div>
                     </div>
-                  )}
-                  {colTasks.map(task=>(
-                    <TaskCard key={task.id} task={task}
-                      onDragStart={(e,id)=>{dragId.current=id;}}
-                      onEdit={t=>setModal({type:"task",task:t})}
-                      onDelete={handleDelete}
-                    />
-                  ))}
-                </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
-      )}
+            } />
+            <Route path="/gantt" element={<GanttChart tasks={tasks} employees={employees} />} />
+            <Route path="/costs" element={<CostDashboard employees={employees} isHR={isHR} />} />
+            
+            {/* HR Only Routes */}
+            {isHR && (
+              <>
+                <Route path="/finances" element={<HRFinanceDashboard isHR={isHR} />} />
+                <Route path="/kpi" element={<KPIDashboard kpi={kpi} employees={employees} tasks={tasks} />} />
+              </>
+            )}
+
+            {/* Fallback route */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        )}
+      </div>
 
       {modal?.type==="task" && <TaskModal task={modal.task} employees={employees} onSave={handleTaskSave} onClose={()=>setModal(null)} />}
       {modal?.type==="employees" && <EmployeeManager employees={employees} onAdd={handleEmpAdd} onDelete={handleEmpDelete} onClose={()=>setModal(null)} />}
-      {showHRLogin && (
-          <div style={{position:"fixed",inset:0,background:"rgba(17,24,39,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,backdropFilter:"blur(4px)"}}>
-            <div style={{background:"#fff",borderRadius:16,padding:28,width:360,boxShadow:"0 20px 60px rgba(0,0,0,0.15)",fontFamily:"'Inter',sans-serif"}}>
-              <div style={{marginBottom:20}}>
-                <div style={{fontSize:10,color:"#9CA3AF",letterSpacing:"0.1em",fontWeight:600,marginBottom:2}}>RESTRICTED ACCESS</div>
-                <h3 style={{color:"#111827",margin:0,fontSize:18,fontWeight:700}}>Private Area Login</h3>
-              </div>
-              <div style={{marginBottom:14}}>
-                <label style={{display:"block",fontSize:11,color:"#374151",marginBottom:6,fontWeight:600}}>PASSWORD</label>
-                <input
-                  type="password"
-                  id="hr-password-input"
-                  style={{
-                    width:"100%", border:"1.5px solid #E5E7EB", borderRadius:8,
-                    padding:"9px 12px", fontSize:13, fontFamily:"'Inter',sans-serif",
-                    outline:"none", color:"#111827"
-                  }}
-                  placeholder="Enter password here..."
-                  onKeyDown={e => {
-                    if (e.key === "Enter") {
-                      handleHRLogin(e.target.value);
-                    }
-                  }}
-                />
-                {hrError && <div style={{fontSize:12,color:"#DC2626",marginTop:4}}>{hrError}</div>}
-              </div>
-              <div style={{display:"flex",gap:10}}>
-                <button onClick={()=>{
-                  const val = document.getElementById("hr-password-input").value;
-                  handleHRLogin(val);
-                }} style={{flex:1,padding:11,background:"#2563EB",color:"#fff",border:"none",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer"}}>
-                  Login
-                </button>
-                <button onClick={()=>{setShowHRLogin(false);setHRError("");}} style={{flex:1,padding:11,background:"#F9FAFB",color:"#374151",border:"1.5px solid #E5E7EB",borderRadius:8,fontSize:13,cursor:"pointer"}}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+      
       <Toast toasts={toasts} />
     </div>
   );

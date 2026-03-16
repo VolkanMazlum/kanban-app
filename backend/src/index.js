@@ -10,7 +10,7 @@ const helmet = require("helmet");
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 150,
+  max: 450,
   message: { error: "Too many requests, please try again later." }
 });
 
@@ -18,8 +18,8 @@ const limiter = rateLimit({
 app.set("trust proxy", 1);
 
 app.use(helmet());
-app.use(cors({ 
-  origin: process.env.FRONTEND_URL,   
+app.use(cors({
+  origin: process.env.FRONTEND_URL,
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization", "X-HR-Auth"]
@@ -50,7 +50,16 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+// Import and configure rate limiters
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 login requests per `window`
+  message: { error: "Too many login attempts, please try again later." }
+});
+
 // Import and initialize route modules
+app.post('/api/login', authLimiter, require('./login').login);
+
 require('./tasks')(app, query);
 require('./employees')(app, query);
 require('./kpi')(app, query);
@@ -58,10 +67,7 @@ require('./timeLogs')(app, query);
 require('./phases')(app, query);
 require("./settings")(app, query);
 require("./costs")(app, query, authenticateHR);
-require("./fatturato")(app, query, authenticateHR); 
-
-// Login endpoint artık gerekmiyor ama kaldırmak istersen diye yorum satırı
-// require('./login').login
+require("./fatturato")(app, query, authenticateHR);
 
 app.get("/", (req, res) => res.send("Welcome to the TEKSER API!"));
 

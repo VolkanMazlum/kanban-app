@@ -4,7 +4,7 @@ services:
     container_name: kanban_db
     restart: unless-stopped
     env_file:
-      - .env
+      - ./.env
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -25,7 +25,7 @@ services:
     container_name: kanban_backend
     restart: unless-stopped
     env_file:
-      - .env
+      - ./.env
     environment:
       DATABASE_URL: ${DATABASE_URL}
       PORT: 4000
@@ -41,7 +41,7 @@ services:
     container_name: kanban_frontend
     restart: unless-stopped
     env_file:
-      - .env
+      - ./.env
     environment:
       AUTH_USERNAME: ${AUTH_USERNAME}
       AUTH_PASSWORD: ${AUTH_PASSWORD}

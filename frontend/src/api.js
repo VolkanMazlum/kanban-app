@@ -1,12 +1,21 @@
 const BASE = "/api";
 
 async function req(path, options = {}) {
+  // Always attach JWT token if available
+  const token = localStorage.getItem("token");
+  
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),
+  };
+
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const res = await fetch(`${BASE}${path}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
+    headers,
   });
 
   if (!res.ok) {
@@ -15,6 +24,8 @@ async function req(path, options = {}) {
   }
   return res.json();
 }
+
+export const login = (data) => req("/login", { method: "POST", body: JSON.stringify(data) });
 
 export const getTasks        = (params = {}) => req(`/tasks${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""}`);
 export const getTask         = (id) => req(`/tasks/${id}`);
@@ -27,11 +38,7 @@ export const getEmployees    = ()           => req("/employees");
 export const createEmployee  = (name, role) => req("/employees", { method: "POST", body: JSON.stringify({ name, role }) });
 export const deleteEmployee  = (id)         => req(`/employees/${id}`, { method: "DELETE" });
 
-export const getKPI = () => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
-  const headers = hrAuth ? { "X-HR-Auth": hrAuth } : {};
-  return req("/kpi", { headers });
-};
+export const getKPI = () => req("/kpi");
 
 export const getTimeLogs = (params = {}) => req(`/time-logs${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""}`);
 export const logTime     = (data) => req("/time-logs", { method: "POST", body: JSON.stringify(data) });
@@ -54,23 +61,18 @@ export const updateSetting = (key, value) => req(`/settings/${key}`, {
 });
 
 export const getMonthlyWorkload = (year, month) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
-  const headers = hrAuth ? { "X-HR-Auth": hrAuth } : {};
-  return req(`/kpi/workload-monthly?year=${year}&month=${month}`, { headers });
+  return req(`/kpi/workload-monthly?year=${year}&month=${month}`);
 };
 
 export const getCosts = (year) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
   const url = year ? `/costs?year=${year}` : "/costs";
-  return req(url, { headers: hrAuth ? { "X-HR-Auth": hrAuth } : {} });
+  return req(url);
 };
 
 export const addEmployeeCost = (employeeId, data) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
   return req(`/costs/${employeeId}`, {
     method: "POST",
-    body: JSON.stringify(data),
-    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+    body: JSON.stringify(data)
   });
 };
 
@@ -78,33 +80,25 @@ export const saveWorkHours = (data) => req("/work-hours", { method: "POST", body
 export const getWorkHours  = (employeeId, year, month) => req(`/work-hours/${employeeId}?year=${year}&month=${month}`);
 
 export const getOvertimeCosts = (employeeId, year) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
-  return req(`/costs/${employeeId}/overtime?year=${year}`, {
-    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
-  });
+  return req(`/costs/${employeeId}/overtime?year=${year}`);
 };
 
 export const saveOvertimeCost = (employeeId, data) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
   return req(`/costs/${employeeId}/overtime`, {
     method: "POST",
-    body: JSON.stringify(data),
-    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+    body: JSON.stringify(data)
   });
 };
 
 export const getTaskFinances = (year) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
   const url = year ? `/task-finances?year=${year}` : "/task-finances";
-  return req(url, { headers: hrAuth ? { "X-HR-Auth": hrAuth } : {} });
+  return req(url);
 };
 
 export const saveTaskRevenue = (taskId, data) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
   return req(`/task-finances/${taskId}`, {
     method: "POST",
-    body: JSON.stringify(data),
-    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+    body: JSON.stringify(data)
   });
 };
 
@@ -115,76 +109,60 @@ export const getPhaseMonthlyHours = (phaseId) =>
 
 // ── FATTURATO ──
 export const getFatturato = (year) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
   const url = year ? `/fatturato?year=${year}` : "/fatturato";
-  return req(url, { headers: hrAuth ? { "X-HR-Auth": hrAuth } : {} });
+  return req(url);
 };
 
 export const getFatturatoByTask = (year) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
   const url = year ? `/fatturato/by-task?year=${year}` : "/fatturato/by-task";
-  return req(url, { headers: hrAuth ? { "X-HR-Auth": hrAuth } : {} });
+  return req(url);
 };
 
 export const createFatturato = (data) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
   return req("/fatturato", {
     method: "POST",
-    body: JSON.stringify(data),
-    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+    body: JSON.stringify(data)
   });
 };
 
 export const updateFatturato = (id, data) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
   return req(`/fatturato/${id}`, {
     method: "PUT",
-    body: JSON.stringify(data),
-    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+    body: JSON.stringify(data)
   });
 };
 
 export const deleteFatturato = (id) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
   return req(`/fatturato/${id}`, {
-    method: "DELETE",
-    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+    method: "DELETE"
   });
 };
 
 // ── CLIENTS ──
 export const getClients = () => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
-  return req("/clients", { headers: hrAuth ? { "X-HR-Auth": hrAuth } : {} });
+  return req("/clients");
 };
 
 export const getClient = (id) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
-  return req(`/clients/${id}`, { headers: hrAuth ? { "X-HR-Auth": hrAuth } : {} });
+  return req(`/clients/${id}`);
 };
 
 export const createClient = (data) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
   return req("/clients", {
     method: "POST",
-    body: JSON.stringify(data),
-    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+    body: JSON.stringify(data)
   });
 };
 
 export const updateClient = (id, data) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
   return req(`/clients/${id}`, {
     method: "PUT",
-    body: JSON.stringify(data),
-    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+    body: JSON.stringify(data)
   });
 };
 
 export const deleteClient = (id) => {
-  const hrAuth = sessionStorage.getItem("hrAuth");
   return req(`/clients/${id}`, {
-    method: "DELETE",
-    headers: hrAuth ? { "X-HR-Auth": hrAuth } : {}
+    method: "DELETE"
   });
 };

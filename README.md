@@ -45,15 +45,17 @@ kanban-app/
 │   ├── package.json
 │   └── src/
 │       ├── index.js            # Server entry point
-│       ├── auth.js             # Basic auth middleware
+│       ├── auth.js             # JWT auth middleware (Standard & HR roles)
 │       ├── employees.js        # Employee CRUD
 │       ├── kpi.js              # KPI endpoint
 │       ├── phases.js           # Phase & template logic
-│       ├── settings.js         # Future config
+│       ├── settings.js         # Settings & Config endpoints
 │       ├── tasks.js            # Full task CRUD with phases & topics
-│       ├── timeLogs.js         # Time‑tracking endpoints
-│       ├── costs.js            # Work‑hours, cost calculations, overtime & finance
+│       ├── timeLogs.js         # Time-tracking endpoints
+│       ├── costs.js            # Work-hours, cost calculations, overtime
+│       ├── fatturato.js        # Revenue, invoicing, and client management
 │       ├── validation.js       # Zod schemas
+│       ├── login.js            # JWT login endpoints
 │       └── db/
 │           └── init.sql        # DB schema & seed data
 ├── frontend/                   # React SPA
@@ -64,10 +66,11 @@ kanban-app/
 │       ├── App.jsx
 │       ├── api.js              # API client wrapper
 │       ├── components/
-│       │   ├── GanttChart.jsx
-│       │   ├── KPIDashboard.jsx
-│       │   ├── TaskCard.jsx
-│       │   ├── TaskModal.jsx
+│       │   ├── HRFinanceDashboard.jsx
+│       │   ├── FatturatoDashboard.jsx
+│       │   ├── ProjectFinances.jsx
+│       │   ├── ClientsManager.jsx
+│       │   ├── Login.jsx
 │       │   └── …
 │       └── constants/
 │           └── index.js
@@ -92,7 +95,7 @@ kanban-app/
 
 ```bash
 # Clone the repository
-git clone <repo‑url>
+git clone <repo-url>
 cd kanban-app
 
 # Copy example environment file and edit the values you need
@@ -126,35 +129,33 @@ npm install
 npm run dev   # Vite dev server at http://localhost:5173
 ```
 
-> **Tip:** The backend respects the `FRONTEND_URL` environment variable for CORS. Set it to the Vite dev URL when developing locally.
-
 ---
 
 ## ⚙️ Environment Variables
 
-The project uses a shared `.env` file (mounted into each container). Required keys:
+The project uses a shared `.env` file. Important keys include:
 
 ```dotenv
 # Docker / PostgreSQL
-POSTGRES_USER
-POSTGRES_PASSWORD
-POSTGRES_DB
+POSTGRES_USER=...
+POSTGRES_PASSWORD=...
+POSTGRES_DB=...
+DATABASE_URL=postgresql://user:pass@db:5432/db
 
-# Backend
-DATABASE_URL=postgresql://POSTGRES_USER:POSTGRES_PASSWORD@db:5432/POSTGRES_DB
+# Backend Authentication
 PORT=4000
-AUTH_USERNAME   # Basic‑auth username
-AUTH_PASSWORD   # Basic‑auth password
-FRONTEND_URL    # Used by CORS middleware (e.g., http://localhost:5173)
+AUTH_USERNAME=...
+AUTH_PASSWORD_HASH=...
+HR_PASSWORD=...
+INTERNAL_SECRET=...
+FRONTEND_URL=http://localhost:5173
 ```
-
-Optional variables for local development can be added as needed. **Never** commit real passwords to source control – `.env` is already listed in `.gitignore`.
 
 ---
 
 ## 📡 API Reference
 
-All endpoints are prefixed with `/api` and require **Basic Auth** (see `backend/src/auth.js`).
+All endpoints are prefixed with `/api` and require **JWT Bearer Token Authentication** (see `backend/src/auth.js`).
 
 ### Tasks
 
@@ -217,37 +218,33 @@ All endpoints are prefixed with `/api` and require **Basic Auth** (see `backend/
 
 ## 🌟 Features
 
-- Drag‑and‑drop Kanban board (New → In Process → Blocked → Done)
-- Phase templates for reusable workflows (e.g., design → development → review)
-- Employee assignment at both task and phase levels
-- KPI dashboard showing total tasks, completed tasks, overdue tasks, etc.
-- Time‑tracking (start/stop) for fine‑grained work logging
-- **Work‑hours API** to record daily effort per employee/task
-- **Cost calculations** with dynamic hourly rates, overtime handling, and cost history
-- **Task finance** reporting – revenue per task and aggregated work‑hours
-- Persistent storage via PostgreSQL (Docker volume)
-- Containerised – one‑click deployment with Docker Compose
-- Basic authentication for API security (username/password from `.env`)
-- Development mode with hot‑reload (`nodemon` & Vite)
+- **Drag-and-drop Kanban board** (New → In Process → Blocked → Done)
+- **Phase templates** for reusable workflows.
+- **KPI Dashboards & Gantt Charts** for project visualization.
+- **Time-tracking (start/stop)** for fine-grained work logging.
+- **Secure Role-Based Access** via JWT (Standard & Admin/HR roles) with a unified login portal.
+- **Private HR Finance Dashboard** for tracking work hours, overtime, employee costs, and company overheads.
+- **Financial Module (Fatturato)** tracking client revenue, invoices, and remaining budgets.
+- **Containerised** one-click deployment with Docker Compose.
+
+---
+
+## 📝 Project Documentation & Analysis
+
+For current code vulnerabilities, missing features, and roadmaps, please refer to:
+- `PROJECT_ANALYSIS_AND_SHORTCOMINGS.md` - Details about missing UI elements for financials and authentication fragmentation.
+- `SECURITY_AND_CODE_IMPROVEMENT_ROADMAP.md` - Overall system health and security improvement roadmap.
+- `COMPREHENSIVE_SECURITY_AND_CODE_REVIEW.md` - Detailed breakdown of backend vulnerabilities.
 
 ---
 
 ## 🤝 Contributing
 
 We welcome contributions! Please follow these steps:
-
-1. **Fork** the repository.
-2. Create a feature branch:
-   ```bash
-   git checkout -b feature/awesome-feature
-   ```
-3. Make your changes and **add tests** if applicable.
-4. Ensure the backend tests (if any) pass and the app still builds.
-5. Open a Pull Request with a clear description of your changes.
-
-### Code of Conduct
-
-Please note that this project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
+1. Fork the repository.
+2. Create a feature branch: `git checkout -b feature/awesome-feature`
+3. Make your changes and add tests if applicable.
+4. Open a Pull Request.
 
 ---
 
