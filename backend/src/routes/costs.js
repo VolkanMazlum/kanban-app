@@ -3,6 +3,12 @@ const { logAudit, getAuditContext } = require("../middleware/auditLog");
 module.exports = (app, query, authenticate, authenticateHR) => {
   app.post("/api/work-hours", authenticate, async (req, res) => {
     const { employee_id, task_id, date, hours, note } = req.body;
+    
+    // Security check: Standard users can only log for themselves
+    if (req.user.role !== 'hr' && parseInt(employee_id) !== req.user.employeeId) {
+      return res.status(403).json({ error: "Access denied. You can only log hours for yourself." });
+    }
+
     try {
       const result = await query(
         `INSERT INTO employee_work_hours (employee_id, task_id, date, hours, note)
@@ -17,12 +23,19 @@ module.exports = (app, query, authenticate, authenticateHR) => {
 
   app.get("/api/work-hours/:employeeId", authenticate, async (req, res) => {
     const { year, month } = req.query;
+    const requestedEmpId = parseInt(req.params.employeeId);
+
+    // Security check: Standard users can only view their own hours
+    if (req.user.role !== 'hr' && requestedEmpId !== req.user.employeeId) {
+      return res.status(403).json({ error: "Access denied. You can only view your own hours." });
+    }
+
     try {
       const result = await query(
         `SELECT * FROM employee_work_hours 
          WHERE employee_id = $1 AND EXTRACT(YEAR FROM date) = $2 AND EXTRACT(MONTH FROM date) = $3
          ORDER BY date`,
-        [req.params.employeeId, year, month]
+        [requestedEmpId, year, month]
       );
       res.json(result.rows);
     } catch (err) { res.status(500).json({ error: "Database error" }); }

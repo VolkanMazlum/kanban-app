@@ -19,6 +19,7 @@ export default function Login() {
       if (res.success && res.token) {
         localStorage.setItem("token", res.token);
         localStorage.setItem("role", res.role);
+        localStorage.setItem("employeeId", res.employeeId || "");
         localStorage.setItem("isHR", res.role === "hr" ? "true" : "false");
         localStorage.setItem("userName", res.name || username);
         navigate("/");

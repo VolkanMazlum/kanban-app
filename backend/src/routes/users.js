@@ -33,22 +33,24 @@ module.exports = (app, query) => {
         return res.status(409).json({ error: 'A user with this email already exists' });
       }
 
-      const hash = await bcrypt.hash(password, 10);
-      
-      // Use a transaction if possible, but for now simple sequential
-      const result = await query(
-        'INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role, is_active, created_at',
-        [email, name, hash, userRole]
-      );
-
       const trimmedName = name.trim();
-      // Sync with employees table: Check if exists first (safer than ON CONFLICT if UNIQUE constraint is missing)
+      let empId;
+      
+      // Sync with employees table
       const empExists = await query('SELECT id FROM employees WHERE name = $1', [trimmedName]);
       if (empExists.rows.length > 0) {
-        await query('UPDATE employees SET is_active = TRUE WHERE name = $1', [trimmedName]);
+        empId = empExists.rows[0].id;
+        await query('UPDATE employees SET is_active = TRUE WHERE id = $1', [empId]);
       } else {
-        await query('INSERT INTO employees (name, is_active) VALUES ($1, TRUE)', [trimmedName]);
+        const newEmp = await query('INSERT INTO employees (name, is_active) VALUES ($1, TRUE) RETURNING id', [trimmedName]);
+        empId = newEmp.rows[0].id;
       }
+
+      const hash = await bcrypt.hash(password, 10);
+      const result = await query(
+        'INSERT INTO users (email, name, password_hash, role, employee_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, name, role, is_active, employee_id, created_at',
+        [email, name, hash, userRole, empId]
+      );
 
       res.status(201).json(result.rows[0]);
     } catch (err) {

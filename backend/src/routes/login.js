@@ -27,6 +27,7 @@ const login = (query) => async (req, res) => {
     // Generate JWT with user identity
     const token = generateToken({
       userId: user.id,
+      employeeId: user.employee_id,
       email: user.email,
       name: user.name,
       role: user.role.trim()
@@ -34,6 +35,7 @@ const login = (query) => async (req, res) => {
 
     return res.json({
       token,
+      employeeId: user.employee_id,
       role: user.role.trim(),
       name: user.name,
       success: true

@@ -28,9 +28,13 @@ export default function App() {
   const location = useLocation();
 
   const token = localStorage.getItem("token");
-  const isHR = localStorage.getItem("isHR") === "true";
+  const role = localStorage.getItem("role") || "standard";
+  const employeeId = localStorage.getItem("employeeId") ? parseInt(localStorage.getItem("employeeId")) : null;
+  const isHR = role === "hr";
   const userName = localStorage.getItem("userName") || "User";
   const isAuthenticated = !!token;
+  
+  const user = { role, employeeId, name: userName };
 
   useEffect(() => {
     // Redirect to login if not authenticated and not already on login page
@@ -294,7 +298,7 @@ export default function App() {
               </div>
             } />
             <Route path="/gantt" element={<GanttChart tasks={tasks} employees={employees} />} />
-            <Route path="/costs" element={<CostDashboard employees={employees} isHR={isHR} />} />
+            <Route path="/costs" element={<CostDashboard employees={employees} user={user} />} />
             
             {/* HR Only Routes */}
             {isHR && (

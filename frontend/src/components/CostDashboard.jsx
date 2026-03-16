@@ -4,7 +4,8 @@ import EmployeeCostsTab from "./EmployeeCostsTab.jsx";
 import TimesheetTab from "./TimesheetTab.jsx";
 import { MONTHS } from "../constants/costConstants.js";
 
-export default function CostDashboard({ employees, isHR }) {
+export default function CostDashboard({ employees, user }) {
+  const isHR = user.role === 'hr';
   const currentYear  = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
   const YEAR_OPTIONS = [currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
@@ -27,6 +28,14 @@ export default function CostDashboard({ employees, isHR }) {
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [dailyHours, setDailyHours] = useState({});
   const [saving, setSaving] = useState(false);
+
+  // Set initial employee for standard users
+  useEffect(() => {
+    if (!isHR && user.employeeId && employees.length > 0) {
+      const self = employees.find(e => e.id === user.employeeId);
+      if (self) setSelectedEmp(self);
+    }
+  }, [isHR, user.employeeId, employees]);
 
   useEffect(() => {
     api.getTasks().then(setAllTasks).catch(console.error);
@@ -206,6 +215,7 @@ export default function CostDashboard({ employees, isHR }) {
       {/* ── İŞÇİ: TIMESHEET ── */}
       <TimesheetTab 
         employees={employees}
+        user={user}
         allTasks={allTasks}
         selectedYear={selectedYear}
         selectedMonth={selectedMonth}

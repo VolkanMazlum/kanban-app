@@ -4,9 +4,10 @@ import { MONTHS } from "../constants/costConstants.js";
 import { getDaysInMonth } from "../utils/costUtils.js";
 
 export default function TimesheetTab({ 
-  employees, allTasks, selectedYear, selectedMonth, setSelectedMonth, 
+  employees, user, allTasks, selectedYear, selectedMonth, setSelectedMonth, 
   selectedEmp, setSelectedEmp, dailyHours, setDailyHours, handleDaySave, saving 
 }) {
+  const isHR = user?.role === 'hr';
   const currentYear  = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
   const today        = new Date(); today.setHours(0,0,0,0);
@@ -23,22 +24,33 @@ export default function TimesheetTab({
     <div style={{background:"#fff",borderRadius:12,border:"1px solid #E5E7EB",overflow:"hidden"}}>
       <div style={{padding:"18px 24px",borderBottom:"1px solid #F3F4F6"}}>
         <h3 style={{fontSize:14,fontWeight:700,color:"#111827",margin:"0 0 2px"}}>Daily Work Hours — {selectedYear}</h3>
-        <p style={{fontSize:12,color:"#6B7280",margin:0}}>Select your name and log hours for assigned projects</p>
+        <p style={{fontSize:12,color:"#6B7280",margin:0}}>
+          {isHR ? "Select an employee to view/edit their log" : "Log your hours for assigned projects"}
+        </p>
       </div>
 
       <div style={{padding:24}}>
         <div style={{marginBottom:20,display:"flex",gap:16,alignItems:"flex-end",flexWrap:"wrap"}}>
-          <div style={{flex:"0 0 240px"}}>
-            <label style={{fontSize:11,color:"#374151",fontWeight:600,marginBottom:6,display:"block",letterSpacing:"0.05em"}}>SELECT EMPLOYEE</label>
-            <select
-              value={selectedEmp?.id || ""}
-              onChange={e => { setSelectedEmp(employees.find(emp => String(emp.id) === e.target.value) || null); setDailyHours({}); }}
-              style={{background:"#F9FAFB",border:"1.5px solid #E5E7EB",borderRadius:8,padding:"8px 12px",fontSize:13,width:"100%",color:"#374151",fontFamily:"'Inter',sans-serif"}}
-            >
-              <option value="">— Select —</option>
-              {employees.map(e => <option key={e.id} value={String(e.id)}>{e.name}</option>)}
-            </select>
-          </div>
+          {isHR && (
+            <div style={{flex:"0 0 240px"}}>
+              <label style={{fontSize:11,color:"#374151",fontWeight:600,marginBottom:6,display:"block",letterSpacing:"0.05em"}}>SELECT EMPLOYEE</label>
+              <select
+                value={selectedEmp?.id || ""}
+                onChange={e => { setSelectedEmp(employees.find(emp => String(emp.id) === e.target.value) || null); setDailyHours({}); }}
+                style={{background:"#F9FAFB",border:"1.5px solid #E5E7EB",borderRadius:8,padding:"8px 12px",fontSize:13,width:"100%",color:"#374151",fontFamily:"'Inter',sans-serif"}}
+              >
+                <option value="">— Select —</option>
+                {employees.map(e => <option key={e.id} value={String(e.id)}>{e.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {!isHR && selectedEmp && (
+            <div style={{flex:"0 0 240px", padding: "10px 14px", background: "#f3f4f6", borderRadius: 8}}>
+              <label style={{fontSize:10,color:"#6b7280",fontWeight:700,marginBottom:4,display:"block"}}>SIGNED AS</label>
+              <div style={{fontSize:15, fontWeight:700, color: "#111827"}}>{selectedEmp.name}</div>
+            </div>
+          )}
 
           <div style={{flex:1}}>
             <label style={{fontSize:11,color:"#374151",fontWeight:600,marginBottom:6,display:"block",letterSpacing:"0.05em"}}>MONTH</label>
