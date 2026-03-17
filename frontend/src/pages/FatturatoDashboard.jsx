@@ -89,6 +89,17 @@ export default function FatturatoDashboard({ isHR }) {
   };
 
   const handleSaveFatt = async () => {
+    // Validation: Check if any line's ordini (percentages) exceed 100%
+    for (const client of fattForm.clients) {
+      for (const line of client.lines) {
+        const totalPct = (line.ordini || []).reduce((sum, o) => sum + (parseFloat(o.percentage) || 0), 0);
+        if (totalPct > 100.01) { // Allowing tiny floating point margin
+          alert(`Error: The total percentage for activity "${line.attivita || 'unnamed'}" exceeds 100% (${totalPct.toFixed(2)}%). Please correct it before saving.`);
+          return;
+        }
+      }
+    }
+
     setSavingFatt(true);
     try {
       if (editingFatt) await api.updateFatturato(editingFatt.id, fattForm);
@@ -393,7 +404,15 @@ export default function FatturatoDashboard({ isHR }) {
                         {/* Nested Ordini (Percentages) */}
                         <div style={{ marginLeft: 20, borderLeft: "2px solid #E5E7EB", paddingLeft: 12 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                            <span style={{ fontSize: 9, fontWeight: 700, color: "#6B7280" }}>PAYMENT SCHEDULE (%)</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, color: "#6B7280" }}>PAYMENT SCHEDULE (%)</span>
+                              {(() => {
+                                const total = (line.ordini || []).reduce((sum, o) => sum + (parseFloat(o.percentage) || 0), 0);
+                                if (total > 100) return <span style={{ fontSize: 9, fontWeight: 700, color: "#EF4444" }}>TOTAL: {total.toFixed(1)}% (EXCEEDS 100!)</span>;
+                                if (total > 0) return <span style={{ fontSize: 9, fontWeight: 700, color: total === 100 ? "#059669" : "#6B7280" }}>TOTAL: {total.toFixed(1)}%</span>;
+                                return null;
+                              })()}
+                            </div>
                             <button onClick={() => addOrdineToLine(cIdx, lIdx)} style={{ background: "#EEF2FF", color: "#4F46E5", border: "1px solid #C7D2FE", padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>+ Add %</button>
                           </div>
                           {(line.ordini || []).map((ord, oIdx) => (

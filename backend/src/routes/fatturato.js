@@ -101,6 +101,20 @@ module.exports = (app, query, authenticate, authenticateHR) => {
   app.post("/api/fatturato", authenticateHR, async (req, res) => {
     const { task_id, comm_number, name, clients } = req.body;
     try {
+      // Validation: Sum of percentages for any line must not exceed 100%
+      if (clients && clients.length > 0) {
+        for (const c of clients) {
+          if (c.lines && c.lines.length > 0) {
+            for (const l of c.lines) {
+              const totalPct = (l.ordini || []).reduce((sum, o) => sum + (parseFloat(o.percentage) || 0), 0);
+              if (totalPct > 100.01) {
+                return res.status(400).json({ error: `Total percentage for activity "${l.attivita || 'unnamed'}" exceeds 100%` });
+              }
+            }
+          }
+        }
+      }
+
       await query("BEGIN");
 
       const commRes = await query(`
@@ -153,6 +167,20 @@ module.exports = (app, query, authenticate, authenticateHR) => {
     const { task_id, comm_number, name, clients } = req.body;
     const commId = req.params.id;
     try {
+      // Validation: Sum of percentages for any line must not exceed 100%
+      if (clients && clients.length > 0) {
+        for (const c of clients) {
+          if (c.lines && c.lines.length > 0) {
+            for (const l of c.lines) {
+              const totalPct = (l.ordini || []).reduce((sum, o) => sum + (parseFloat(o.percentage) || 0), 0);
+              if (totalPct > 100.01) {
+                return res.status(400).json({ error: `Total percentage for activity "${l.attivita || 'unnamed'}" exceeds 100%` });
+              }
+            }
+          }
+        }
+      }
+
       await query("BEGIN");
       await query(`UPDATE commesse SET task_id = $1, comm_number = $2, name = $3 WHERE id = $4`, [task_id || null, comm_number || null, name || null, commId]);
 
@@ -235,6 +263,14 @@ module.exports = (app, query, authenticate, authenticateHR) => {
   app.post("/api/fatturato-lines/:lineId/ordini", authenticateHR, async (req, res) => {
     const { label, percentage, expected_date, note } = req.body;
     try {
+      // Validation: Total percentage for the line must not exceed 100%
+      const existingRes = await query(`SELECT SUM(percentage) as total FROM fatturato_ordini WHERE fatturato_line_id = $1`, [req.params.lineId]);
+      const currentTotal = parseFloat(existingRes.rows[0].total || 0);
+      const newPercentage = parseFloat(percentage) || 0;
+      if (currentTotal + newPercentage > 100.01) {
+        return res.status(400).json({ error: `Adding this installment would exceed 100% for this activity (current: ${currentTotal}%)` });
+      }
+
       const { rows } = await query(
         `INSERT INTO fatturato_ordini (fatturato_line_id, label, percentage, expected_date, note)
          VALUES ($1, $2, $3, $4, $5) RETURNING *`,
@@ -257,6 +293,18 @@ module.exports = (app, query, authenticate, authenticateHR) => {
   app.put("/api/fatturato-ordini/:id", authenticateHR, async (req, res) => {
     const { label, percentage, expected_date, note } = req.body;
     try {
+      // Validation: Total percentage for the line must not exceed 100%
+      const lineRes = await query(`SELECT fatturato_line_id FROM fatturato_ordini WHERE id = $1`, [req.params.id]);
+      if (lineRes.rows.length === 0) return res.status(404).json({ error: "Not found" });
+      const lineId = lineRes.rows[0].fatturato_line_id;
+
+      const existingOtherRes = await query(`SELECT SUM(percentage) as total FROM fatturato_ordini WHERE fatturato_line_id = $1 AND id <> $2`, [lineId, req.params.id]);
+      const otherTotal = parseFloat(existingOtherRes.rows[0].total || 0);
+      const newPercentage = parseFloat(percentage) || 0;
+      if (otherTotal + newPercentage > 100.01) {
+        return res.status(400).json({ error: `Updating this installment would exceed 100% for this activity (others total: ${otherTotal}%)` });
+      }
+
       const { rows } = await query(
         `UPDATE fatturato_ordini
          SET label = $1, percentage = $2, expected_date = $3, note = $4
