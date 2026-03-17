@@ -185,63 +185,60 @@ export default function App() {
       `}</style>
 
       {/* Header */}
-      <div style={{background:"#fff",borderBottom:"1px solid #E5E7EB",padding:"0 24px",height:65,display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 1px 4px rgba(0,0,0,0.05)",position:"sticky",top:0,zIndex:50}}>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:36,height:36,background:"#2563EB",borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:18}}>T</div>
-          <div>
-            <div style={{fontSize:17,fontWeight:800,color:"#111827",letterSpacing:"-0.02em"}}>TEKSER</div>
-            <div style={{fontSize:10,color:"#9CA3AF",fontWeight:600,letterSpacing:"0.06em"}}>S.R.L. — PROJECT MANAGEMENT</div>
-          </div>
-          <div style={{display:"flex",background:"#F3F4F6",borderRadius:8,padding:3,marginLeft:20, flexWrap: "wrap"}}>
-            {TABS.map(tab=>(
-              <button key={tab.id} onClick={()=>navigate(tab.id)} style={{
-                padding:"6px 16px",borderRadius:6,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,
-                fontFamily:"'Inter',sans-serif",
-                background: location.pathname === tab.id ? "#fff" : "transparent",
-                color: location.pathname === tab.id ? "#111827" : "#6B7280",
-                boxShadow: location.pathname === tab.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-                transition:"all 0.15s",
-              }}>{tab.label}</button>
-            ))}
+      <div style={{background:"#fff",borderBottom:"1px solid #E5E7EB",padding:"0 20px",height:65,display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 1px 4px rgba(0,0,0,0.05)",position:"sticky",top:0,zIndex:50}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+          <div style={{width:32,height:32,background: "#2563EB", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16}}>T</div>
+          <div style={{display:"flex",flexDirection:"column"}}>
+            <div style={{fontSize:15,fontWeight:800,color:"#111827",letterSpacing:"-0.02em",lineHeight:1}}>TEKSER</div>
+            <div style={{fontSize:8,color:"#9CA3AF",fontWeight:600,letterSpacing:"0.04em"}}>S.R.L.</div>
           </div>
         </div>
 
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",background:"#F3F4F6",borderRadius:8}}>
-            <div style={{width:28,height:28,borderRadius:"50%",background:"#2563EB",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700}}>{userName.charAt(0).toUpperCase()}</div>
-            <span style={{fontSize:13,fontWeight:600,color:"#374151"}}>{userName}</span>
-            {isHR && <span style={{fontSize:10,fontWeight:700,color:"#2563EB",background:"#EFF6FF",padding:"2px 6px",borderRadius:4}}>HR</span>}
-          </div>
-          <button onClick={handleLogout} style={{
-            background:"#FEF2F2", border:"1.5px solid #FECACA",
-            borderRadius:8, padding:"6px 14px", color:"#DC2626",
-            fontSize:12, cursor:"pointer", fontWeight:600
-          }}>Logout</button>
+        <div style={{display:"flex",background:"#F3F4F6",borderRadius:8,padding:3,margin:"0 12px",flexShrink:0}}>
+          {TABS.map(tab=>(
+            <button key={tab.id} onClick={()=>navigate(tab.id)} style={{
+              padding:"6px 12px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,
+              fontFamily:"'Inter',sans-serif",
+              background: location.pathname === tab.id ? "#fff" : "transparent",
+              color: location.pathname === tab.id ? "#111827" : "#6B7280",
+              boxShadow: location.pathname === tab.id ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+              transition:"all 0.15s",
+              whiteSpace:"nowrap"
+            }}>{tab.label}</button>
+          ))}
         </div>
 
-        {location.pathname === "/" && (
-          <div style={{display:"flex",gap:20}}>
-            {COLUMNS.map(col=>(
-              <div key={col.id} style={{textAlign:"center"}}>
-                <div style={{fontSize:20,fontWeight:800,color:col.color}}>{tasks.filter(t=>t.status===col.id).length}</div>
-                <div style={{fontSize:9,color:"#9CA3AF",fontWeight:600,letterSpacing:"0.08em"}}>{col.label}</div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,flex:1,justifyContent:"flex-end",minWidth:0}}>
           {location.pathname === "/" && (
-            <select value={filterEmpId} onChange={e=>setFilter(e.target.value)}
-              style={{background:"#F9FAFB",border:"1.5px solid #E5E7EB",borderRadius:8,padding:"7px 12px",color:"#374151",fontSize:12,fontFamily:"'Inter',sans-serif",cursor:"pointer",fontWeight:500}}>
-              <option value="all">All Members</option>
-              {employees.map(e=><option key={e.id} value={String(e.id)}>{e.name}</option>)}
-            </select>
+            <div style={{display:"flex",gap:12,marginRight:8,flexShrink:0}}>
+              {COLUMNS.map(col=>(
+                <div key={col.id} style={{textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center"}}>
+                  <div style={{fontSize:16,fontWeight:800,color:col.color,lineHeight:1}}>{tasks.filter(t=>t.status===col.id).length}</div>
+                  <div style={{fontSize:7,color:"#9CA3AF",fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase"}}>{col.label}</div>
+                </div>
+              ))}
+            </div>
           )}
-          <button onClick={()=>setModal({type:"employees"})}
-            style={{background:"#F9FAFB",border:"1.5px solid #E5E7EB",borderRadius:8,padding:"7px 14px",color:"#374151",fontSize:12,fontFamily:"'Inter',sans-serif",cursor:"pointer",fontWeight:600}}>👥 Team</button>
-          <button onClick={()=>setModal({type:"task"})}
-            style={{background:"#2563EB",color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontFamily:"'Inter',sans-serif",fontSize:13,fontWeight:600,cursor:"pointer",boxShadow:"0 2px 8px rgba(37,99,235,0.3)"}}>+ New Task</button>
+
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"4px 10px",background:"#F3F4F6",borderRadius:8,flexShrink:0}}>
+            <div style={{width:24,height:24,borderRadius:"50%",background:"#2563EB",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{userName.charAt(0).toUpperCase()}</div>
+            <span style={{fontSize:12,fontWeight:600,color:"#374151"}}>{userName}</span>
+            <button onClick={handleLogout} style={{background:"none",border:"none",color: "#DC2626",fontSize:11,cursor:"pointer",fontWeight:700,marginLeft:4,padding:0}}>Logout</button>
+          </div>
+
+          <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+            {location.pathname === "/" && (
+              <select value={filterEmpId} onChange={e=>setFilter(e.target.value)}
+                style={{background:"#fff",border:"1.px solid #E5E7EB",borderRadius:6,padding:"5px 8px",color:"#374151",fontSize:11,fontFamily:"'Inter',sans-serif",cursor:"pointer",fontWeight:500,maxWidth:110}}>
+                <option value="all">All Members</option>
+                {employees.map(e=><option key={e.id} value={String(e.id)}>{e.name}</option>)}
+              </select>
+            )}
+            <button onClick={()=>setModal({type:"employees"})}
+              style={{background:"#fff",border:"1px solid #E5E7EB",borderRadius:6,padding:"5px 10px",color:"#374151",fontSize:11,fontFamily:"'Inter',sans-serif",cursor:"pointer",fontWeight:600}}>👥 Team</button>
+            <button onClick={()=>setModal({type:"task"})}
+              style={{background:"#2563EB",color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",fontFamily:"'Inter',sans-serif",fontSize:12,fontWeight:700,cursor:"pointer",boxShadow:"0 2px 4px rgba(37,99,235,0.2)"}}>+ Task</button>
+          </div>
         </div>
       </div>
 
