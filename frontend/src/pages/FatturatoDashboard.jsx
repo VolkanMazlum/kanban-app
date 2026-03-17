@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import * as api from "../api";
-import { EMPTY_LINE, EMPTY_CLIENT, EMPTY_FORM, EMPTY_ORDINE, inpStyle } from "../constants/costConstants.js";
+import { getEmptyLine, getEmptyClient, getEmptyForm, inpStyle } from "../constants/costConstants.js";
 
 // Utility formatting
 const parseEuNum = (val) => {
@@ -25,7 +25,7 @@ export default function FatturatoDashboard({ isHR }) {
 
   const [showFattModal, setShowFattModal] = useState(false);
   const [editingFatt, setEditingFatt] = useState(null);
-  const [fattForm, setFattForm] = useState(EMPTY_FORM);
+  const [fattForm, setFattForm] = useState(getEmptyForm());
   const [savingFatt, setSavingFatt] = useState(false);
 
   const [showClientModal, setShowClientModal] = useState(false);
@@ -138,10 +138,18 @@ export default function FatturatoDashboard({ isHR }) {
     : fatturatoList;
 
   // Form Handlers
-  const addClientBlock = () => setFattForm({ ...fattForm, clients: [...fattForm.clients, { ...EMPTY_CLIENT }] });
+  const addClientBlock = () => setFattForm({ ...fattForm, clients: [...fattForm.clients, getEmptyClient()] });
   const removeClientBlock = (cIdx) => { const newClients = [...fattForm.clients]; newClients.splice(cIdx, 1); setFattForm({ ...fattForm, clients: newClients }); };
-  const handleClientChange = (cIdx, field, val) => { const newClients = [...fattForm.clients]; newClients[cIdx][field] = val; setFattForm({ ...fattForm, clients: newClients }); };
-  const addLineToClient = (cIdx) => { const newClients = [...fattForm.clients]; newClients[cIdx].lines.push({ ...EMPTY_LINE }); setFattForm({ ...fattForm, clients: newClients }); };
+  const handleClientChange = (cIdx, field, val) => { 
+    const newClients = [...fattForm.clients]; 
+    newClients[cIdx] = { ...newClients[cIdx], [field]: val };
+    setFattForm({ ...fattForm, clients: newClients }); 
+  };
+  const addLineToClient = (cIdx) => { 
+    const newClients = [...fattForm.clients]; 
+    newClients[cIdx] = { ...newClients[cIdx], lines: [...newClients[cIdx].lines, getEmptyLine()] }; 
+    setFattForm({ ...fattForm, clients: newClients }); 
+  };
   const removeLineFromClient = (cIdx, lIdx) => { const newClients = [...fattForm.clients]; newClients[cIdx].lines.splice(lIdx, 1); setFattForm({ ...fattForm, clients: newClients }); };
 
   const updateFatturatoFromOrdini = (newClients, cIdx, lIdx) => {
@@ -156,14 +164,19 @@ export default function FatturatoDashboard({ isHR }) {
 
   const handleLineChange = (cIdx, lIdx, field, val) => { 
     const newClients = [...fattForm.clients]; 
-    newClients[cIdx].lines[lIdx][field] = val; 
+    const newLine = { ...newClients[cIdx].lines[lIdx], [field]: val };
+    newClients[cIdx] = { ...newClients[cIdx], lines: [...newClients[cIdx].lines] };
+    newClients[cIdx].lines[lIdx] = newLine;
     if (field === "valore_ordine") updateFatturatoFromOrdini(newClients, cIdx, lIdx);
     setFattForm({ ...fattForm, clients: newClients }); 
   };
   const addOrdineToLine = (cIdx, lIdx) => {
     const newClients = [...fattForm.clients];
-    if (!newClients[cIdx].lines[lIdx].ordini) newClients[cIdx].lines[lIdx].ordini = [];
-    newClients[cIdx].lines[lIdx].ordini.push({ label: "", percentage: "" });
+    const newLine = { ...newClients[cIdx].lines[lIdx] };
+    if (!newLine.ordini) newLine.ordini = [];
+    newLine.ordini = [...newLine.ordini, { label: "", percentage: "" }];
+    newClients[cIdx] = { ...newClients[cIdx], lines: [...newClients[cIdx].lines] };
+    newClients[cIdx].lines[lIdx] = newLine;
     updateFatturatoFromOrdini(newClients, cIdx, lIdx);
     setFattForm({ ...fattForm, clients: newClients });
   };
@@ -175,7 +188,12 @@ export default function FatturatoDashboard({ isHR }) {
   };
   const handleOrdineChange = (cIdx, lIdx, oIdx, field, val) => {
     const newClients = [...fattForm.clients];
-    newClients[cIdx].lines[lIdx].ordini[oIdx][field] = val;
+    const newLine = { ...newClients[cIdx].lines[lIdx] };
+    const newOrdini = [...newLine.ordini];
+    newOrdini[oIdx] = { ...newOrdini[oIdx], [field]: val };
+    newLine.ordini = newOrdini;
+    newClients[cIdx] = { ...newClients[cIdx], lines: [...newClients[cIdx].lines] };
+    newClients[cIdx].lines[lIdx] = newLine;
     if (field === "percentage") updateFatturatoFromOrdini(newClients, cIdx, lIdx);
     setFattForm({ ...fattForm, clients: newClients });
   };

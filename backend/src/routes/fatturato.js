@@ -341,9 +341,58 @@ module.exports = (app, query, authenticate, authenticateHR) => {
     try { res.json((await query(`SELECT * FROM clients ORDER BY name ASC`)).rows); }
     catch (err) { res.status(500).json({ error: "Database error" }); }
   });
+
+  app.get("/api/clients/:id", authenticateHR, async (req, res) => {
+    try {
+      const { rows } = await query(`SELECT * FROM clients WHERE id = $1`, [req.params.id]);
+      if (rows.length === 0) return res.status(404).json({ error: "Client not found" });
+      res.json(rows[0]);
+    } catch (err) {
+      res.status(500).json({ error: "Database error" });
+    }
+  });
+
   app.post("/api/clients", authenticateHR, async (req, res) => {
     const { name, vat_number, contact_email, phone, address, notes } = req.body;
-    try { res.status(201).json((await query(`INSERT INTO clients (name, vat_number, contact_email, phone, address, notes) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`, [name, vat_number || null, contact_email || null, phone || null, address || null, notes || null])).rows[0]); }
+    try { 
+      const { rows } = await query(`INSERT INTO clients (name, vat_number, contact_email, phone, address, notes) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`, [name, vat_number || null, contact_email || null, phone || null, address || null, notes || null]);
+      const client = rows[0];
+      const ctx = getAuditContext(req);
+      logAudit(query, { ...ctx, action: 'CREATE', entityType: 'client', entityId: client.id, details: { name } });
+      res.status(201).json(client); 
+    }
     catch (err) { res.status(500).json({ error: "Database error" }); }
+  });
+
+  app.put("/api/clients/:id", authenticateHR, async (req, res) => {
+    const { name, vat_number, contact_email, phone, address, notes } = req.body;
+    try {
+      const { rows } = await query(
+        `UPDATE clients SET name = $1, vat_number = $2, contact_email = $3, phone = $4, address = $5, notes = $6 
+         WHERE id = $7 RETURNING *`,
+        [name, vat_number || null, contact_email || null, phone || null, address || null, notes || null, req.params.id]
+      );
+      if (rows.length === 0) return res.status(404).json({ error: "Client not found" });
+      
+      const ctx = getAuditContext(req);
+      logAudit(query, { ...ctx, action: 'UPDATE', entityType: 'client', entityId: parseInt(req.params.id), details: { name } });
+      
+      res.json(rows[0]);
+    } catch (err) {
+      res.status(500).json({ error: "Database error" });
+    }
+  });
+
+  app.delete("/api/clients/:id", authenticateHR, async (req, res) => {
+    try {
+      await query(`DELETE FROM clients WHERE id = $1`, [req.params.id]);
+      
+      const ctx = getAuditContext(req);
+      logAudit(query, { ...ctx, action: 'DELETE', entityType: 'client', entityId: parseInt(req.params.id) });
+      
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Database error. Client might be linked to projects." });
+    }
   });
 };
