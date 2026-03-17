@@ -133,11 +133,11 @@ export default function FatturatoDashboard({ isHR }) {
   const addLineToClient = (cIdx) => { const newClients = [...fattForm.clients]; newClients[cIdx].lines.push({ ...EMPTY_LINE }); setFattForm({ ...fattForm, clients: newClients }); };
   const removeLineFromClient = (cIdx, lIdx) => { const newClients = [...fattForm.clients]; newClients[cIdx].lines.splice(lIdx, 1); setFattForm({ ...fattForm, clients: newClients }); };
   const handleLineChange = (cIdx, lIdx, field, val) => { const newClients = [...fattForm.clients]; newClients[cIdx].lines[lIdx][field] = val; setFattForm({ ...fattForm, clients: newClients }); };
-  const addOrdineToLine = (cIdx, lIdx) => { 
-    const newClients = [...fattForm.clients]; 
+  const addOrdineToLine = (cIdx, lIdx) => {
+    const newClients = [...fattForm.clients];
     if (!newClients[cIdx].lines[lIdx].ordini) newClients[cIdx].lines[lIdx].ordini = [];
-    newClients[cIdx].lines[lIdx].ordini.push({ label: "", percentage: "" }); 
-    setFattForm({ ...fattForm, clients: newClients }); 
+    newClients[cIdx].lines[lIdx].ordini.push({ label: "", percentage: "" });
+    setFattForm({ ...fattForm, clients: newClients });
   };
   const removeOrdineFromLine = (cIdx, lIdx, oIdx) => {
     const newClients = [...fattForm.clients];
@@ -265,17 +265,17 @@ export default function FatturatoDashboard({ isHR }) {
                           {/* Fatturato Ordine (%) Col */}
                           <td style={{ padding: "4px 14px", fontSize: 12, minWidth: 200, verticalAlign: "middle" }}>
                             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                               {ordini.map(ord => (
-                                 <div key={ord.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 4, padding: "2px 6px", fontSize: 11 }}>
-                                   <span title={ord.note || ""}>
-                                     <strong style={{ color: "#1D4ED8" }}>{ord.label}</strong>: {parseFloat(ord.percentage)}%
-                                     <span style={{ marginLeft: 6, color: "#6B7280", fontStyle: "italic" }}>
-                                       (€{fmtEu(valOrdine * (parseFloat(ord.percentage) / 100))})
-                                     </span>
-                                   </span>
-                                 </div>
-                               ))}
-                               {ordini.length === 0 && <span style={{ color: "#9CA3AF", fontSize: 10 }}>None</span>}
+                              {ordini.map(ord => (
+                                <div key={ord.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 4, padding: "2px 6px", fontSize: 11 }}>
+                                  <span title={ord.note || ""}>
+                                    <strong style={{ color: "#1D4ED8" }}>{ord.label}</strong>: {parseFloat(ord.percentage)}%
+                                    <span style={{ marginLeft: 6, color: "#6B7280", fontStyle: "italic" }}>
+                                      (€{fmtEu(valOrdine * (parseFloat(ord.percentage) / 100))})
+                                    </span>
+                                  </span>
+                                </div>
+                              ))}
+                              {ordini.length === 0 && <span style={{ color: "#9CA3AF", fontSize: 10 }}>None</span>}
                             </div>
                           </td>
 
@@ -389,12 +389,12 @@ export default function FatturatoDashboard({ isHR }) {
                           <div style={{ flex: 1 }}><input type="number" placeholder="Fatturato €" value={line.fatturato_amount} onChange={e => handleLineChange(cIdx, lIdx, "fatturato_amount", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
                           <button onClick={() => removeLineFromClient(cIdx, lIdx)} disabled={client.lines.length === 1} style={{ background: "#F3F4F6", color: "#DC2626", border: "none", padding: "6px 10px", borderRadius: 6, cursor: client.lines.length > 1 ? "pointer" : "not-allowed" }}>✕</button>
                         </div>
-                        
+
                         {/* Nested Ordini (Percentages) */}
                         <div style={{ marginLeft: 20, borderLeft: "2px solid #E5E7EB", paddingLeft: 12 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                             <span style={{ fontSize: 9, fontWeight: 700, color: "#6B7280" }}>PAYMENT SCHEDULE (%)</span>
-                             <button onClick={() => addOrdineToLine(cIdx, lIdx)} style={{ background: "#EEF2FF", color: "#4F46E5", border: "1px solid #C7D2FE", padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>+ Add %</button>
+                            <span style={{ fontSize: 9, fontWeight: 700, color: "#6B7280" }}>PAYMENT SCHEDULE (%)</span>
+                            <button onClick={() => addOrdineToLine(cIdx, lIdx)} style={{ background: "#EEF2FF", color: "#4F46E5", border: "1px solid #C7D2FE", padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>+ Add %</button>
                           </div>
                           {(line.ordini || []).map((ord, oIdx) => (
                             <div key={oIdx} style={{ display: "flex", gap: 4, marginBottom: 4 }}>

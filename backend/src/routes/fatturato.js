@@ -65,19 +65,28 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       const yearPrefix = (year && year !== 'all') ? String(year).slice(2) : null;
 
       const result = await query(`
+        WITH line_agg AS (
+          SELECT 
+            fl.commessa_client_id,
+            SUM(fl.valore_ordine) as valore_sum,
+            SUM(fl.fatturato_amount) as fatturato_sum,
+            SUM(COALESCE((
+              SELECT SUM(fl.valore_ordine * fo.percentage / 100)
+              FROM fatturato_ordini fo
+              WHERE fo.fatturato_line_id = fl.id
+            ), 0)) as scheduled_sum
+          FROM fatturato_lines fl
+          GROUP BY fl.commessa_client_id
+        )
         SELECT 
           c.task_id,
           LEFT(c.comm_number, 2) as year_code,
-          SUM(fl.valore_ordine)    AS total_valore_ordine,
-          SUM(fl.fatturato_amount) AS total_fatturato,
-          SUM(COALESCE((
-            SELECT SUM(fl.valore_ordine * fo.percentage / 100)
-            FROM fatturato_ordini fo
-            WHERE fo.fatturato_line_id = fl.id
-          ), 0)) AS total_scheduled_amount
+          SUM(la.valore_sum)    AS total_valore_ordine,
+          SUM(la.fatturato_sum) AS total_fatturato,
+          SUM(la.scheduled_sum) AS total_scheduled_amount
         FROM commesse c
         JOIN commessa_clients cc ON c.id = cc.commessa_id
-        JOIN fatturato_lines fl ON cc.id = fl.commessa_client_id
+        JOIN line_agg la ON cc.id = la.commessa_client_id
         WHERE c.task_id IS NOT NULL
           AND ($1::text IS NULL OR c.comm_number LIKE $1 || '-%')
         GROUP BY c.task_id, LEFT(c.comm_number, 2)
@@ -114,7 +123,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
                 INSERT INTO fatturato_lines (commessa_client_id, attivita, descrizione, valore_ordine, fatturato_amount, rimanente_probabile, proforma)
                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
               `, [ccId, l.attivita || null, l.descrizione || null, parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0, parseFloat(l.rimanente_probabile) || 0, parseFloat(l.proforma) || 0]);
-              
+
               const lineId = flRes.rows[0].id;
               if (l.ordini && l.ordini.length > 0) {
                 for (const o of l.ordini) {
@@ -163,7 +172,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
                 INSERT INTO fatturato_lines (commessa_client_id, attivita, descrizione, valore_ordine, fatturato_amount, rimanente_probabile, proforma)
                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
               `, [ccId, l.attivita || null, l.descrizione || null, parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0, parseFloat(l.rimanente_probabile) || 0, parseFloat(l.proforma) || 0]);
-              
+
               const lineId = flRes.rows[0].id;
               if (l.ordini && l.ordini.length > 0) {
                 for (const o of l.ordini) {
