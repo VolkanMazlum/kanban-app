@@ -102,7 +102,18 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
   useEffect(() => { phasesRef.current = phases; }, [phases]);
 
   const handleSave = async (form) => {
-    await onSave(form, phasesRef.current);
+    // Collect all employee IDs from all phases to ensure task-level assignees match phase assignees
+    const allAssignees = new Set();
+    phasesRef.current.forEach(ph => {
+      (ph.assignee_hours || []).forEach(ah => allAssignees.add(Number(ah.id)));
+    });
+    
+    const updatedForm = {
+      ...form,
+      assignee_ids: Array.from(allAssignees)
+    };
+    
+    await onSave(updatedForm, phasesRef.current);
   };
 
   return (

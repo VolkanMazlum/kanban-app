@@ -52,17 +52,22 @@ module.exports = (app, query, authenticate, authenticateHR) => {
 
   app.get("/api/fatturato/by-task", authenticateHR, async (req, res) => {
     try {
+      const year = req.query.year;
+      const yearPrefix = (year && year !== 'all') ? String(year).slice(2) : null;
+      
       const result = await query(`
         SELECT 
           c.task_id,
+          LEFT(c.comm_number, 2) as year_code,
           SUM(fl.valore_ordine)    AS total_valore_ordine,
           SUM(fl.fatturato_amount) AS total_fatturato
         FROM commesse c
         JOIN commessa_clients cc ON c.id = cc.commessa_id
         JOIN fatturato_lines fl ON cc.id = fl.commessa_client_id
         WHERE c.task_id IS NOT NULL
-        GROUP BY c.task_id
-      `);
+          AND ($1::text IS NULL OR c.comm_number LIKE $1 || '-%')
+        GROUP BY c.task_id, LEFT(c.comm_number, 2)
+      `, [yearPrefix]);
       res.json(result.rows);
     } catch (err) {
       console.error("GET /fatturato/by-task error:", err);

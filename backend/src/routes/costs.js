@@ -3,7 +3,7 @@ const { logAudit, getAuditContext } = require("../middleware/auditLog");
 module.exports = (app, query, authenticate, authenticateHR) => {
   app.post("/api/work-hours", authenticate, async (req, res) => {
     const { employee_id, task_id, date, hours, note } = req.body;
-    
+
     // Security check: Standard users can only log for themselves
     if (req.user.role !== 'hr' && parseInt(employee_id) !== req.user.employeeId) {
       return res.status(403).json({ error: "Access denied. You can only log hours for yourself." });
@@ -45,7 +45,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
   app.get("/api/costs", authenticateHR, async (req, res) => {
     const isAllTime = req.query.year === 'all';
     const targetYear = isAllTime ? null : (parseInt(req.query.year) || new Date().getFullYear());
-    
+
     try {
       const result = await query(`
         SELECT 
@@ -64,11 +64,11 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       const employees = result.rows.map(e => {
         const gross = parseFloat(e.current_annual_gross);
         const loggedHours = parseFloat(e.logged_hours);
-        const overtimeHours = parseFloat(e.overtime_hours); 
-        
+        const overtimeHours = parseFloat(e.overtime_hours);
+
         const hourlyRateBase = gross > 0 ? (gross / THEORETICAL_HOURS_CONST) : 0;
         const overtimeCost = overtimeHours * hourlyRateBase;
-        
+
         const totalCost = gross + overtimeCost;
         const totalHours = loggedHours + overtimeHours;
 
@@ -84,9 +84,9 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         };
       });
       res.json(employees);
-    } catch (err) { 
+    } catch (err) {
       console.error(err);
-      res.status(500).json({ error: "Database error" }); 
+      res.status(500).json({ error: "Database error" });
     }
   });
 
@@ -96,7 +96,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
     try {
       const result = await query(
         `INSERT INTO employee_costs (employee_id, annual_gross, valid_from) VALUES ($1, $2, $3) RETURNING *`,
-        [employeeId, annual_gross, valid_from || new Date().toISOString().slice(0,10)]
+        [employeeId, annual_gross, valid_from || new Date().toISOString().slice(0, 10)]
       );
       res.status(201).json(result.rows[0]);
     } catch (err) { res.status(500).json({ error: "Database error" }); }
@@ -116,7 +116,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
   app.post("/api/costs/:employeeId/overtime", authenticateHR, async (req, res) => {
     const { employeeId } = req.params;
     const { year, month, amount, hours } = req.body;
-    const valToSave = amount !== undefined ? amount : (hours || 0); 
+    const valToSave = amount !== undefined ? amount : (hours || 0);
     try {
       const result = await query(
         `INSERT INTO employee_overtime_costs (employee_id, year, month, hours) VALUES ($1, $2, $3, $4)
@@ -139,12 +139,17 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         LEFT JOIN task_revenues tr ON t.id = tr.task_id 
         WHERE 
           $1::int IS NULL
-          OR (EXTRACT(YEAR FROM t.planned_start) <= $1 AND (t.planned_end IS NULL OR EXTRACT(YEAR FROM t.planned_end) >= $1))
-          OR (EXTRACT(YEAR FROM t.actual_start) <= $1 AND (t.actual_end IS NULL OR EXTRACT(YEAR FROM t.actual_end) >= $1))
-          OR (t.planned_start IS NULL AND t.actual_start IS NULL)
+          OR EXISTS (
+            SELECT 1 FROM commesse c 
+            WHERE c.task_id = t.id AND c.comm_number LIKE RIGHT($1::text, 2) || '-%'
+          )
+          OR EXISTS (
+            SELECT 1 FROM employee_work_hours wh 
+            WHERE wh.task_id = t.id AND EXTRACT(YEAR FROM wh.date) = $1
+          )
         ORDER BY t.created_at DESC
       `, [targetYear]);
-      
+
       const hoursRes = await query(`
         SELECT task_id, employee_id, SUM(hours) as total_hours 
         FROM employee_work_hours 

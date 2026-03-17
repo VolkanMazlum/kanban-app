@@ -106,8 +106,8 @@ export default function App() {
         savedTaskId = created.id;
         toast("Task created");
       }
-      if (phases && phases.length > 0 && savedTaskId) {
-        await api.saveTaskPhases(savedTaskId, phases);
+      if (savedTaskId) {
+        await api.saveTaskPhases(savedTaskId, phases || []);
       }
       const [t, k] = await Promise.all([api.getTasks(), isHR ? api.getKPI() : Promise.resolve(null)]);
       setTasks(t); setKpi(k);

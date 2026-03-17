@@ -70,7 +70,7 @@ module.exports = (app, query, authenticate) => {
             ) AS commessa
       FROM tasks t
       LEFT JOIN task_assignees ta ON t.id = ta.task_id
-      LEFT JOIN employees e ON ta.employee_id = e.id
+      LEFT JOIN employees e ON ta.employee_id = e.id AND e.is_active = TRUE
       WHERE 1=1
     `;
       const params = [];
@@ -180,7 +180,7 @@ module.exports = (app, query, authenticate) => {
                ) AS commessa
         FROM tasks t 
         LEFT JOIN task_assignees ta ON t.id = ta.task_id
-        LEFT JOIN employees e ON ta.employee_id = e.id
+        LEFT JOIN employees e ON ta.employee_id = e.id AND e.is_active = TRUE
         WHERE t.id = $1
         GROUP BY t.id
       `;

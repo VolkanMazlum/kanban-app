@@ -71,12 +71,7 @@ module.exports = (app, query, authenticate) => {
             ]
           );
           const phaseId = result.rows[0].id;
-          if (ph.assignee_ids && ph.assignee_ids.length > 0) {
-            await query(
-              "INSERT INTO phase_assignees (phase_id, employee_id) SELECT $1, unnest($2::int[])",
-              [phaseId, ph.assignee_ids]
-            );
-          }
+          
           if (ph.assignee_hours && ph.assignee_hours.length > 0) {
             for (const a of ph.assignee_hours) {
               await query(
