@@ -143,21 +143,40 @@ export default function FatturatoDashboard({ isHR }) {
   const handleClientChange = (cIdx, field, val) => { const newClients = [...fattForm.clients]; newClients[cIdx][field] = val; setFattForm({ ...fattForm, clients: newClients }); };
   const addLineToClient = (cIdx) => { const newClients = [...fattForm.clients]; newClients[cIdx].lines.push({ ...EMPTY_LINE }); setFattForm({ ...fattForm, clients: newClients }); };
   const removeLineFromClient = (cIdx, lIdx) => { const newClients = [...fattForm.clients]; newClients[cIdx].lines.splice(lIdx, 1); setFattForm({ ...fattForm, clients: newClients }); };
-  const handleLineChange = (cIdx, lIdx, field, val) => { const newClients = [...fattForm.clients]; newClients[cIdx].lines[lIdx][field] = val; setFattForm({ ...fattForm, clients: newClients }); };
+
+  const updateFatturatoFromOrdini = (newClients, cIdx, lIdx) => {
+    const line = newClients[cIdx].lines[lIdx];
+    const valOrdine = parseFloat(line.valore_ordine) || 0;
+    const totalPct = (line.ordini || []).reduce((sum, o) => sum + (parseFloat(o.percentage) || 0), 0);
+    // If there are installments, they define the fatturato_amount
+    if ((line.ordini || []).length > 0) {
+      line.fatturato_amount = (valOrdine * totalPct / 100).toFixed(2);
+    }
+  };
+
+  const handleLineChange = (cIdx, lIdx, field, val) => { 
+    const newClients = [...fattForm.clients]; 
+    newClients[cIdx].lines[lIdx][field] = val; 
+    if (field === "valore_ordine") updateFatturatoFromOrdini(newClients, cIdx, lIdx);
+    setFattForm({ ...fattForm, clients: newClients }); 
+  };
   const addOrdineToLine = (cIdx, lIdx) => {
     const newClients = [...fattForm.clients];
     if (!newClients[cIdx].lines[lIdx].ordini) newClients[cIdx].lines[lIdx].ordini = [];
     newClients[cIdx].lines[lIdx].ordini.push({ label: "", percentage: "" });
+    updateFatturatoFromOrdini(newClients, cIdx, lIdx);
     setFattForm({ ...fattForm, clients: newClients });
   };
   const removeOrdineFromLine = (cIdx, lIdx, oIdx) => {
     const newClients = [...fattForm.clients];
     newClients[cIdx].lines[lIdx].ordini.splice(oIdx, 1);
+    updateFatturatoFromOrdini(newClients, cIdx, lIdx);
     setFattForm({ ...fattForm, clients: newClients });
   };
   const handleOrdineChange = (cIdx, lIdx, oIdx, field, val) => {
     const newClients = [...fattForm.clients];
     newClients[cIdx].lines[lIdx].ordini[oIdx][field] = val;
+    if (field === "percentage") updateFatturatoFromOrdini(newClients, cIdx, lIdx);
     setFattForm({ ...fattForm, clients: newClients });
   };
 
@@ -234,7 +253,7 @@ export default function FatturatoDashboard({ isHR }) {
                     const isFirstCli = lIdx === 0;
                     const valOrdine = parseEuNum(line.valore_ordine);
                     const valFatt = parseEuNum(line.fatturato_amount);
-                    const rimanente = valOrdine - valFatt;
+                    const rimanente = Math.max(0, valOrdine - valFatt);
 
                     const ordini = line.ordini || [];
                     const rowBorder = lIdx === clientLines.length - 1 && cIdx !== comm.clients.length - 1 ? "1px dashed #D1D5DB" : cIdx === comm.clients.length - 1 && lIdx === clientLines.length - 1 ? "2px solid #E5E7EB" : "1px solid #F3F4F6";
@@ -292,7 +311,16 @@ export default function FatturatoDashboard({ isHR }) {
 
                           {/* Financial Cols */}
                           <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: "#6366F1", whiteSpace: "nowrap" }}>{valOrdine ? `€${fmtEu(valOrdine)}` : "—"}</td>
-                          <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 700, color: "#059669", whiteSpace: "nowrap" }}>{valFatt ? `€${fmtEu(valFatt)}` : "—"}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 700, color: "#059669", whiteSpace: "nowrap" }}>
+                            <div style={{ display: "flex", flexDirection: "column" }}>
+                              <span>{valFatt ? `€${fmtEu(valFatt)}` : "—"}</span>
+                              {valFatt > 0 && valOrdine > 0 && (
+                                <span style={{ fontSize: 10, color: "#94A3B8", fontWeight: 500 }}>
+                                  ({((valFatt / valOrdine) * 100).toFixed(1)}%)
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: rimanente > 0 ? "#F59E0B" : "#6B7280", whiteSpace: "nowrap" }}>{valOrdine ? `€${fmtEu(rimanente)}` : "—"}</td>
                           <td style={{ padding: "12px 14px", fontSize: 12, color: "#374151", whiteSpace: "nowrap" }}>{line.rimanente_probabile ? `€${fmtEu(line.rimanente_probabile)}` : "—"}</td>
                           <td style={{ padding: "12px 14px", fontSize: 12, color: "#374151", whiteSpace: "nowrap" }}>{line.proforma ? `€${fmtEu(line.proforma)}` : "—"}</td>

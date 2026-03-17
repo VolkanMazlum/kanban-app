@@ -260,8 +260,7 @@ export default function ProjectFinances({ isHR }) {
                     { label: "Overhead Share", align: "center", hint: "Portion of general costs allocated to this project" },
                     { label: "Total Cost", align: "center" },
                     { label: "Valore Ordine", align: "center", hint: "From Fatturato Register" },
-                    { label: "Scheduled (Ordini)", align: "center", hint: "Total Scheduled via Percentages" },
-                    { label: "Fatturato (€)", align: "center", hint: "Already Billed" },
+                    { label: "Fatturato", align: "center", hint: "Already Billed" },
                     { label: "Rimanente", align: "center", hint: "Valore Ordine - Fatturato" },
                     { label: "Net Profit", align: "center" },
                   ].map(h => (
@@ -288,8 +287,8 @@ export default function ProjectFinances({ isHR }) {
 
                   const extraCost = getExtraCost(task.id);
                   const totalCost = labourCost + extraCost;
-                  const rimanente = valoreOrdine - fatturato;
-                  const profit = rimanente - totalCost;
+                  const rimanente = Math.max(0, valoreOrdine - fatturato);
+                  const profit = fatturato - totalCost;
                   const isProfitable = profit >= 0;
 
                   // Weight percentage display (Project's share of Lifetime Order Value)
@@ -324,15 +323,16 @@ export default function ProjectFinances({ isHR }) {
                         </span>
                       </td>
                       <td style={{ padding: "14px 16px", textAlign: "center", color: "#6366F1", fontWeight: 600 }}>{valoreOrdine > 0 ? `€${fmtEu(valoreOrdine)}` : "—"}</td>
-                      <td style={{ padding: "14px 16px", textAlign: "center", color: "#2563EB", fontWeight: 600 }}>
-                        {fattData.total_scheduled > 0 ? (
+                      <td style={{ padding: "14px 16px", textAlign: "center", color: "#059669", fontWeight: 700 }}>
+                        {fatturato > 0 ? (
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                            <span style={{ fontSize: 13, fontWeight: 700 }}>€{fmtEu(fattData.total_scheduled)}</span>
-                            <span style={{ fontSize: 10, color: "#94A3B8" }}>({((fattData.total_scheduled / valoreOrdine) * 100).toFixed(0)}%)</span>
+                            <span style={{ fontSize: 13, fontWeight: 700 }}>€{fmtEu(fatturato)}</span>
+                            {valoreOrdine > 0 && (
+                              <span style={{ fontSize: 10, color: "#94A3B8", fontWeight: 500 }}>({((fatturato / valoreOrdine) * 100).toFixed(1)}%)</span>
+                            )}
                           </div>
                         ) : "—"}
                       </td>
-                      <td style={{ padding: "14px 16px", textAlign: "center", color: "#059669", fontWeight: 700 }}>{fatturato > 0 ? `€${fmtEu(fatturato)}` : "—"}</td>
                       <td style={{ padding: "14px 16px", textAlign: "center", color: rimanente > 0 ? "#F59E0B" : "#6B7280", fontWeight: 600 }}>{valoreOrdine > 0 ? `€${fmtEu(rimanente)}` : "—"}</td>
                       <td style={{ padding: "14px 16px", textAlign: "center" }}>
                         {fatturato > 0 || totalCost > 0 ? (
@@ -351,7 +351,7 @@ export default function ProjectFinances({ isHR }) {
 
               {/* TOTALS ROW */}
               {finances.tasks.length > 0 && (() => {
-                let grandLabour = 0, grandFatturato = 0, grandValore = 0, grandHours = 0, grandExtra = 0, grandScheduled = 0;
+                let grandLabour = 0, grandFatturato = 0, grandValore = 0, grandHours = 0, grandExtra = 0;
                 finances.tasks.forEach(task => {
                   const tHours = finances.task_hours.filter(th => th.task_id === task.id);
                   tHours.forEach(th => {
@@ -364,11 +364,10 @@ export default function ProjectFinances({ isHR }) {
                   const fattData = getTaskFattData(task.id);
                   grandFatturato += fattData.total_fatturato;
                   grandValore += fattData.total_valore_ordine;
-                  grandScheduled += fattData.total_scheduled;
                 });
                 const grandTotal = grandLabour + grandExtra;
-                const grandRimanente = grandValore - grandFatturato;
-                const grandProfit = grandRimanente - grandTotal;
+                const grandRimanente = Math.max(0, grandValore - grandFatturato);
+                const grandProfit = grandFatturato - grandTotal;
                 return (
                   <tfoot>
                     <tr style={{ background: "#F9FAFB", borderTop: "2px solid #E5E7EB" }}>
@@ -379,8 +378,14 @@ export default function ProjectFinances({ isHR }) {
                       <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#F59E0B" }}>- €{fmtEu(grandExtra)}</td>
                       <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#DC2626" }}>- €{fmtEu(grandTotal)}</td>
                       <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#6366F1" }}>€{fmtEu(grandValore)}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#2563EB" }}>€{fmtEu(grandScheduled)}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#059669" }}>€{fmtEu(grandFatturato)}</td>
+                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#059669" }}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                          <span>€{fmtEu(grandFatturato)}</span>
+                          {grandValore > 0 && (
+                            <span style={{ fontSize: 10, color: "#94A3B8", fontWeight: 500 }}>({((grandFatturato / grandValore) * 100).toFixed(1)}%)</span>
+                          )}
+                        </div>
+                      </td>
                       <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: grandRimanente > 0 ? "#F59E0B" : "#6B7280" }}>€{fmtEu(grandRimanente)}</td>
                       <td style={{ padding: "12px 16px", textAlign: "center" }}>
                         <span style={{ fontSize: 13, fontWeight: 800, color: grandProfit >= 0 ? "#059669" : "#DC2626", background: grandProfit >= 0 ? "#F0FDF4" : "#FEF2F2", padding: "4px 10px", borderRadius: 6 }}>
