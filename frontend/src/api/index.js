@@ -138,6 +138,14 @@ export const deleteFatturato = (id) => {
   });
 };
 
+// ── FATTURATO ORDINI (percentage-based installments per attivita) ──
+export const getLineOrdini  = (lineId)       => req(`/fatturato-lines/${lineId}/ordini`);
+export const createOrdine   = (lineId, data) => req(`/fatturato-lines/${lineId}/ordini`, { method: "POST",   body: JSON.stringify(data) });
+export const updateOrdine   = (id, data)     => req(`/fatturato-ordini/${id}`,           { method: "PUT",    body: JSON.stringify(data) });
+export const deleteOrdine   = (id)           => req(`/fatturato-ordini/${id}`,           { method: "DELETE" });
+
+
+
 // ── CLIENTS ──
 export const getClients = () => {
   return req("/clients");

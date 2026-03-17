@@ -1,6 +1,17 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import * as api from "../api";
-import { EMPTY_LINE, EMPTY_CLIENT, EMPTY_FORM, inpStyle } from "../constants/costConstants.js";
+import { EMPTY_LINE, EMPTY_CLIENT, EMPTY_FORM, EMPTY_ORDINE, inpStyle } from "../constants/costConstants.js";
+
+// Utility formatting
+const parseEuNum = (val) => {
+  if (!val) return 0;
+  if (typeof val === "number") return val;
+  const str = String(val).trim();
+  if (str.includes(".") && str.includes(",")) return parseFloat(str.replace(/\./g, "").replace(",", "."));
+  if (str.includes(",")) return parseFloat(str.replace(",", "."));
+  return parseFloat(str) || 0;
+};
+const fmtEu = (num) => parseFloat(num || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function FatturatoDashboard({ isHR }) {
   const currentYear = new Date().getFullYear();
@@ -12,15 +23,6 @@ export default function FatturatoDashboard({ isHR }) {
   const [clients, setClients] = useState([]);
   const [fattFilterClient, setFattFilterClient] = useState("");
 
-  const parseEuNum = (val) => {
-    if (!val) return 0;
-    if (typeof val === "number") return val;
-    const str = String(val).trim();
-    if (str.includes(".") && str.includes(",")) return parseFloat(str.replace(/\./g, "").replace(",", "."));
-    if (str.includes(",")) return parseFloat(str.replace(",", "."));
-    return parseFloat(str) || 0;
-  };
-
   const [showFattModal, setShowFattModal] = useState(false);
   const [editingFatt, setEditingFatt] = useState(null);
   const [fattForm, setFattForm] = useState(EMPTY_FORM);
@@ -30,42 +32,44 @@ export default function FatturatoDashboard({ isHR }) {
   const [clientForm, setClientForm] = useState({ name: "", vat_number: "" });
   const [savingClient, setSavingClient] = useState(false);
 
-  useEffect(() => {
-    if (!isHR) return;
+  const fetchData = () => {
     Promise.all([
       api.getFatturato(selectedYear),
       api.getClients(),
       api.getTasks()
     ])
-    .then(([fatt, cls, tasks]) => {
-      setFatturatoList(fatt);
-      setClients(cls);
-      setAllTasks(tasks);
-    })
-    .catch(console.error);
+      .then(([fatt, cls, tasks]) => {
+        setFatturatoList(fatt);
+        setClients(cls);
+        setAllTasks(tasks);
+      })
+      .catch(console.error);
+  };
+
+  useEffect(() => {
+    if (isHR) fetchData();
   }, [isHR, selectedYear]);
 
   if (!isHR) {
     return <div style={{ padding: 40, textAlign: "center", color: "#6B7280" }}>Unauthorized access. HR privileges required.</div>;
   }
 
+  // ---- COMMESSA CRUD ----
   const openNewFatt = () => { setEditingFatt(null); setFattForm(EMPTY_FORM); setShowFattModal(true); };
-  
+
   const openEditFatt = (row) => {
     setEditingFatt(row);
     const linkedTask = allTasks.find(t => t.id === row.task_id);
-    
+
     let initialClients = row.clients && row.clients.length > 0 ? row.clients.map(c => ({
       ...c, lines: c.lines && c.lines.length > 0 ? c.lines : [{ ...EMPTY_LINE }]
     })) : [{ ...EMPTY_CLIENT }];
 
     if (linkedTask && linkedTask.phases) {
       const relevantPhases = linkedTask.phases.filter(ph => ph.status === 'active' || ph.status === 'done');
-      
       initialClients = initialClients.map(client => {
         const existingActivities = new Set(client.lines.map(l => l.attivita));
         const missingPhases = relevantPhases.filter(ph => !existingActivities.has(ph.name));
-        
         if (missingPhases.length > 0) {
           const linesToAdd = missingPhases.map(ph => ({ ...EMPTY_LINE, attivita: ph.name }));
           const filteredLines = client.lines.filter(l => l.attivita || l.valore_ordine || l.fatturato_amount);
@@ -76,8 +80,8 @@ export default function FatturatoDashboard({ isHR }) {
     }
 
     setFattForm({
-      task_id: row.task_id || "", 
-      comm_number: row.comm_number || "", 
+      task_id: row.task_id || "",
+      comm_number: row.comm_number || "",
       name: row.name || "",
       clients: initialClients
     });
@@ -89,8 +93,7 @@ export default function FatturatoDashboard({ isHR }) {
     try {
       if (editingFatt) await api.updateFatturato(editingFatt.id, fattForm);
       else await api.createFatturato(fattForm);
-      const fresh = await api.getFatturato(selectedYear);
-      setFatturatoList(fresh); 
+      fetchData();
       setShowFattModal(false);
     } catch (err) { console.error(err); }
     setSavingFatt(false);
@@ -100,17 +103,17 @@ export default function FatturatoDashboard({ isHR }) {
     if (!window.confirm("Delete this entire Commessa and ALL its clients/activities?")) return;
     try {
       await api.deleteFatturato(id);
-      const fresh = await api.getFatturato(selectedYear);
-      setFatturatoList(fresh);
+      fetchData();
     } catch (err) { console.error(err); }
   };
 
+  // ---- CLIENT CRUD ----
   const handleSaveClient = async () => {
     if (!clientForm.name.trim()) return;
     setSavingClient(true);
     try {
       const saved = await api.createClient(clientForm);
-      setClients(p => [...p, saved]); 
+      setClients(p => [...p, saved]);
       setShowClientModal(false);
     } catch (err) { console.error(err); }
     setSavingClient(false);
@@ -118,28 +121,45 @@ export default function FatturatoDashboard({ isHR }) {
 
   const filteredFatturatoList = fattFilterClient
     ? fatturatoList.map(comm => ({
-        ...comm,
-        clients: comm.clients.filter(c => String(c.client_id) === String(fattFilterClient))
-      })).filter(comm => comm.clients.length > 0)
+      ...comm,
+      clients: comm.clients.filter(c => String(c.client_id) === String(fattFilterClient))
+    })).filter(comm => comm.clients.length > 0)
     : fatturatoList;
 
+  // Form Handlers
   const addClientBlock = () => setFattForm({ ...fattForm, clients: [...fattForm.clients, { ...EMPTY_CLIENT }] });
   const removeClientBlock = (cIdx) => { const newClients = [...fattForm.clients]; newClients.splice(cIdx, 1); setFattForm({ ...fattForm, clients: newClients }); };
   const handleClientChange = (cIdx, field, val) => { const newClients = [...fattForm.clients]; newClients[cIdx][field] = val; setFattForm({ ...fattForm, clients: newClients }); };
   const addLineToClient = (cIdx) => { const newClients = [...fattForm.clients]; newClients[cIdx].lines.push({ ...EMPTY_LINE }); setFattForm({ ...fattForm, clients: newClients }); };
   const removeLineFromClient = (cIdx, lIdx) => { const newClients = [...fattForm.clients]; newClients[cIdx].lines.splice(lIdx, 1); setFattForm({ ...fattForm, clients: newClients }); };
   const handleLineChange = (cIdx, lIdx, field, val) => { const newClients = [...fattForm.clients]; newClients[cIdx].lines[lIdx][field] = val; setFattForm({ ...fattForm, clients: newClients }); };
+  const addOrdineToLine = (cIdx, lIdx) => { 
+    const newClients = [...fattForm.clients]; 
+    if (!newClients[cIdx].lines[lIdx].ordini) newClients[cIdx].lines[lIdx].ordini = [];
+    newClients[cIdx].lines[lIdx].ordini.push({ label: "", percentage: "" }); 
+    setFattForm({ ...fattForm, clients: newClients }); 
+  };
+  const removeOrdineFromLine = (cIdx, lIdx, oIdx) => {
+    const newClients = [...fattForm.clients];
+    newClients[cIdx].lines[lIdx].ordini.splice(oIdx, 1);
+    setFattForm({ ...fattForm, clients: newClients });
+  };
+  const handleOrdineChange = (cIdx, lIdx, oIdx, field, val) => {
+    const newClients = [...fattForm.clients];
+    newClients[cIdx].lines[lIdx].ordini[oIdx][field] = val;
+    setFattForm({ ...fattForm, clients: newClients });
+  };
 
   return (
     <div style={{ padding: "28px 32px", overflowY: "auto", height: "calc(100vh - 65px)", fontFamily: "'Inter',sans-serif", background: "#F9FAFB" }}>
-      
+
       {/* HEADER */}
       <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
             <h2 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>Fatturato / Revenue Register</h2>
-            <select 
-              value={selectedYear} 
+            <select
+              value={selectedYear}
               onChange={e => setSelectedYear(e.target.value === "all" ? "all" : parseInt(e.target.value))}
               style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #D1D5DB", fontSize: 14, fontWeight: 700, color: "#2563EB", background: "#EFF6FF", outline: "none", cursor: "pointer" }}
             >
@@ -160,7 +180,7 @@ export default function FatturatoDashboard({ isHR }) {
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          
+
           <button onClick={openNewFatt} style={{ background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
             + New Commessa
           </button>
@@ -170,10 +190,18 @@ export default function FatturatoDashboard({ isHR }) {
       {/* DATA TABLE */}
       <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E5E7EB", overflowX: "auto" }}>
         {filteredFatturatoList.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>No entries found.</div> : (
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1200 }}>
+          <table style={{ borderCollapse: "collapse", minWidth: 1300 }}>
             <thead>
               <tr style={{ background: "#F9FAFB" }}>
-                {["Comm.","Task (Project)","Actions","N. Cliente","Cliente","Preventivo","Ordine","Attività","Valore Ordine","Fatturato","Rimanente","Rim. Prob.","Proforma"].map(h => <th key={h} style={{ padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB" }}>{h.toUpperCase()}</th>)}
+                {/* 3 Sticky Columns */}
+                <th style={{ position: "sticky", left: 0, zIndex: 10, background: "#F9FAFB", padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB" }}>COMM.</th>
+                <th style={{ position: "sticky", left: 80, zIndex: 10, background: "#F9FAFB", padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB" }}>TASK (PROJECT)</th>
+                <th style={{ position: "sticky", left: 280, zIndex: 10, background: "#F9FAFB", padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB", borderRight: "2px solid #E5E7EB" }}>ACTIONS</th>
+
+                {/* Scrollable columns */}
+                {["N. Cliente", "Cliente", "Preventivo", "Ordine", "Attività", "Fatturato Ordine (%)", "Valore Ordine", "Fatturato", "Rimanente", "Rim. Prob.", "Proforma"].map(h =>
+                  <th key={h} style={{ padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB" }}>{h.toUpperCase()}</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -182,7 +210,12 @@ export default function FatturatoDashboard({ isHR }) {
                 let commRendered = false;
 
                 return comm.clients.length === 0 ? (
-                  <tr key={comm.id} style={{ borderBottom: "2px solid #E5E7EB" }}><td style={{ padding: "12px 14px", fontWeight: 700 }}>{comm.comm_number}</td><td style={{ padding: "12px 14px" }}>{comm.task_title}</td><td style={{ padding: "12px 14px" }}><button onClick={() => openEditFatt(comm)}>Edit</button></td><td colSpan={10} style={{ color: "#9CA3AF", padding: "12px" }}>No clients added.</td></tr>
+                  <tr key={comm.id} style={{ borderBottom: "2px solid #E5E7EB" }}>
+                    <td style={{ position: "sticky", left: 0, zIndex: 5, background: "#FAFAFA", padding: "12px 14px", fontWeight: 700 }}>{comm.comm_number}</td>
+                    <td style={{ position: "sticky", left: 80, zIndex: 5, background: "#FAFAFA", padding: "12px 14px" }}>{comm.task_title}</td>
+                    <td style={{ position: "sticky", left: 280, zIndex: 5, background: "#FAFAFA", padding: "12px 14px", borderRight: "2px solid #E5E7EB" }}><button onClick={() => openEditFatt(comm)}>Edit</button></td>
+                    <td colSpan={11} style={{ color: "#9CA3AF", padding: "12px" }}>No clients added.</td>
+                  </tr>
                 ) : comm.clients.map((client, cIdx) => {
                   const clientLines = client.lines?.length > 0 ? client.lines : [{}];
                   return clientLines.map((line, lIdx) => {
@@ -192,38 +225,69 @@ export default function FatturatoDashboard({ isHR }) {
                     const valFatt = parseEuNum(line.fatturato_amount);
                     const rimanente = valOrdine - valFatt;
 
+                    const ordini = line.ordini || [];
+                    const rowBorder = lIdx === clientLines.length - 1 && cIdx !== comm.clients.length - 1 ? "1px dashed #D1D5DB" : cIdx === comm.clients.length - 1 && lIdx === clientLines.length - 1 ? "2px solid #E5E7EB" : "1px solid #F3F4F6";
+
                     return (
-                      <tr key={`${comm.id}-${client.id}-${line.id||lIdx}`} style={{ borderBottom: lIdx === clientLines.length-1 && cIdx !== comm.clients.length-1 ? "1px dashed #D1D5DB" : cIdx === comm.clients.length-1 && lIdx === clientLines.length-1 ? "2px solid #E5E7EB" : "1px solid #F3F4F6" }}>
-                        {isFirstComm && (
-                          <>
-                            <td rowSpan={totalLines} style={{ padding: "12px 14px", fontWeight: 800, color: "#4F46E5", verticalAlign: "top", borderRight: "1px solid #E5E7EB", background: "#FAFAFA" }}>{comm.comm_number || "—"}</td>
-                            <td rowSpan={totalLines} style={{ padding: "12px 14px", fontWeight: 600, color: "#111827", verticalAlign: "top", maxWidth: 150, background: "#FAFAFA" }}>{comm.name ? (
+                      <React.Fragment key={`${comm.id}-${client.id}-${line.id || lIdx}`}>
+                        {/* Main Attivita Row */}
+                        <tr style={{ background: "#fff", borderBottom: rowBorder }}>
+                          {isFirstComm && (
+                            <>
+                              <td rowSpan={totalLines} style={{ position: "sticky", left: 0, zIndex: 5, padding: "12px 14px", fontWeight: 800, color: "#4F46E5", verticalAlign: "top", borderRight: "1px solid #E5E7EB", background: "#FAFAFA" }}>{comm.comm_number || "—"}</td>
+                              <td rowSpan={totalLines} style={{ position: "sticky", left: 80, zIndex: 5, padding: "12px 14px", fontWeight: 600, color: "#111827", verticalAlign: "top", width: 200, maxWidth: 200, background: "#FAFAFA" }}>{comm.name ? (
                                 <div><div style={{ fontWeight: 700 }}>{comm.name}</div><div style={{ fontSize: 11, color: "#9CA3AF" }}>{comm.task_title || "—"}</div></div>
                               ) : (comm.task_title || "—")}
-                            </td>
-                            <td rowSpan={totalLines} style={{ padding: "12px 14px", verticalAlign: "top", borderRight: "2px solid #E5E7EB", background: "#FAFAFA" }}>
-                              <div style={{ display: "flex", gap: 4, flexDirection: "column" }}>
-                                <button onClick={() => openEditFatt(comm)} style={{ background: "#F3F4F6", border: "1px solid #D1D5DB", borderRadius: 6, padding: "4px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Edit</button>
-                                <button onClick={() => handleDeleteFatt(comm.id)} style={{ background: "#FEF2F2", color: "#DC2626", border: "1px solid #FECACA", borderRadius: 6, padding: "4px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Delete</button>
-                              </div>
-                            </td>
-                          </>
-                        )}
-                        {isFirstCli && (
-                          <>
-                            <td rowSpan={clientLines.length} style={{ padding: "12px 14px", fontWeight: 700, color: "#6B7280", verticalAlign: "top", background: "#fff" }}>{client.n_cliente || "—"}</td>
-                            <td rowSpan={clientLines.length} style={{ padding: "12px 14px", fontSize: 12, color: "#374151", verticalAlign: "top", fontWeight: 600, background: "#fff" }}>{client.client_name || "—"}</td>
-                            <td rowSpan={clientLines.length} style={{ padding: "12px 14px", fontSize: 12, color: "#374151", verticalAlign: "top", background: "#fff" }}>{client.preventivo || "—"}</td>
-                            <td rowSpan={clientLines.length} style={{ padding: "12px 14px", fontSize: 12, color: "#374151", verticalAlign: "top", borderRight: "1px solid #F3F4F6", background: "#fff" }}>{client.ordine || "—"}</td>
-                          </>
-                        )}
-                        <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: "#111827" }}>{line.attivita || "—"}</td>
-                        <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: "#6366F1" }}>{valOrdine ? `€${valOrdine.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` : "—"}</td>
-                        <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 700, color: "#059669" }}>{valFatt ? `€${valFatt.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` : "—"}</td>
-                        <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: rimanente > 0 ? "#F59E0B" : "#6B7280" }}>{valOrdine ? `€${rimanente.toLocaleString("it-IT", { minimumFractionDigits: 2 })}` : "—"}</td>
-                        <td style={{ padding: "12px 14px", fontSize: 12, color: "#374151" }}>{line.rimanente_probabile ? `€${parseEuNum(line.rimanente_probabile).toLocaleString("it-IT", { minimumFractionDigits: 2 })}` : "—"}</td>
-                        <td style={{ padding: "12px 14px", fontSize: 12, color: "#374151" }}>{line.proforma ? `€${parseEuNum(line.proforma).toLocaleString("it-IT", { minimumFractionDigits: 2 })}` : "—"}</td>
-                      </tr>
+                              </td>
+                              <td rowSpan={totalLines} style={{ position: "sticky", left: 280, zIndex: 5, padding: "12px 14px", verticalAlign: "top", borderRight: "2px solid #E5E7EB", background: "#FAFAFA", width: 80 }}>
+                                <div style={{ display: "flex", gap: 4, flexDirection: "column" }}>
+                                  <button onClick={() => openEditFatt(comm)} style={{ background: "#F3F4F6", border: "1px solid #D1D5DB", borderRadius: 6, padding: "4px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Edit</button>
+                                  <button onClick={() => handleDeleteFatt(comm.id)} style={{ background: "#FEF2F2", color: "#DC2626", border: "1px solid #FECACA", borderRadius: 6, padding: "4px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Delete</button>
+                                </div>
+                              </td>
+                            </>
+                          )}
+                          {isFirstCli && (
+                            <>
+                              <td rowSpan={clientLines.length} style={{ padding: "12px 14px", fontWeight: 700, color: "#6B7280", verticalAlign: "top" }}>{client.n_cliente || "—"}</td>
+                              <td rowSpan={clientLines.length} style={{ padding: "12px 14px", fontSize: 12, color: "#374151", verticalAlign: "top", fontWeight: 600, maxWidth: 150 }}>{client.client_name || "—"}</td>
+                              <td rowSpan={clientLines.length} style={{ padding: "12px 14px", fontSize: 12, color: "#374151", verticalAlign: "top", maxWidth: 120 }}>{client.preventivo || "—"}</td>
+                              <td rowSpan={clientLines.length} style={{ padding: "12px 14px", fontSize: 12, color: "#374151", verticalAlign: "top", borderRight: "1px solid #F3F4F6", maxWidth: 150 }}>{client.ordine || "—"}</td>
+                            </>
+                          )}
+
+                          {/* Attivita Col */}
+                          <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: "#111827", width: 250, maxWidth: 250, whiteSpace: "normal" }}>
+                            {line.attivita || "—"}
+                            {line.descrizione && <div style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 400, marginTop: 4 }}>{line.descrizione}</div>}
+                          </td>
+
+                          {/* Fatturato Ordine (%) Col */}
+                          <td style={{ padding: "4px 14px", fontSize: 12, minWidth: 200, verticalAlign: "middle" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                               {ordini.map(ord => (
+                                 <div key={ord.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 4, padding: "2px 6px", fontSize: 11 }}>
+                                   <span title={ord.note || ""}>
+                                     <strong style={{ color: "#1D4ED8" }}>{ord.label}</strong>: {parseFloat(ord.percentage)}%
+                                     <span style={{ marginLeft: 6, color: "#6B7280", fontStyle: "italic" }}>
+                                       (€{fmtEu(valOrdine * (parseFloat(ord.percentage) / 100))})
+                                     </span>
+                                   </span>
+                                 </div>
+                               ))}
+                               {ordini.length === 0 && <span style={{ color: "#9CA3AF", fontSize: 10 }}>None</span>}
+                            </div>
+                          </td>
+
+                          {/* Financial Cols */}
+                          <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: "#6366F1", whiteSpace: "nowrap" }}>{valOrdine ? `€${fmtEu(valOrdine)}` : "—"}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 700, color: "#059669", whiteSpace: "nowrap" }}>{valFatt ? `€${fmtEu(valFatt)}` : "—"}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: rimanente > 0 ? "#F59E0B" : "#6B7280", whiteSpace: "nowrap" }}>{valOrdine ? `€${fmtEu(rimanente)}` : "—"}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 12, color: "#374151", whiteSpace: "nowrap" }}>{line.rimanente_probabile ? `€${fmtEu(line.rimanente_probabile)}` : "—"}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 12, color: "#374151", whiteSpace: "nowrap" }}>{line.proforma ? `€${fmtEu(line.proforma)}` : "—"}</td>
+                        </tr>
+
+                      </React.Fragment>
                     );
                   })
                 });
@@ -233,7 +297,7 @@ export default function FatturatoDashboard({ isHR }) {
         )}
       </div>
 
-      {/* FATTURATO MODAL */}
+      {/* FATTURATO MODAL (Edit Hierarchy) */}
       {showFattModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, backdropFilter: "blur(4px)", padding: "40px 0" }}>
           <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 960, boxShadow: "0 20px 60px rgba(0,0,0,0.15)", maxHeight: "100%", overflowY: "auto" }}>
@@ -249,15 +313,15 @@ export default function FatturatoDashboard({ isHR }) {
                 <div><label style={{ fontSize: 10, fontWeight: 700 }}>Commessa Name</label><input value={fattForm.name || ""} onChange={e => setFattForm({ ...fattForm, name: e.target.value })} style={inpStyle} placeholder="es. HOTEL DIANA MAJESTIC" /></div>
                 <div>
                   <label style={{ fontSize: 10, fontWeight: 700 }}>Linked Task</label>
-                  <select 
-                    value={fattForm.task_id} 
+                  <select
+                    value={fattForm.task_id}
                     onChange={e => {
                       const selectedTaskId = e.target.value;
                       const oldTaskId = fattForm.task_id;
                       const oldTask = allTasks.find(t => String(t.id) === String(oldTaskId));
                       const selectedTask = allTasks.find(t => String(t.id) === String(selectedTaskId));
                       const oldPhaseNames = new Set(oldTask?.phases?.map(p => p.name) || []);
-                      
+
                       let newClients = fattForm.clients.map(client => {
                         let cleanedLines = client.lines.filter(l => {
                           const isFromOldTask = oldPhaseNames.has(l.attivita);
@@ -269,20 +333,17 @@ export default function FatturatoDashboard({ isHR }) {
                           const relevantPhases = selectedTask.phases.filter(ph => ph.status === 'active' || ph.status === 'done');
                           const existingActivities = new Set(cleanedLines.map(l => l.attivita));
                           const missingPhases = relevantPhases.filter(ph => !existingActivities.has(ph.name));
-                          
                           if (missingPhases.length > 0) {
                             const linesToAdd = missingPhases.map(ph => ({ ...EMPTY_LINE, attivita: ph.name }));
                             cleanedLines = cleanedLines.filter(l => l.attivita || l.valore_ordine || l.fatturato_amount);
                             cleanedLines = [...(cleanedLines.length > 0 ? cleanedLines : []), ...linesToAdd];
                           }
                         }
-                        
                         if (cleanedLines.length === 0) cleanedLines = [{ ...EMPTY_LINE }];
                         return { ...client, lines: cleanedLines };
                       });
-
                       setFattForm({ ...fattForm, task_id: selectedTaskId, name: selectedTask ? selectedTask.title : fattForm.name, clients: newClients });
-                    }} 
+                    }}
                     style={inpStyle}
                   >
                     <option value="">— Not Linked —</option>
@@ -301,7 +362,7 @@ export default function FatturatoDashboard({ isHR }) {
               {fattForm.clients.map((client, cIdx) => (
                 <div key={cIdx} style={{ background: "#F9FAFB", padding: 16, borderRadius: 10, border: "2px solid #E5E7EB", marginBottom: 16, position: "relative" }}>
                   {fattForm.clients.length > 1 && <button onClick={() => removeClientBlock(cIdx)} style={{ position: "absolute", top: 16, right: 16, background: "#FEF2F2", color: "#DC2626", border: "none", padding: "4px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Remove Client</button>}
-                  
+
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12, paddingRight: 60 }}>
                     <div><label style={{ fontSize: 10, fontWeight: 700 }}>N. Cliente</label><input value={client.n_cliente} onChange={e => handleClientChange(cIdx, "n_cliente", e.target.value)} style={inpStyle} placeholder="00" /></div>
                     <div>
@@ -321,11 +382,28 @@ export default function FatturatoDashboard({ isHR }) {
                       <button onClick={() => addLineToClient(cIdx)} style={{ background: "#10B981", color: "#fff", border: "none", padding: "4px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>+ Add Line</button>
                     </div>
                     {client.lines.map((line, lIdx) => (
-                      <div key={lIdx} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                        <div style={{ flex: 2 }}><input placeholder="Attività" value={line.attivita} onChange={e => handleLineChange(cIdx, lIdx, "attivita", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
-                        <div style={{ flex: 1 }}><input type="number" placeholder="Valore €" value={line.valore_ordine} onChange={e => handleLineChange(cIdx, lIdx, "valore_ordine", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
-                        <div style={{ flex: 1 }}><input type="number" placeholder="Fatturato €" value={line.fatturato_amount} onChange={e => handleLineChange(cIdx, lIdx, "fatturato_amount", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
-                        <button onClick={() => removeLineFromClient(cIdx, lIdx)} disabled={client.lines.length === 1} style={{ background: "#F3F4F6", color: "#DC2626", border: "none", padding: "6px 10px", borderRadius: 6, cursor: client.lines.length > 1 ? "pointer" : "not-allowed" }}>✕</button>
+                      <div key={lIdx} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, padding: 10, marginBottom: 8 }}>
+                        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                          <div style={{ flex: 2 }}><input placeholder="Attività" value={line.attivita} onChange={e => handleLineChange(cIdx, lIdx, "attivita", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
+                          <div style={{ flex: 1 }}><input type="number" placeholder="Valore €" value={line.valore_ordine} onChange={e => handleLineChange(cIdx, lIdx, "valore_ordine", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
+                          <div style={{ flex: 1 }}><input type="number" placeholder="Fatturato €" value={line.fatturato_amount} onChange={e => handleLineChange(cIdx, lIdx, "fatturato_amount", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
+                          <button onClick={() => removeLineFromClient(cIdx, lIdx)} disabled={client.lines.length === 1} style={{ background: "#F3F4F6", color: "#DC2626", border: "none", padding: "6px 10px", borderRadius: 6, cursor: client.lines.length > 1 ? "pointer" : "not-allowed" }}>✕</button>
+                        </div>
+                        
+                        {/* Nested Ordini (Percentages) */}
+                        <div style={{ marginLeft: 20, borderLeft: "2px solid #E5E7EB", paddingLeft: 12 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                             <span style={{ fontSize: 9, fontWeight: 700, color: "#6B7280" }}>PAYMENT SCHEDULE (%)</span>
+                             <button onClick={() => addOrdineToLine(cIdx, lIdx)} style={{ background: "#EEF2FF", color: "#4F46E5", border: "1px solid #C7D2FE", padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>+ Add %</button>
+                          </div>
+                          {(line.ordini || []).map((ord, oIdx) => (
+                            <div key={oIdx} style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+                              <input placeholder="SAL 1" value={ord.label} onChange={e => handleOrdineChange(cIdx, lIdx, oIdx, "label", e.target.value)} style={{ ...inpStyle, flex: 2, padding: "4px", fontSize: 11 }} />
+                              <input type="number" placeholder="%" value={ord.percentage} onChange={e => handleOrdineChange(cIdx, lIdx, oIdx, "percentage", e.target.value)} style={{ ...inpStyle, flex: 1, padding: "4px", fontSize: 11 }} />
+                              <button onClick={() => removeOrdineFromLine(cIdx, lIdx, oIdx)} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 12 }}>✕</button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -333,7 +411,7 @@ export default function FatturatoDashboard({ isHR }) {
               ))}
             </div>
 
-            <button onClick={handleSaveFatt} disabled={savingFatt} style={{ width: "100%", padding: 14, background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>{savingFatt ? "Saving Everything..." : "Save Full Commessa Structure"}</button>
+            <button onClick={handleSaveFatt} disabled={savingFatt} style={{ width: "100%", padding: 14, background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>{savingFatt ? "Saving..." : "Save Commessa Structure"}</button>
           </div>
         </div>
       )}

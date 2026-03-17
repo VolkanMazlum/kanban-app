@@ -12,6 +12,8 @@ export default function ProjectFinances({ isHR }) {
   const [finances, setFinances] = useState({ tasks: [], task_hours: [] });
   const [fatturatoByTask, setFatturatoByTask] = useState([]);
 
+  const fmtEu = (num) => parseFloat(num || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
   // Custom parser to handle European number strings like "295.000,50" or "295,000" correctly
   const parseEuNum = (val) => {
     if (!val) return 0;
@@ -120,6 +122,7 @@ export default function ProjectFinances({ isHR }) {
     return {
       total_valore_ordine: relevant.reduce((sum, r) => sum + parseEuNum(r.total_valore_ordine), 0),
       total_fatturato: relevant.reduce((sum, r) => sum + parseEuNum(r.total_fatturato), 0),
+      total_scheduled: relevant.reduce((sum, r) => sum + parseEuNum(r.total_scheduled_amount), 0),
       byYear: relevant
     };
   };
@@ -257,7 +260,8 @@ export default function ProjectFinances({ isHR }) {
                     { label: "Overhead Share", align: "center", hint: "Portion of general costs allocated to this project" },
                     { label: "Total Cost", align: "center" },
                     { label: "Valore Ordine", align: "center", hint: "From Fatturato Register" },
-                    { label: "Fatturato (€)", align: "center", hint: "From Fatturato Register" },
+                    { label: "Scheduled (Ordini)", align: "center", hint: "Total Scheduled via Percentages" },
+                    { label: "Fatturato (€)", align: "center", hint: "Already Billed" },
                     { label: "Rimanente", align: "center", hint: "Valore Ordine - Fatturato" },
                     { label: "Net Profit", align: "center" },
                   ].map(h => (
@@ -297,7 +301,7 @@ export default function ProjectFinances({ isHR }) {
                     <tr key={task.id} style={{ borderTop: "1px solid #F3F4F6", transition: "background 0.15s" }} onMouseEnter={(e) => e.currentTarget.style.background = "#F9FAFB"} onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
                       <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 600, color: "#111827" }}>{task.title}</td>
                       <td style={{ padding: "14px 16px", textAlign: "center", fontSize: 13, fontWeight: 600, color: "#374151" }}>{totalHours.toFixed(1)}h</td>
-                      <td style={{ padding: "14px 16px", textAlign: "center", fontSize: 13, fontWeight: 600, color: "#DC2626" }}>- €{labourCost.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td style={{ padding: "14px 16px", textAlign: "center", fontSize: 13, fontWeight: 600, color: "#DC2626" }}>- €{fmtEu(labourCost)}</td>
                       <td style={{ padding: "14px 16px", textAlign: "center" }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
                           <span style={{ fontSize: 13, fontWeight: 700, color: (valoreOrdine > 0) ? "#4F46E5" : "#D1D5DB" }}>
@@ -309,19 +313,27 @@ export default function ProjectFinances({ isHR }) {
                       <td style={{ padding: "14px 16px", textAlign: "center" }}>
                         {extraCost > 0 ? (
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: "#F59E0B" }}>- €{extraCost.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "#F59E0B" }}>- €{fmtEu(extraCost)}</span>
                             <span style={{ fontSize: 10, color: "#D1D5DB" }}>of overhead</span>
                           </div>
                         ) : <span style={{ color: "#D1D5DB", fontSize: 13 }}>—</span>}
                       </td>
                       <td style={{ padding: "14px 16px", textAlign: "center" }}>
                         <span style={{ fontSize: 13, fontWeight: 700, color: totalCost > 0 ? "#DC2626" : "#D1D5DB", background: totalCost > 0 ? "#FEF2F2" : "transparent", padding: totalCost > 0 ? "3px 8px" : "0", borderRadius: 6 }}>
-                          {totalCost > 0 ? `- €${totalCost.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+                          {totalCost > 0 ? `- €${fmtEu(totalCost)}` : "—"}
                         </span>
                       </td>
-                      <td style={{ padding: "14px 16px", textAlign: "center", color: "#6366F1", fontWeight: 600 }}>{valoreOrdine > 0 ? `€${valoreOrdine.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}</td>
-                      <td style={{ padding: "14px 16px", textAlign: "center", color: "#059669", fontWeight: 700 }}>{fatturato > 0 ? `€${fatturato.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}</td>
-                      <td style={{ padding: "14px 16px", textAlign: "center", color: rimanente > 0 ? "#F59E0B" : "#6B7280", fontWeight: 600 }}>{valoreOrdine > 0 ? `€${rimanente.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}</td>
+                      <td style={{ padding: "14px 16px", textAlign: "center", color: "#6366F1", fontWeight: 600 }}>{valoreOrdine > 0 ? `€${fmtEu(valoreOrdine)}` : "—"}</td>
+                      <td style={{ padding: "14px 16px", textAlign: "center", color: "#2563EB", fontWeight: 600 }}>
+                        {fattData.total_scheduled > 0 ? (
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                            <span style={{ fontSize: 13, fontWeight: 700 }}>€{fmtEu(fattData.total_scheduled)}</span>
+                            <span style={{ fontSize: 10, color: "#94A3B8" }}>({((fattData.total_scheduled / valoreOrdine) * 100).toFixed(0)}%)</span>
+                          </div>
+                        ) : "—"}
+                      </td>
+                      <td style={{ padding: "14px 16px", textAlign: "center", color: "#059669", fontWeight: 700 }}>{fatturato > 0 ? `€${fmtEu(fatturato)}` : "—"}</td>
+                      <td style={{ padding: "14px 16px", textAlign: "center", color: rimanente > 0 ? "#F59E0B" : "#6B7280", fontWeight: 600 }}>{valoreOrdine > 0 ? `€${fmtEu(rimanente)}` : "—"}</td>
                       <td style={{ padding: "14px 16px", textAlign: "center" }}>
                         {fatturato > 0 || totalCost > 0 ? (
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
@@ -339,7 +351,7 @@ export default function ProjectFinances({ isHR }) {
 
               {/* TOTALS ROW */}
               {finances.tasks.length > 0 && (() => {
-                let grandLabour = 0, grandFatturato = 0, grandValore = 0, grandHours = 0, grandExtra = 0;
+                let grandLabour = 0, grandFatturato = 0, grandValore = 0, grandHours = 0, grandExtra = 0, grandScheduled = 0;
                 finances.tasks.forEach(task => {
                   const tHours = finances.task_hours.filter(th => th.task_id === task.id);
                   tHours.forEach(th => {
@@ -352,6 +364,7 @@ export default function ProjectFinances({ isHR }) {
                   const fattData = getTaskFattData(task.id);
                   grandFatturato += fattData.total_fatturato;
                   grandValore += fattData.total_valore_ordine;
+                  grandScheduled += fattData.total_scheduled;
                 });
                 const grandTotal = grandLabour + grandExtra;
                 const grandRimanente = grandValore - grandFatturato;
@@ -361,13 +374,14 @@ export default function ProjectFinances({ isHR }) {
                     <tr style={{ background: "#F9FAFB", borderTop: "2px solid #E5E7EB" }}>
                       <td style={{ padding: "12px 16px", fontSize: 12, fontWeight: 700, color: "#6B7280" }}>TOTALS</td>
                       <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#374151" }}>{grandHours.toFixed(1)}h</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#DC2626" }}>- €{grandLabour.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#DC2626" }}>- €{fmtEu(grandLabour)}</td>
                       <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 11, color: "#9CA3AF" }}>Σ €{totalWeight.toLocaleString("it-IT", { minimumFractionDigits: 0 })}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#F59E0B" }}>- €{grandExtra.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#DC2626" }}>- €{grandTotal.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#6366F1" }}>€{grandValore.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#059669" }}>€{grandFatturato.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: grandRimanente > 0 ? "#F59E0B" : "#6B7280" }}>€{grandRimanente.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#F59E0B" }}>- €{fmtEu(grandExtra)}</td>
+                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#DC2626" }}>- €{fmtEu(grandTotal)}</td>
+                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#6366F1" }}>€{fmtEu(grandValore)}</td>
+                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#2563EB" }}>€{fmtEu(grandScheduled)}</td>
+                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#059669" }}>€{fmtEu(grandFatturato)}</td>
+                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: grandRimanente > 0 ? "#F59E0B" : "#6B7280" }}>€{fmtEu(grandRimanente)}</td>
                       <td style={{ padding: "12px 16px", textAlign: "center" }}>
                         <span style={{ fontSize: 13, fontWeight: 800, color: grandProfit >= 0 ? "#059669" : "#DC2626", background: grandProfit >= 0 ? "#F0FDF4" : "#FEF2F2", padding: "4px 10px", borderRadius: 6 }}>
                           {grandProfit >= 0 ? "+" : ""}€{grandProfit.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

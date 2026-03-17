@@ -246,8 +246,20 @@ CREATE TABLE IF NOT EXISTS fatturato_lines (
   note TEXT
 );
 
+-- 4. KATMAN: Ödeme Takvimi (Fatturato Ordini - Percentage-based installments per attivita)
+CREATE TABLE IF NOT EXISTS fatturato_ordini (
+  id SERIAL PRIMARY KEY,
+  fatturato_line_id INTEGER NOT NULL REFERENCES fatturato_lines(id) ON DELETE CASCADE,
+  label VARCHAR(255),           -- e.g. "SAL 1", "Acconto", "Saldo finale"
+  percentage NUMERIC(5,2) NOT NULL DEFAULT 0,  -- e.g. 30.00 = 30% of valore_ordine
+  expected_date DATE,
+  note TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_commesse_task ON commesse(task_id);
 CREATE INDEX IF NOT EXISTS idx_commessa_clients_comm ON commessa_clients(commessa_id);
+CREATE INDEX IF NOT EXISTS idx_fatturato_ordini_line ON fatturato_ordini(fatturato_line_id);
 
 -- ==============================================================================
 -- 7. USERS & AUDIT LOGS
