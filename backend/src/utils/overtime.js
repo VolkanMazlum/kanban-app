@@ -14,7 +14,7 @@ async function updateMonthlyOvertime(query, employeeId, year, month) {
           date,
           SUM(hours) as daily_total,
           CASE 
-            WHEN EXTRACT(DOW FROM date) IN (0, 6) THEN SUM(hours)
+            WHEN EXTRACT(DOW FROM date) IN (5, 6) THEN SUM(hours)
             ELSE GREATEST(0, SUM(hours) - 8)
           END as daily_overtime
         FROM employee_work_hours
@@ -34,7 +34,7 @@ async function updateMonthlyOvertime(query, employeeId, year, month) {
       ON CONFLICT (employee_id, year, month) 
       DO UPDATE SET hours = EXCLUDED.hours
     `, [employeeId, year, month, totalOvertime]);
-    
+
     return totalOvertime;
   } catch (err) {
     console.error("updateMonthlyOvertime error:", err);
