@@ -2,119 +2,240 @@ module.exports = (app, query, authenticate) => {
   // ── KPIs ──────────────────────────────────────────────────────
   app.get("/api/kpi", authenticate, async (req, res) => {
     try {
-      const statusRes = await query("SELECT status, COUNT(*) as count FROM tasks GROUP BY status");
+      const year = parseInt(req.query.year) || new Date().getFullYear();
+      const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+      const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+      const monthEnd = new Date(year, month, 0).toISOString().slice(0, 10);
+
+      // 1. Status distribution for the selected month (tasks active/updated in that month)
+      const statusRes = await query(`
+        SELECT status, COUNT(*) as count 
+        FROM tasks 
+        WHERE (planned_start <= $2 AND planned_end >= $1)
+           OR (updated_at::date >= $1 AND updated_at::date <= $2)
+        GROUP BY status
+      `, [monthStart, monthEnd]);
       const by_status = { new: 0, process: 0, blocked: 0, done: 0 };
-      let totalTasks = 0;
+      let monthTotalTasks = 0;
       statusRes.rows.forEach(r => {
         by_status[r.status] = parseInt(r.count, 10);
-        totalTasks += parseInt(r.count, 10);
+        monthTotalTasks += parseInt(r.count, 10);
       });
 
-      const overdueRes = await query("SELECT COUNT(*) as count FROM tasks WHERE deadline < CURRENT_DATE AND status != 'done'");
-      const overdue = parseInt(overdueRes.rows[0].count, 10);
-      
-      const avg_days_to_complete = await query(`
-        SELECT AVG(EXTRACT(EPOCH FROM (actual_end - actual_start)) / 86400) as avg_days
-        FROM tasks WHERE status = 'done' AND actual_start IS NOT NULL AND actual_end IS NOT NULL
-      `);
-      const completed_month_avg  = await query(`
+      // 2. Overdue tasks
+      const overdueRes = await query(`
         SELECT COUNT(*) as count FROM tasks 
-        WHERE status = 'done' AND EXTRACT(MONTH FROM updated_at) = EXTRACT(MONTH FROM CURRENT_DATE)
+        WHERE deadline < CURRENT_DATE AND status != 'done'
       `);
-      
-      // YENİ: Sadece aktif çalışanların çalışma sayılarını sayıyoruz
-      const working_employees_res = await query(`
-        SELECT COUNT(DISTINCT ca.employee_id) as count 
+      const overdue = parseInt(overdueRes.rows[0].count, 10);
+
+      // 3. Completed in selected month
+      const completedMonthRes = await query(`
+        SELECT COUNT(*) as count FROM tasks 
+        WHERE status = 'done' 
+        AND updated_at::date >= $1 AND updated_at::date <= $2
+      `, [monthStart, monthEnd]);
+      const completedMonthCount = parseInt(completedMonthRes.rows[0].count, 10);
+
+      // 4. Monthly Billed Revenue (from lines) + Scheduled Revenue (from installments)
+      const billedRes = await query(`
+        SELECT fl.id, fl.attivita, fl.fatturato_amount, c.name as commessa_name,
+               COALESCE(fl.invoice_date, fl.updated_at, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end) as date
+        FROM fatturato_lines fl
+        JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
+        JOIN commesse c ON cc.commessa_id = c.id
+        LEFT JOIN tasks t ON c.task_id = t.id
+        WHERE (EXTRACT(YEAR FROM COALESCE(fl.invoice_date, fl.updated_at, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end)) = $1
+          AND EXTRACT(MONTH FROM COALESCE(fl.invoice_date, fl.updated_at, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end)) = $2)
+          AND (fl.fatturato_amount > 0 OR fl.invoice_date IS NOT NULL)
+      `, [year, month]);
+
+      const monthlyRevenueTotal = billedRes.rows.reduce((sum, r) => sum + parseFloat(r.fatturato_amount || 0), 0);
+
+      const scheduledRes = await query(`
+        SELECT SUM(fl.valore_ordine * fo.percentage / 100) as total
+        FROM fatturato_ordini fo
+        JOIN fatturato_lines fl ON fo.fatturato_line_id = fl.id
+        LEFT JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
+        LEFT JOIN commesse c ON cc.commessa_id = c.id
+        LEFT JOIN tasks t ON c.task_id = t.id
+        WHERE (COALESCE(fo.expected_date, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end) >= $1 
+          AND COALESCE(fo.expected_date, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end) <= $2)
+          AND fl.fatturato_amount < fl.valore_ordine
+          AND (SELECT SUM(percentage) FROM fatturato_ordini fo2 WHERE fo2.fatturato_line_id = fl.id) >= 99.9
+          AND (
+            fl.invoice_date IS NULL AND (
+              EXISTS (SELECT 1 FROM task_phases tp WHERE tp.task_id = t.id AND LOWER(tp.name) = LOWER(fl.attivita) AND tp.status != 'done') OR
+              (NOT EXISTS (SELECT 1 FROM task_phases tp WHERE tp.task_id = t.id AND LOWER(tp.name) = LOWER(fl.attivita)) AND t.status != 'done')
+            )
+          )
+      `, [monthStart, monthEnd]);
+
+
+      // 4a. Revenue Forecast (Next 3 months) - Combine future scheduled and future line invoices
+      const forecast = [];
+      for (let i = 0; i < 4; i++) {
+        const fDate = new Date(year, month - 1 + i, 1);
+        const fStart = `${fDate.getFullYear()}-${String(fDate.getMonth() + 1).padStart(2, '0')}-01`;
+        const fEnd = new Date(fDate.getFullYear(), fDate.getMonth() + 1, 0).toISOString().slice(0, 10);
+
+        const fBilled = await query(`
+          SELECT fl.attivita, c.name as commessa_name, SUM(fl.fatturato_amount) as amount
+          FROM fatturato_lines fl
+          JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
+          JOIN commesse c ON cc.commessa_id = c.id
+          LEFT JOIN tasks t ON c.task_id = t.id
+          WHERE (EXTRACT(YEAR FROM COALESCE(fl.invoice_date, fl.updated_at, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end)) = $1
+            AND EXTRACT(MONTH FROM COALESCE(fl.invoice_date, fl.updated_at, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end)) = $2)
+            AND (fl.fatturato_amount > 0 OR fl.invoice_date IS NOT NULL)
+          GROUP BY fl.attivita, c.name
+        `, [fDate.getFullYear(), fDate.getMonth() + 1]);
+
+        const fScheduled = await query(`
+          SELECT fl.attivita, c.name as commessa_name, SUM(fl.valore_ordine * fo.percentage / 100) as amount
+          FROM fatturato_ordini fo
+          JOIN fatturato_lines fl ON fo.fatturato_line_id = fl.id
+          LEFT JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
+          LEFT JOIN commesse c ON cc.commessa_id = c.id
+          LEFT JOIN tasks t ON c.task_id = t.id
+          WHERE (COALESCE(fo.expected_date, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end) >= $1 
+            AND COALESCE(fo.expected_date, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end) <= $2)
+            AND fl.fatturato_amount < fl.valore_ordine
+            AND (SELECT SUM(percentage) FROM fatturato_ordini fo2 WHERE fo2.fatturato_line_id = fl.id) >= 99.9
+            AND (
+              fl.invoice_date IS NULL AND (
+                EXISTS (SELECT 1 FROM task_phases tp WHERE tp.task_id = t.id AND LOWER(tp.name) = LOWER(fl.attivita) AND tp.status != 'done') OR
+                (NOT EXISTS (SELECT 1 FROM task_phases tp WHERE tp.task_id = t.id AND LOWER(tp.name) = LOWER(fl.attivita)) AND t.status != 'done')
+              )
+            )
+          GROUP BY fl.attivita, c.name
+        `, [fStart, fEnd]);
+
+        const totalBilled = fBilled.rows.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
+        const totalScheduled = fScheduled.rows.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
+
+        // Combine details
+        const detailsMap = {};
+        fBilled.rows.forEach(r => {
+          const name = r.commessa_name ? `${r.commessa_name}: ${r.attivita}` : (r.attivita || "Unnamed Activity");
+          detailsMap[name] = (detailsMap[name] || 0) + parseFloat(r.amount || 0);
+        });
+        fScheduled.rows.forEach(r => {
+          const name = r.commessa_name ? `${r.commessa_name}: ${r.attivita}` : (r.attivita || "Unnamed Activity");
+          detailsMap[name] = (detailsMap[name] || 0) + parseFloat(r.amount || 0);
+        });
+
+        const details = Object.entries(detailsMap)
+          .map(([name, amount]) => ({ name, amount }))
+          .sort((a, b) => b.amount - a.amount);
+
+        forecast.push({
+          month: fDate.toLocaleString('en-US', { month: 'short' }),
+          total: totalBilled + totalScheduled,
+          details
+        });
+      }
+
+      // 4b. Monthly Labor Costs
+      const laborRes = await query(`
+        SELECT e.name, SUM(wh.hours) as hours,
+               (SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id AND ec.valid_from <= $3 ORDER BY ec.valid_from DESC LIMIT 1) as annual_gross
+        FROM employee_work_hours wh
+        JOIN employees e ON wh.employee_id = e.id
+        WHERE EXTRACT(YEAR FROM wh.date) = $1 AND EXTRACT(MONTH FROM wh.date) = $2
+        GROUP BY e.id, e.name
+      `, [year, month, monthEnd]);
+
+      const labor_details = laborRes.rows.map(r => {
+        const hours = parseFloat(r.hours || 0);
+        const gross = parseFloat(r.annual_gross || 0);
+        const cost = (hours * (gross / 2000)); // Using 2000 as constant theoretical hours
+        return { name: r.name, hours, cost };
+      }).filter(l => l.hours > 0);
+
+      const totalLaborCost = labor_details.reduce((sum, l) => sum + l.cost, 0);
+
+      // 4c. Monthly Overhead (General Costs)
+      const settingsRes = await query(`SELECT key, value FROM settings WHERE key LIKE 'gc_%_' || $1`, [year]);
+      const yearlyOverhead = settingsRes.rows.reduce((sum, r) => sum + (parseFloat(r.value) || 0), 0);
+      const monthlyOverhead = yearlyOverhead / 12;
+
+      // 5. Monthly Phase Completion
+      const phaseCompRes = await query(`
+        SELECT COUNT(*) as completed_phases
+        FROM task_phases
+        WHERE status = 'done'
+        AND end_date >= $1 AND end_date <= $2
+      `, [monthStart, monthEnd]);
+      const completedPhases = phaseCompRes.rows[0].completed_phases || 0;
+
+      // 5. Active Team Size (Active members on task/phases in that month)
+      const teamRes = await query(`
+        SELECT COUNT(DISTINCT employee_id) as active_count
         FROM (
-          SELECT employee_id 
-          FROM task_assignees 
-          WHERE task_id IN (SELECT id FROM tasks WHERE status != 'done')
-          
+          SELECT ta.employee_id FROM task_assignees ta 
+          JOIN tasks t ON ta.task_id = t.id
+          WHERE t.planned_start <= $2 AND t.planned_end >= $1
           UNION
-          
-          SELECT pa.employee_id 
-          FROM phase_assignees pa
+          SELECT pa.employee_id FROM phase_assignees pa
           JOIN task_phases tp ON pa.phase_id = tp.id
-          JOIN tasks t ON tp.task_id = t.id
-          WHERE t.status != 'done' AND tp.status != 'done'
-        ) as ca
-        JOIN employees e ON ca.employee_id = e.id
+          WHERE tp.start_date <= $2 AND tp.end_date >= $1
+        ) as active_emp
+        JOIN employees e ON active_emp.employee_id = e.id
         WHERE e.is_active = TRUE
+      `, [monthStart, monthEnd]);
+
+      const totalEmpRes = await query("SELECT COUNT(*) as count FROM employees WHERE is_active = TRUE");
+
+      // 6. Trend: Rolling 6 months completions
+      const trendRes = await query(`
+        SELECT 
+          to_char(updated_at, 'Mon YYYY') as month,
+          COUNT(*) as completed,
+          MIN(updated_at) as sort_date
+        FROM tasks
+        WHERE status = 'done'
+        AND updated_at >= CURRENT_DATE - INTERVAL '6 months'
+        GROUP BY to_char(updated_at, 'Mon YYYY')
+        ORDER BY sort_date ASC
       `);
-      
-      // YENİ: Toplam çalışan sayısını bulurken is_active=TRUE olanları alıyoruz
-      const totalEmployeesCountRes = await query(`SELECT COUNT(*) as count FROM employees WHERE is_active = TRUE`);
-      
+
+      const monthlyRevenue = monthlyRevenueTotal + parseFloat(scheduledRes.rows[0].total || 0);
+
       const summary = {
-        total: totalTasks,
-        working_employees_res: `${working_employees_res.rows[0].count} / ${totalEmployeesCountRes.rows[0].count}`,
-        completed_month: totalTasks > 0 ? `${((completed_month_avg.rows[0].count / totalTasks) * 100).toFixed(2)}%` : "0%",
-        overdue: overdue,
-        avg_days_to_complete: parseFloat(avg_days_to_complete.rows[0].avg_days || 0).toFixed(2)
+        total: monthTotalTasks,
+        working_employees_res: `${teamRes.rows[0].active_count} / ${totalEmpRes.rows[0].count}`,
+        completed_month: monthTotalTasks > 0 ? `${((completedMonthCount / monthTotalTasks) * 100).toFixed(1)}%` : "0%",
+        overdue,
+        monthly_revenue: monthlyRevenue,
+        completed_count: completedMonthCount,
+        completed_phases: completedPhases,
+        forecast,
+        labor_costs: labor_details,
+        total_labor_cost: totalLaborCost,
+        monthly_overhead: monthlyOverhead,
+        realized_details: billedRes.rows
       };
 
-      const topicRes = await query(`
-        SELECT tt.topic, 
-               COUNT(t.id) as total, 
-               SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as done
-        FROM task_topics tt
-        JOIN tasks t ON tt.task_id = t.id
-        GROUP BY tt.topic
-      `);
-      const by_topic = topicRes.rows.map(r => ({
-        topic: r.topic, 
-        total: parseInt(r.total, 10), 
-        done: parseInt(r.done || 0, 10)
-      }));
-
-      // YENİ: Çalışan performans tablosuna 'WHERE e.is_active = TRUE' eklendi
-      const empRes = await query(`
-        SELECT e.id, e.name,
-               COUNT(t.id) as total_assigned,
-               SUM(CASE WHEN t.status = 'new' THEN 1 ELSE 0 END) as new_count,
-               SUM(CASE WHEN t.status = 'process' THEN 1 ELSE 0 END) as in_process,
-               SUM(CASE WHEN t.status = 'blocked' THEN 1 ELSE 0 END) as blocked,
-               SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END) as done_count,
-               AVG(EXTRACT(EPOCH FROM (t.actual_end - t.actual_start)) / 3600) as avg_completion_hours
-        FROM employees e
-        LEFT JOIN task_assignees ta ON e.id = ta.employee_id
-        LEFT JOIN tasks t ON ta.task_id = t.id
-        LEFT JOIN task_time_logs tl ON tl.employee_id = e.id AND tl.task_id = t.id
-        LEFT JOIN (
-          SELECT task_id, MAX(started_at) as actual_start, MAX(ended_at) as actual_end
-          FROM task_time_logs
-          GROUP BY task_id
-        ) ttl ON ttl.task_id = t.id
-        WHERE e.is_active = TRUE
-        GROUP BY e.id, e.name
-      `);
-      
-      const per_employee = empRes.rows.map(r => ({
-        id: r.id, name: r.name,
-        total_assigned: parseInt(r.total_assigned, 10),
-        new_count: parseInt(r.new_count || 0, 10),
-        in_process: parseInt(r.in_process || 0, 10),
-        blocked: parseInt(r.blocked || 0, 10),
-        done_count: parseInt(r.done_count || 0, 10),
-        avg_completion_hours: parseFloat(r.avg_completion_hours || 0).toFixed(2),
-      }));
-
-      const trend = [{ month: "Recent", completed: by_status.done }];
-
-      res.json({ summary, by_status, by_topic, per_employee, trend });
-    } catch (err) { 
+      res.json({
+        summary,
+        by_status,
+        trend: trendRes.rows,
+        monthLabel: new Date(year, month - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
+      });
+    } catch (err) {
       console.error("KPI Error:", err);
-      res.status(500).json({ error: "Database error while fetching KPIs" }); 
+      res.status(500).json({ error: "Database error" });
     }
   });
 
   app.get("/api/kpi/workload-monthly", authenticate, async (req, res) => {
     try {
-      const year  = parseInt(req.query.year)  || new Date().getFullYear();
+      const year = parseInt(req.query.year) || new Date().getFullYear();
       const month = parseInt(req.query.month) || new Date().getMonth() + 1;
 
-      const monthStart = `${year}-${String(month).padStart(2,'0')}-01`;
-      const monthEnd   = new Date(year, month, 0).toISOString().slice(0,10);
+      const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+      const monthEnd = new Date(year, month, 0).toISOString().slice(0, 10);
 
       // YENİ: Aylık iş yükü tablosunda silinmiş (is_active = FALSE) çalışanları göstermiyoruz
       const result = await query(`

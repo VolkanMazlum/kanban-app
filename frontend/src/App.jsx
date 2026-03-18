@@ -56,12 +56,11 @@ export default function App() {
     }
     if (!silent) setLoading(true);
     try {
-      const [t, e, k] = await Promise.all([
+      const [t, e] = await Promise.all([
         api.getTasks(), 
-        api.getEmployees(), 
-        isHR ? api.getKPI() : Promise.resolve(null)
+        api.getEmployees()
       ]);
-      setTasks(t); setEmployees(e); setKpi(k); setError(null);
+      setTasks(t); setEmployees(e); setError(null);
     } catch(err) { 
       setError(err.message);
       if (err.message.includes("Token") || err.message.includes("Authentication required") || err.message.includes("Invalid or expired") || err.message.includes("401")) {
@@ -126,9 +125,9 @@ export default function App() {
     } catch(err) { toast(err.message, "error"); loadAll(); }
   };
 
-  const handleEmpAdd = async (name, role) => {
+  const handleEmpAdd = async (name, position) => {
     try {
-      const e = await api.createEmployee(name, role);
+      const e = await api.createEmployee(name, position);
       setEmployees(p => [...p, e]); toast(`${e.name} added`);
       if (isHR) {
         const k = await api.getKPI(); setKpi(k);
@@ -166,7 +165,7 @@ export default function App() {
       { id: "/costs", label: "⏳ Timesheet & Labor" },
       ...(isHR ? [
         { id: "/finances", label: "📈 Finances & HR" },
-        { id: "/kpi", label: "📊 KPIs" }
+        { id: "/kpi", label: "📊 Monthly Workload KPI" }
       ] : [])
     ];
 
@@ -312,7 +311,7 @@ export default function App() {
       </div>
 
       {modal?.type==="task" && <TaskModal task={modal.task} employees={employees} onSave={handleTaskSave} onClose={()=>setModal(null)} />}
-      {modal?.type==="employees" && <EmployeeManager employees={employees} onAdd={handleEmpAdd} onDelete={handleEmpDelete} onClose={()=>setModal(null)} />}
+      {modal?.type==="employees" && <EmployeeManager employees={employees} isHR={isHR} onAdd={handleEmpAdd} onDelete={handleEmpDelete} onClose={()=>setModal(null)} />}
       
       <Toast toasts={toasts} />
     </div>

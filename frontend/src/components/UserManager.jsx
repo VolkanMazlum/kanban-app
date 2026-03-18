@@ -8,7 +8,7 @@ export default function UserManager({ isHR, onUserAdded }) {
 
   // New user form
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ email: "", name: "", password: "", role: "standard" });
+  const [form, setForm] = useState({ email: "", name: "", password: "", role: "standard", position: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -37,7 +37,7 @@ export default function UserManager({ isHR, onUserAdded }) {
     setError(null);
     try {
       await api.createUser(form);
-      setForm({ email: "", name: "", password: "", role: "standard" });
+      setForm({ email: "", name: "", password: "", role: "standard", position: "" });
       setShowForm(false);
       await refreshUsers();
       if (onUserAdded) onUserAdded(true);
@@ -62,6 +62,14 @@ export default function UserManager({ isHR, onUserAdded }) {
       if (onUserAdded) onUserAdded(true);
     } catch (err) { console.error(err); }
   };
+  
+  const handlePositionChange = async (user, newPos) => {
+    try {
+      await api.updateUser(user.id, { position: newPos });
+      await refreshUsers();
+      if (onUserAdded) onUserAdded(true);
+    } catch (err) { console.error(err); }
+  };
 
   const tabStyle = (id) => ({
     padding: "8px 18px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
@@ -75,7 +83,7 @@ export default function UserManager({ isHR, onUserAdded }) {
   const actionMap = { CREATE: "🟢", UPDATE: "🔵", DELETE: "🔴", STATUS_CHANGE: "🟡" };
 
   return (
-    <div style={{ padding: "28px 32px", overflowY: "auto", height: "calc(100vh - 65px)", fontFamily: "'Inter',sans-serif", background: "#F9FAFB" }}>
+    <div style={{ padding: "28px 32px", overflowY: "auto", height: "100%", fontFamily: "'Inter',sans-serif", background: "#F9FAFB" }}>
 
       {/* Header */}
       <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
@@ -132,11 +140,19 @@ export default function UserManager({ isHR, onUserAdded }) {
                   }} />
               </div>
               <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 4 }}>POSITION</label>
+                <input value={form.position} onChange={e => setForm({ ...form, position: e.target.value })}
+                  placeholder="e.g. Architect" style={{
+                    padding: "8px 12px", borderRadius: 6, border: "1.5px solid #E5E7EB",
+                    fontSize: 13, fontWeight: 600, width: 150, outline: "none", fontFamily: "'Inter',sans-serif"
+                  }} />
+              </div>
+              <div>
                 <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 4 }}>ROLE</label>
                 <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}
                   style={{
                     padding: "8px 12px", borderRadius: 6, border: "1.5px solid #E5E7EB",
-                    fontSize: 13, fontWeight: 600, width: 120, outline: "none", cursor: "pointer", fontFamily: "'Inter',sans-serif"
+                    fontSize: 13, fontWeight: 600, width: 110, outline: "none", cursor: "pointer", fontFamily: "'Inter',sans-serif"
                   }}>
                   <option value="standard">Standard</option>
                   <option value="hr">HR / Admin</option>
@@ -157,7 +173,7 @@ export default function UserManager({ isHR, onUserAdded }) {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: "#F9FAFB" }}>
-                  {["Username", "Name", "Role", "Status", "Created", "Actions"].map(h => (
+                  {["Username", "Name", "Position", "Role", "Status", "Created", "Actions"].map(h => (
                     <th key={h} style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "left", borderBottom: "2px solid #E5E7EB" }}>{h}</th>
                   ))}
                 </tr>
@@ -177,6 +193,22 @@ export default function UserManager({ isHR, onUserAdded }) {
                       </div>
                     </td>
                     <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151" }}>{user.name}</td>
+                    <td style={{ padding: "12px 16px" }}>
+                      <input 
+                        defaultValue={user.position || ""} 
+                        onBlur={e => {
+                          if (e.target.value !== (user.position || "")) {
+                            handlePositionChange(user, e.target.value);
+                          }
+                        }}
+                        placeholder="Set Position"
+                        style={{
+                          padding: "4px 8px", borderRadius: 6, border: "1px solid #D1D5DB",
+                          fontSize: 12, fontWeight: 600, width: 120, outline: "none",
+                          background: "#F9FAFB", color: "#374151"
+                        }}
+                      />
+                    </td>
                     <td style={{ padding: "12px 16px" }}>
                       <select value={user.role} onChange={e => handleRoleChange(user, e.target.value)}
                         style={{

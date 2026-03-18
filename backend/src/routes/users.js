@@ -5,9 +5,12 @@ module.exports = (app, query) => {
   // GET /api/users — List all users (HR only)
   app.get('/api/users', authenticateHR, async (req, res) => {
     try {
-      const result = await query(
-        'SELECT id, email, name, role, is_active, created_at FROM users ORDER BY created_at ASC'
-      );
+      const result = await query(`
+        SELECT u.id, u.email, u.name, u.role, u.is_active, u.created_at, e.position
+        FROM users u
+        LEFT JOIN employees e ON u.employee_id = e.id
+        ORDER BY u.created_at ASC
+      `);
       res.json(result.rows);
     } catch (err) {
       console.error('GET /users error:', err);
@@ -17,7 +20,7 @@ module.exports = (app, query) => {
 
   // POST /api/users — Create a new user (HR only)
   app.post('/api/users', authenticateHR, async (req, res) => {
-    const { email, name, password, role } = req.body;
+    const { email, name, password, role, position } = req.body;
 
     if (!email || !name || !password) {
       return res.status(400).json({ error: 'Email, name, and password are required' });
@@ -40,9 +43,9 @@ module.exports = (app, query) => {
       const empExists = await query('SELECT id FROM employees WHERE name = $1', [trimmedName]);
       if (empExists.rows.length > 0) {
         empId = empExists.rows[0].id;
-        await query('UPDATE employees SET is_active = TRUE WHERE id = $1', [empId]);
+        await query('UPDATE employees SET is_active = TRUE, position = COALESCE($2, position) WHERE id = $1', [empId, position || null]);
       } else {
-        const newEmp = await query('INSERT INTO employees (name, is_active) VALUES ($1, TRUE) RETURNING id', [trimmedName]);
+        const newEmp = await query('INSERT INTO employees (name, is_active, position) VALUES ($1, TRUE, $2) RETURNING id', [trimmedName, position || '']);
         empId = newEmp.rows[0].id;
       }
 
@@ -62,7 +65,7 @@ module.exports = (app, query) => {
   // PATCH /api/users/:id — Update user (HR only)
   app.patch('/api/users/:id', authenticateHR, async (req, res) => {
     const { id } = req.params;
-    const { name, role, is_active, password } = req.body;
+    const { name, role, is_active, password, position } = req.body;
 
     try {
       const updates = [];
@@ -78,7 +81,7 @@ module.exports = (app, query) => {
         values.push(hash);
       }
 
-      if (updates.length === 0) {
+      if (updates.length === 0 && position === undefined) {
         return res.status(400).json({ error: 'No valid fields to update' });
       }
 
@@ -86,7 +89,7 @@ module.exports = (app, query) => {
       values.push(id);
 
       const result = await query(
-        `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIdx} RETURNING id, email, name, role, is_active`,
+        `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIdx} RETURNING id, email, name, role, is_active, employee_id`,
         values
       );
 
@@ -94,10 +97,18 @@ module.exports = (app, query) => {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      // Sync is_active status with employees table if it was updated
-      if (is_active !== undefined) {
-        const userName = result.rows[0].name;
-        await query('UPDATE employees SET is_active = $1 WHERE name = $2', [is_active, userName]);
+      // Sync is_active status and position with employees table if they were updated
+      const empId = result.rows[0].employee_id;
+      if ((is_active !== undefined || position !== undefined) && empId) {
+        const empUpdates = [];
+        const empValues = [];
+        let eIdx = 1;
+        if (is_active !== undefined) { empUpdates.push(`is_active = $${eIdx++}`); empValues.push(is_active); }
+        if (position !== undefined) { empUpdates.push(`position = $${eIdx++}`); empValues.push(position); }
+        if (empUpdates.length > 0) {
+          empValues.push(empId);
+          await query(`UPDATE employees SET ${empUpdates.join(', ')} WHERE id = $${eIdx}`, empValues);
+        }
       }
 
       res.json(result.rows[0]);

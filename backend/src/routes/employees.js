@@ -13,11 +13,11 @@ module.exports = (app, query, authenticate, authenticateHR) => {
     
     // Validate input using Zod schema
     try {
-      const validatedData = employeeSchema.parse({ name });
-      const validatedName = validatedData.name;
+      const validatedData = employeeSchema.parse({ name, position: req.body.position });
+      const { name: validatedName, position } = validatedData;
       
       try {
-        const result = await query("INSERT INTO employees (name) VALUES ($1) RETURNING *", [validatedName]);
+        const result = await query("INSERT INTO employees (name, position) VALUES ($1, $2) RETURNING *", [validatedName, position]);
         res.status(201).json(result.rows[0]);
       } catch (err) { res.status(500).json({ error: "Database error" }); }
     } catch (validationError) {

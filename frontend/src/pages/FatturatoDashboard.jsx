@@ -2,14 +2,19 @@ import React, { useState, useEffect } from "react";
 import * as api from "../api";
 import { getEmptyLine, getEmptyClient, getEmptyForm, inpStyle } from "../constants/costConstants.js";
 
-// Utility formatting
 const parseEuNum = (val) => {
   if (!val) return 0;
   if (typeof val === "number") return val;
-  const str = String(val).trim();
-  if (str.includes(".") && str.includes(",")) return parseFloat(str.replace(/\./g, "").replace(",", "."));
-  if (str.includes(",")) return parseFloat(str.replace(",", "."));
-  return parseFloat(str) || 0;
+  let str = String(val).trim().replace(/[^0-9,.-]/g, "");
+  const lastComma = str.lastIndexOf(',');
+  const lastDot = str.lastIndexOf('.');
+  if (lastComma > lastDot) {
+    return parseFloat(str.replace(/\./g, "").replace(",", "."));
+  } else {
+    const dotCount = (str.match(/\./g) || []).length;
+    if (dotCount > 1) return parseFloat(str.replace(/\./g, ""));
+    return parseFloat(str.replace(/,/g, "")) || 0;
+  }
 };
 const fmtEu = (num) => parseFloat(num || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -140,18 +145,18 @@ export default function FatturatoDashboard({ isHR }) {
   // Form Handlers
   const addClientBlock = () => setFattForm({ ...fattForm, clients: [...fattForm.clients, getEmptyClient()] });
   const removeClientBlock = (cIdx) => { const newClients = [...fattForm.clients]; newClients.splice(cIdx, 1); setFattForm({ ...fattForm, clients: newClients }); };
-  const handleClientChange = (cIdx, field, val) => { 
-    const newClients = [...fattForm.clients]; 
+  const handleClientChange = (cIdx, field, val) => {
+    const newClients = [...fattForm.clients];
     newClients[cIdx] = { ...newClients[cIdx], [field]: val };
-    setFattForm({ ...fattForm, clients: newClients }); 
+    setFattForm({ ...fattForm, clients: newClients });
   };
-  const addLineToClient = (cIdx) => { 
-    const newClients = [...fattForm.clients]; 
-    newClients[cIdx] = { ...newClients[cIdx], lines: [...newClients[cIdx].lines, getEmptyLine()] }; 
-    setFattForm({ ...fattForm, clients: newClients }); 
+  const addLineToClient = (cIdx) => {
+    const newClients = [...fattForm.clients];
+    newClients[cIdx] = { ...newClients[cIdx], lines: [...newClients[cIdx].lines, getEmptyLine()] };
+    setFattForm({ ...fattForm, clients: newClients });
   };
   const removeLineFromClient = (cIdx, lIdx) => { const newClients = [...fattForm.clients]; newClients[cIdx].lines.splice(lIdx, 1); setFattForm({ ...fattForm, clients: newClients }); };
-
+  /*** 
   const updateFatturatoFromOrdini = (newClients, cIdx, lIdx) => {
     const line = newClients[cIdx].lines[lIdx];
     const valOrdine = parseFloat(line.valore_ordine) || 0;
@@ -160,15 +165,16 @@ export default function FatturatoDashboard({ isHR }) {
     if ((line.ordini || []).length > 0) {
       line.fatturato_amount = (valOrdine * totalPct / 100).toFixed(2);
     }
-  };
+  };*/
 
-  const handleLineChange = (cIdx, lIdx, field, val) => { 
-    const newClients = [...fattForm.clients]; 
+  const handleLineChange = (cIdx, lIdx, field, val) => {
+    const newClients = [...fattForm.clients];
     const newLine = { ...newClients[cIdx].lines[lIdx], [field]: val };
     newClients[cIdx] = { ...newClients[cIdx], lines: [...newClients[cIdx].lines] };
     newClients[cIdx].lines[lIdx] = newLine;
-    if (field === "valore_ordine") updateFatturatoFromOrdini(newClients, cIdx, lIdx);
-    setFattForm({ ...fattForm, clients: newClients }); 
+
+    //if (field === "valore_ordine") updateFatturatoFromOrdini(newClients, cIdx, lIdx);
+    setFattForm({ ...fattForm, clients: newClients });
   };
   const addOrdineToLine = (cIdx, lIdx) => {
     const newClients = [...fattForm.clients];
@@ -177,13 +183,13 @@ export default function FatturatoDashboard({ isHR }) {
     newLine.ordini = [...newLine.ordini, { label: "", percentage: "" }];
     newClients[cIdx] = { ...newClients[cIdx], lines: [...newClients[cIdx].lines] };
     newClients[cIdx].lines[lIdx] = newLine;
-    updateFatturatoFromOrdini(newClients, cIdx, lIdx);
+    //updateFatturatoFromOrdini(newClients, cIdx, lIdx);
     setFattForm({ ...fattForm, clients: newClients });
   };
   const removeOrdineFromLine = (cIdx, lIdx, oIdx) => {
     const newClients = [...fattForm.clients];
     newClients[cIdx].lines[lIdx].ordini.splice(oIdx, 1);
-    updateFatturatoFromOrdini(newClients, cIdx, lIdx);
+    //updateFatturatoFromOrdini(newClients, cIdx, lIdx);
     setFattForm({ ...fattForm, clients: newClients });
   };
   const handleOrdineChange = (cIdx, lIdx, oIdx, field, val) => {
@@ -194,12 +200,13 @@ export default function FatturatoDashboard({ isHR }) {
     newLine.ordini = newOrdini;
     newClients[cIdx] = { ...newClients[cIdx], lines: [...newClients[cIdx].lines] };
     newClients[cIdx].lines[lIdx] = newLine;
-    if (field === "percentage") updateFatturatoFromOrdini(newClients, cIdx, lIdx);
+
+    //if (field === "percentage") updateFatturatoFromOrdini(newClients, cIdx, lIdx);
     setFattForm({ ...fattForm, clients: newClients });
   };
 
   return (
-    <div style={{ padding: "28px 32px", overflowY: "auto", height: "calc(100vh - 65px)", fontFamily: "'Inter',sans-serif", background: "#F9FAFB" }}>
+    <div style={{ padding: "28px 32px", overflowY: "auto", height: "100%", fontFamily: "'Inter',sans-serif", background: "#F9FAFB" }}>
 
       {/* HEADER */}
       <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
@@ -355,146 +362,156 @@ export default function FatturatoDashboard({ isHR }) {
       </div>
 
       {/* FATTURATO MODAL (Edit Hierarchy) */}
-      {showFattModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, backdropFilter: "blur(4px)", padding: "40px 0" }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 960, boxShadow: "0 20px 60px rgba(0,0,0,0.15)", maxHeight: "100%", overflowY: "auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <h3 style={{ color: "#111827", margin: 0, fontSize: 18, fontWeight: 700 }}>{editingFatt ? "Edit Commessa Hierarchy" : "New Commessa & Clients"}</h3>
-              <button onClick={() => setShowFattModal(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>✕</button>
-            </div>
+      {
+        showFattModal && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, backdropFilter: "blur(4px)", padding: "40px 0" }}>
+            <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 960, boxShadow: "0 20px 60px rgba(0,0,0,0.15)", maxHeight: "100%", overflowY: "auto" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                <h3 style={{ color: "#111827", margin: 0, fontSize: 18, fontWeight: 700 }}>{editingFatt ? "Edit Commessa Hierarchy" : "New Commessa & Clients"}</h3>
+                <button onClick={() => setShowFattModal(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9CA3AF" }}>✕</button>
+              </div>
 
-            <div style={{ background: "#F0FDF4", padding: 16, borderRadius: 8, border: "1px solid #BBF7D0", marginBottom: 20 }}>
-              <h4 style={{ margin: "0 0 12px", fontSize: 11, fontWeight: 800, color: "#166534" }}>1. COMMESSA (PROJECT ROOT)</h4>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16 }}>
-                <div><label style={{ fontSize: 10, fontWeight: 700 }}>Comm. Number</label><input value={fattForm.comm_number} onChange={e => setFattForm({ ...fattForm, comm_number: e.target.value })} style={inpStyle} placeholder="e.g. 25-003" /></div>
-                <div><label style={{ fontSize: 10, fontWeight: 700 }}>Commessa Name</label><input value={fattForm.name || ""} onChange={e => setFattForm({ ...fattForm, name: e.target.value })} style={inpStyle} placeholder="es. HOTEL DIANA MAJESTIC" /></div>
-                <div>
-                  <label style={{ fontSize: 10, fontWeight: 700 }}>Linked Task</label>
-                  <select
-                    value={fattForm.task_id}
-                    onChange={e => {
-                      const selectedTaskId = e.target.value;
-                      const oldTaskId = fattForm.task_id;
-                      const oldTask = allTasks.find(t => String(t.id) === String(oldTaskId));
-                      const selectedTask = allTasks.find(t => String(t.id) === String(selectedTaskId));
-                      const oldPhaseNames = new Set(oldTask?.phases?.map(p => p.name) || []);
+              <div style={{ background: "#F0FDF4", padding: 16, borderRadius: 8, border: "1px solid #BBF7D0", marginBottom: 20 }}>
+                <h4 style={{ margin: "0 0 12px", fontSize: 11, fontWeight: 800, color: "#166534" }}>1. COMMESSA (PROJECT ROOT)</h4>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16 }}>
+                  <div><label style={{ fontSize: 10, fontWeight: 700 }}>Comm. Number</label><input value={fattForm.comm_number} onChange={e => setFattForm({ ...fattForm, comm_number: e.target.value })} style={inpStyle} placeholder="e.g. 25-003" /></div>
+                  <div><label style={{ fontSize: 10, fontWeight: 700 }}>Commessa Name</label><input value={fattForm.name || ""} onChange={e => setFattForm({ ...fattForm, name: e.target.value })} style={inpStyle} placeholder="es. HOTEL DIANA MAJESTIC" /></div>
+                  <div>
+                    <label style={{ fontSize: 10, fontWeight: 700 }}>Linked Task</label>
+                    <select
+                      value={fattForm.task_id}
+                      onChange={e => {
+                        const selectedTaskId = e.target.value;
+                        const oldTaskId = fattForm.task_id;
+                        const oldTask = allTasks.find(t => String(t.id) === String(oldTaskId));
+                        const selectedTask = allTasks.find(t => String(t.id) === String(selectedTaskId));
+                        const oldPhaseNames = new Set(oldTask?.phases?.map(p => p.name) || []);
 
-                      let newClients = fattForm.clients.map(client => {
-                        let cleanedLines = client.lines.filter(l => {
-                          const isFromOldTask = oldPhaseNames.has(l.attivita);
-                          const hasFinancialData = parseEuNum(l.valore_ordine) > 0 || parseEuNum(l.fatturato_amount) > 0;
-                          return !(isFromOldTask && !hasFinancialData);
-                        });
+                        let newClients = fattForm.clients.map(client => {
+                          let cleanedLines = client.lines.filter(l => {
+                            const isFromOldTask = oldPhaseNames.has(l.attivita);
+                            const hasFinancialData = parseEuNum(l.valore_ordine) > 0 || parseEuNum(l.fatturato_amount) > 0;
+                            return !(isFromOldTask && !hasFinancialData);
+                          });
 
-                        if (selectedTask && selectedTask.phases) {
-                          const relevantPhases = selectedTask.phases.filter(ph => ph.status === 'active' || ph.status === 'done');
-                          const existingActivities = new Set(cleanedLines.map(l => l.attivita));
-                          const missingPhases = relevantPhases.filter(ph => !existingActivities.has(ph.name));
-                          if (missingPhases.length > 0) {
-                            const linesToAdd = missingPhases.map(ph => ({ ...EMPTY_LINE, attivita: ph.name }));
-                            cleanedLines = cleanedLines.filter(l => l.attivita || l.valore_ordine || l.fatturato_amount);
-                            cleanedLines = [...(cleanedLines.length > 0 ? cleanedLines : []), ...linesToAdd];
+                          if (selectedTask && selectedTask.phases) {
+                            const relevantPhases = selectedTask.phases.filter(ph => ph.status === 'active' || ph.status === 'done');
+                            const existingActivities = new Set(cleanedLines.map(l => l.attivita));
+                            const missingPhases = relevantPhases.filter(ph => !existingActivities.has(ph.name));
+                            if (missingPhases.length > 0) {
+                              const linesToAdd = missingPhases.map(ph => ({ ...EMPTY_LINE, attivita: ph.name }));
+                              cleanedLines = cleanedLines.filter(l => l.attivita || l.valore_ordine || l.fatturato_amount);
+                              cleanedLines = [...(cleanedLines.length > 0 ? cleanedLines : []), ...linesToAdd];
+                            }
                           }
-                        }
-                        if (cleanedLines.length === 0) cleanedLines = [{ ...EMPTY_LINE }];
-                        return { ...client, lines: cleanedLines };
-                      });
-                      setFattForm({ ...fattForm, task_id: selectedTaskId, name: selectedTask ? selectedTask.title : fattForm.name, clients: newClients });
-                    }}
-                    style={inpStyle}
-                  >
-                    <option value="">— Not Linked —</option>
-                    {allTasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
-                  </select>
+                          if (cleanedLines.length === 0) cleanedLines = [{ ...EMPTY_LINE }];
+                          return { ...client, lines: cleanedLines };
+                        });
+                        setFattForm({ ...fattForm, task_id: selectedTaskId, name: selectedTask ? selectedTask.title : fattForm.name, clients: newClients });
+                      }}
+                      style={inpStyle}
+                    >
+                      <option value="">— Not Linked —</option>
+                      {allTasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+                    </select>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <h4 style={{ margin: 0, fontSize: 13, fontWeight: 800, color: "#1F2937" }}>2. CLIENTS & ACTIVITIES</h4>
-                <button onClick={addClientBlock} style={{ background: "#2563EB", color: "#fff", border: "none", padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>+ Add Another Client</button>
-              </div>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <h4 style={{ margin: 0, fontSize: 13, fontWeight: 800, color: "#1F2937" }}>2. CLIENTS & ACTIVITIES</h4>
+                  <button onClick={addClientBlock} style={{ background: "#2563EB", color: "#fff", border: "none", padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>+ Add Another Client</button>
+                </div>
 
-              {fattForm.clients.map((client, cIdx) => (
-                <div key={cIdx} style={{ background: "#F9FAFB", padding: 16, borderRadius: 10, border: "2px solid #E5E7EB", marginBottom: 16, position: "relative" }}>
-                  {fattForm.clients.length > 1 && <button onClick={() => removeClientBlock(cIdx)} style={{ position: "absolute", top: 16, right: 16, background: "#FEF2F2", color: "#DC2626", border: "none", padding: "4px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Remove Client</button>}
+                {fattForm.clients.map((client, cIdx) => (
+                  <div key={cIdx} style={{ background: "#F9FAFB", padding: 16, borderRadius: 10, border: "2px solid #E5E7EB", marginBottom: 16, position: "relative" }}>
+                    {fattForm.clients.length > 1 && <button onClick={() => removeClientBlock(cIdx)} style={{ position: "absolute", top: 16, right: 16, background: "#FEF2F2", color: "#DC2626", border: "none", padding: "4px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Remove Client</button>}
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12, paddingRight: 60 }}>
-                    <div><label style={{ fontSize: 10, fontWeight: 700 }}>N. Cliente</label><input value={client.n_cliente} onChange={e => handleClientChange(cIdx, "n_cliente", e.target.value)} style={inpStyle} placeholder="00" /></div>
-                    <div>
-                      <label style={{ fontSize: 10, fontWeight: 700 }}>Client Profile</label>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <select value={client.client_id} onChange={e => handleClientChange(cIdx, "client_id", e.target.value)} style={{ ...inpStyle, padding: "6px", flex: 1 }}><option value="">— Select —</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-                        <button onClick={() => setShowClientModal(true)} style={{ padding: "6px 10px", background: "#E5E7EB", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>+</button>
-                      </div>
-                    </div>
-                    <div><label style={{ fontSize: 10, fontWeight: 700 }}>Preventivo</label><input value={client.preventivo} onChange={e => handleClientChange(cIdx, "preventivo", e.target.value)} style={inpStyle} /></div>
-                    <div><label style={{ fontSize: 10, fontWeight: 700 }}>Ordine Desc.</label><input value={client.ordine} onChange={e => handleClientChange(cIdx, "ordine", e.target.value)} style={inpStyle} /></div>
-                  </div>
-
-                  <div style={{ marginTop: 16, borderTop: "1px dashed #D1D5DB", paddingTop: 12 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: "#6B7280" }}>ACTIVITIES FOR THIS CLIENT</div>
-                      <button onClick={() => addLineToClient(cIdx)} style={{ background: "#10B981", color: "#fff", border: "none", padding: "4px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>+ Add Line</button>
-                    </div>
-                    {client.lines.map((line, lIdx) => (
-                      <div key={lIdx} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, padding: 10, marginBottom: 8 }}>
-                        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                          <div style={{ flex: 2 }}><input placeholder="Attività" value={line.attivita} onChange={e => handleLineChange(cIdx, lIdx, "attivita", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
-                          <div style={{ flex: 1 }}><input type="number" placeholder="Valore €" value={line.valore_ordine} onChange={e => handleLineChange(cIdx, lIdx, "valore_ordine", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
-                          <div style={{ flex: 1 }}><input type="number" placeholder="Fatturato €" value={line.fatturato_amount} onChange={e => handleLineChange(cIdx, lIdx, "fatturato_amount", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
-                          <button onClick={() => removeLineFromClient(cIdx, lIdx)} disabled={client.lines.length === 1} style={{ background: "#F3F4F6", color: "#DC2626", border: "none", padding: "6px 10px", borderRadius: 6, cursor: client.lines.length > 1 ? "pointer" : "not-allowed" }}>✕</button>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12, paddingRight: 60 }}>
+                      <div><label style={{ fontSize: 10, fontWeight: 700 }}>N. Cliente</label><input value={client.n_cliente} onChange={e => handleClientChange(cIdx, "n_cliente", e.target.value)} style={inpStyle} placeholder="00" /></div>
+                      <div>
+                        <label style={{ fontSize: 10, fontWeight: 700 }}>Client Profile</label>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          <select value={client.client_id} onChange={e => handleClientChange(cIdx, "client_id", e.target.value)} style={{ ...inpStyle, padding: "6px", flex: 1 }}><option value="">— Select —</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                          <button onClick={() => setShowClientModal(true)} style={{ padding: "6px 10px", background: "#E5E7EB", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>+</button>
                         </div>
+                      </div>
+                      <div><label style={{ fontSize: 10, fontWeight: 700 }}>Preventivo</label><input value={client.preventivo} onChange={e => handleClientChange(cIdx, "preventivo", e.target.value)} style={inpStyle} /></div>
+                      <div><label style={{ fontSize: 10, fontWeight: 700 }}>Ordine Desc.</label><input value={client.ordine} onChange={e => handleClientChange(cIdx, "ordine", e.target.value)} style={inpStyle} /></div>
+                    </div>
 
-                        {/* Nested Ordini (Percentages) */}
-                        <div style={{ marginLeft: 20, borderLeft: "2px solid #E5E7EB", paddingLeft: 12 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, color: "#6B7280" }}>PAYMENT SCHEDULE (%)</span>
-                              {(() => {
-                                const total = (line.ordini || []).reduce((sum, o) => sum + (parseFloat(o.percentage) || 0), 0);
-                                if (total > 100) return <span style={{ fontSize: 9, fontWeight: 700, color: "#EF4444" }}>TOTAL: {total.toFixed(1)}% (EXCEEDS 100!)</span>;
-                                if (total > 0) return <span style={{ fontSize: 9, fontWeight: 700, color: total === 100 ? "#059669" : "#6B7280" }}>TOTAL: {total.toFixed(1)}%</span>;
-                                return null;
-                              })()}
-                            </div>
-                            <button onClick={() => addOrdineToLine(cIdx, lIdx)} style={{ background: "#EEF2FF", color: "#4F46E5", border: "1px solid #C7D2FE", padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>+ Add %</button>
+                    <div style={{ marginTop: 16, borderTop: "1px dashed #D1D5DB", paddingTop: 12 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#6B7280" }}>ACTIVITIES FOR THIS CLIENT</div>
+                        <button onClick={() => addLineToClient(cIdx)} style={{ background: "#10B981", color: "#fff", border: "none", padding: "4px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>+ Add Line</button>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, marginBottom: 4, padding: "0 10px" }}>
+                        <div style={{ flex: 2, fontSize: 9, fontWeight: 700, color: "#9CA3AF" }}>ATTIVITÀ</div>
+                        <div style={{ flex: 1, fontSize: 9, fontWeight: 700, color: "#9CA3AF" }}>VALORE €</div>
+                        <div style={{ flex: 1, fontSize: 9, fontWeight: 700, color: "#9CA3AF" }}>FATTURATO €</div>
+                        <div style={{ width: 34 }}></div>
+                      </div>
+                      {client.lines.map((line, lIdx) => (
+                        <div key={lIdx} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, padding: 10, marginBottom: 8 }}>
+                          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                            <div style={{ flex: 2 }}><input placeholder="Attività" value={line.attivita} onChange={e => handleLineChange(cIdx, lIdx, "attivita", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
+                            <div style={{ flex: 1 }}><input type="number" placeholder="Valore €" value={line.valore_ordine} onChange={e => handleLineChange(cIdx, lIdx, "valore_ordine", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
+                            <div style={{ flex: 1 }}><input type="number" placeholder="Fatturato €" value={line.fatturato_amount} onChange={e => handleLineChange(cIdx, lIdx, "fatturato_amount", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
+                            <button onClick={() => removeLineFromClient(cIdx, lIdx)} disabled={client.lines.length === 1} style={{ background: "#F3F4F6", color: "#DC2626", border: "none", padding: "6px 10px", borderRadius: 6, cursor: client.lines.length > 1 ? "pointer" : "not-allowed" }}>✕</button>
                           </div>
-                          {(line.ordini || []).map((ord, oIdx) => (
-                            <div key={oIdx} style={{ display: "flex", gap: 4, marginBottom: 4 }}>
-                              <input placeholder="SAL 1" value={ord.label} onChange={e => handleOrdineChange(cIdx, lIdx, oIdx, "label", e.target.value)} style={{ ...inpStyle, flex: 2, padding: "4px", fontSize: 11 }} />
-                              <input type="number" placeholder="%" value={ord.percentage} onChange={e => handleOrdineChange(cIdx, lIdx, oIdx, "percentage", e.target.value)} style={{ ...inpStyle, flex: 1, padding: "4px", fontSize: 11 }} />
-                              <button onClick={() => removeOrdineFromLine(cIdx, lIdx, oIdx)} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 12 }}>✕</button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
 
-            <button onClick={handleSaveFatt} disabled={savingFatt} style={{ width: "100%", padding: 14, background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>{savingFatt ? "Saving..." : "Save Commessa Structure"}</button>
+                          {/* Nested Ordini (Percentages) */}
+                          <div style={{ marginLeft: 20, borderLeft: "2px solid #E5E7EB", paddingLeft: 12 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontSize: 9, fontWeight: 700, color: "#6B7280" }}>PAYMENT SCHEDULE (%)</span>
+                                {(() => {
+                                  const total = (line.ordini || []).reduce((sum, o) => sum + (parseFloat(o.percentage) || 0), 0);
+                                  if (total > 100) return <span style={{ fontSize: 9, fontWeight: 700, color: "#EF4444" }}>TOTAL: {total.toFixed(1)}% (EXCEEDS 100!)</span>;
+                                  if (total > 0) return <span style={{ fontSize: 9, fontWeight: 700, color: total === 100 ? "#059669" : "#6B7280" }}>TOTAL: {total.toFixed(1)}%</span>;
+                                  return null;
+                                })()}
+                              </div>
+                              <button onClick={() => addOrdineToLine(cIdx, lIdx)} style={{ background: "#EEF2FF", color: "#4F46E5", border: "1px solid #C7D2FE", padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>+ Add %</button>
+                            </div>
+                            {(line.ordini || []).map((ord, oIdx) => (
+                              <div key={oIdx} style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+                                <input placeholder="SAL 1" value={ord.label} onChange={e => handleOrdineChange(cIdx, lIdx, oIdx, "label", e.target.value)} style={{ ...inpStyle, flex: 2, padding: "4px", fontSize: 11 }} />
+                                <input type="number" placeholder="%" value={ord.percentage} onChange={e => handleOrdineChange(cIdx, lIdx, oIdx, "percentage", e.target.value)} style={{ ...inpStyle, flex: 1, padding: "4px", fontSize: 11 }} />
+                                <button onClick={() => removeOrdineFromLine(cIdx, lIdx, oIdx)} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 12 }}>✕</button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button onClick={handleSaveFatt} disabled={savingFatt} style={{ width: "100%", padding: 14, background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>{savingFatt ? "Saving..." : "Save Commessa Structure"}</button>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* NEW CLIENT MODAL */}
-      {showClientModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 400, backdropFilter: "blur(4px)" }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
-            <h3 style={{ margin: "0 0 20px", fontSize: 18, fontWeight: 700 }}>Add New Client</h3>
-            <div style={{ marginBottom: 14 }}><label style={{ fontSize: 11, fontWeight: 600, marginBottom: 6, display: "block" }}>CLIENT NAME</label><input value={clientForm.name} onChange={e => setClientForm({ ...clientForm, name: e.target.value })} style={inpStyle} placeholder="e.g. Comune di Milano" /></div>
-            <div style={{ marginBottom: 24 }}><label style={{ fontSize: 11, fontWeight: 600, marginBottom: 6, display: "block" }}>VAT NUMBER (P.IVA)</label><input value={clientForm.vat_number} onChange={e => setClientForm({ ...clientForm, vat_number: e.target.value })} style={inpStyle} /></div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={handleSaveClient} disabled={savingClient} style={{ flex: 1, padding: 11, background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>{savingClient ? "Saving..." : "Save"}</button>
-              <button onClick={() => setShowClientModal(false)} style={{ flex: 1, padding: 11, background: "#F9FAFB", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+      {
+        showClientModal && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 400, backdropFilter: "blur(4px)" }}>
+            <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 400, boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
+              <h3 style={{ margin: "0 0 20px", fontSize: 18, fontWeight: 700 }}>Add New Client</h3>
+              <div style={{ marginBottom: 14 }}><label style={{ fontSize: 11, fontWeight: 600, marginBottom: 6, display: "block" }}>CLIENT NAME</label><input value={clientForm.name} onChange={e => setClientForm({ ...clientForm, name: e.target.value })} style={inpStyle} placeholder="e.g. Comune di Milano" /></div>
+              <div style={{ marginBottom: 24 }}><label style={{ fontSize: 11, fontWeight: 600, marginBottom: 6, display: "block" }}>VAT NUMBER (P.IVA)</label><input value={clientForm.vat_number} onChange={e => setClientForm({ ...clientForm, vat_number: e.target.value })} style={inpStyle} /></div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={handleSaveClient} disabled={savingClient} style={{ flex: 1, padding: 11, background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>{savingClient ? "Saving..." : "Save"}</button>
+                <button onClick={() => setShowClientModal(false)} style={{ flex: 1, padding: 11, background: "#F9FAFB", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }

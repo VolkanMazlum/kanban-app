@@ -35,10 +35,16 @@ export const patchTaskStatus = (id, status) => req(`/tasks/${id}/status`, { meth
 export const deleteTask      = (id) => req(`/tasks/${id}`,  { method: "DELETE" });
 
 export const getEmployees    = ()           => req(`/employees?t=${Date.now()}`);
-export const createEmployee  = (name, role) => req("/employees", { method: "POST", body: JSON.stringify({ name, role }) });
+export const createEmployee  = (name, position) => req("/employees", { method: "POST", body: JSON.stringify({ name, position }) });
 export const deleteEmployee  = (id)         => req(`/employees/${id}`, { method: "DELETE" });
 
-export const getKPI = () => req("/kpi");
+export const getKPI = (year, month) => {
+  const params = new URLSearchParams();
+  if (year) params.append("year", year);
+  if (month) params.append("month", month);
+  const q = params.toString();
+  return req(`/kpi${q ? `?${q}` : ""}`);
+};
 
 export const getTimeLogs = (params = {}) => req(`/time-logs${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""}`);
 export const logTime     = (data) => req("/time-logs", { method: "POST", body: JSON.stringify(data) });

@@ -5,6 +5,7 @@
 CREATE TABLE IF NOT EXISTS employees (
   id SERIAL PRIMARY KEY,
   name VARCHAR(100) UNIQUE NOT NULL,
+  position VARCHAR(100) DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   is_active BOOLEAN DEFAULT TRUE
 );
@@ -201,6 +202,11 @@ CREATE TABLE IF NOT EXISTS clients (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+DROP TRIGGER IF EXISTS clients_updated_at ON clients;
+CREATE TRIGGER clients_updated_at
+BEFORE UPDATE ON clients
+FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
 
 -- ==============================================================================
 -- 8. FATTURATO (3-Tier Hiyerarşik Yapı: Commessa -> Client -> Lines)
@@ -243,8 +249,13 @@ CREATE TABLE IF NOT EXISTS fatturato_lines (
   rimanente_probabile NUMERIC(12,2) DEFAULT 0,  
   proforma NUMERIC(12,2) DEFAULT 0,
   invoice_date DATE,
-  note TEXT
+  note TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TRIGGER fatturato_lines_updated_at
+BEFORE UPDATE ON fatturato_lines
+FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- 4. KATMAN: Ödeme Takvimi (Fatturato Ordini - Percentage-based installments per attivita)
 CREATE TABLE IF NOT EXISTS fatturato_ordini (
@@ -276,6 +287,11 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+DROP TRIGGER IF EXISTS users_updated_at ON users;
+CREATE TRIGGER users_updated_at
+BEFORE UPDATE ON users
+FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
@@ -437,5 +453,11 @@ INSERT INTO phase_templates (topic, name, position) VALUES
   ('CONTINUOUS COMMISSIONING', 'Sviluppo Simulazione per allenamento algoritmo AI-Eco', 0), 
   ('CONTINUOUS COMMISSIONING', 'Sviluppo e rilascio dell''algoritmo AI-Eco', 1), 
   ('CONTINUOUS COMMISSIONING', 'Continuous Commissioning ed Ongoing monitoring activities', 2)
-
 ON CONFLICT DO NOTHING;
+
+-- ADD DEFAULT EMPLOYEES
+INSERT INTO employees (name, position) VALUES 
+  ('Admin', 'Administrator'),
+  ('Standard User', 'Developer')
+ON CONFLICT (name) DO NOTHING;
+
