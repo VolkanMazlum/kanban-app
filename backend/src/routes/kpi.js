@@ -1,3 +1,5 @@
+const { calculateMonthlyLaborCost } = require("../utils/finance");
+
 module.exports = (app, query, authenticate) => {
   // ── KPIs ──────────────────────────────────────────────────────
   app.get("/api/kpi", authenticate, async (req, res) => {
@@ -99,13 +101,11 @@ module.exports = (app, query, authenticate) => {
 
       const labor_details = laborRes.rows.map(r => {
         const hours = parseFloat(r.hours || 0);
-        const gross = parseFloat(r.annual_gross || 0);
-        let cost = 0;
-        if (r.category === 'consultant') {
-          cost = gross / 12;
-        } else {
-          cost = hours * (gross / 2000);
-        }
+        const cost = calculateMonthlyLaborCost({
+          hours,
+          annual_gross: r.annual_gross,
+          category: r.category
+        });
         return { name: r.name, hours, cost };
       }).filter(l => l.cost > 0 || l.hours > 0);
 
@@ -168,10 +168,11 @@ module.exports = (app, query, authenticate) => {
         `, [ty, tm, tmEnd]);
 
         const mLabor = lRes.rows.reduce((sum, r) => {
-          const h = parseFloat(r.hours || 0);
-          const g = parseFloat(r.annual_gross || 0);
-          if (r.category === 'consultant') return sum + (g / 12);
-          return sum + (h * (g / 2000));
+          return sum + calculateMonthlyLaborCost({
+            hours: r.hours,
+            annual_gross: r.annual_gross,
+            category: r.category
+          });
         }, 0);
 
         // Overhead
