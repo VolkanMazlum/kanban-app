@@ -353,9 +353,25 @@ module.exports = (app, query, authenticate, authenticateHR) => {
   });
 
   app.post("/api/clients", authenticateHR, async (req, res) => {
-    const { name, vat_number, contact_email, phone, address, notes } = req.body;
+    const { 
+      name, ragione_sociale, vat_number, codice_fiscale, codice_univoco, codice_ateco, codice_inarcassa,
+      contact_email, phone, fax, address, localita, cap, province, stato,
+      contabilita_prefix, contabilita_name, contabilita_email, contabilita_phone, notes 
+    } = req.body;
     try { 
-      const { rows } = await query(`INSERT INTO clients (name, vat_number, contact_email, phone, address, notes) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`, [name, vat_number || null, contact_email || null, phone || null, address || null, notes || null]);
+      const { rows } = await query(`
+        INSERT INTO clients (
+          name, ragione_sociale, vat_number, codice_fiscale, codice_univoco, codice_ateco, codice_inarcassa,
+          contact_email, phone, fax, address, localita, cap, province, stato,
+          contabilita_prefix, contabilita_name, contabilita_email, contabilita_phone, notes
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) 
+        RETURNING *`, 
+        [
+          name, ragione_sociale || null, vat_number || null, codice_fiscale || null, codice_univoco || null, codice_ateco || null, codice_inarcassa || null,
+          contact_email || null, phone || null, fax || null, address || null, localita || null, cap || null, province || null, stato || null,
+          contabilita_prefix || null, contabilita_name || null, contabilita_email || null, contabilita_phone || null, notes || null
+        ]
+      );
       const client = rows[0];
       const ctx = getAuditContext(req);
       logAudit(query, { ...ctx, action: 'CREATE', entityType: 'client', entityId: client.id, details: { name } });
@@ -365,12 +381,24 @@ module.exports = (app, query, authenticate, authenticateHR) => {
   });
 
   app.put("/api/clients/:id", authenticateHR, async (req, res) => {
-    const { name, vat_number, contact_email, phone, address, notes } = req.body;
+    const { 
+      name, ragione_sociale, vat_number, codice_fiscale, codice_univoco, codice_ateco, codice_inarcassa,
+      contact_email, phone, fax, address, localita, cap, province, stato,
+      contabilita_prefix, contabilita_name, contabilita_email, contabilita_phone, notes 
+    } = req.body;
     try {
       const { rows } = await query(
-        `UPDATE clients SET name = $1, vat_number = $2, contact_email = $3, phone = $4, address = $5, notes = $6 
-         WHERE id = $7 RETURNING *`,
-        [name, vat_number || null, contact_email || null, phone || null, address || null, notes || null, req.params.id]
+        `UPDATE clients SET 
+          name = $1, ragione_sociale = $2, vat_number = $3, codice_fiscale = $4, codice_univoco = $5, codice_ateco = $6, codice_inarcassa = $7,
+          contact_email = $8, phone = $9, fax = $10, address = $11, localita = $12, cap = $13, province = $14, stato = $15,
+          contabilita_prefix = $16, contabilita_name = $17, contabilita_email = $18, contabilita_phone = $19, notes = $20
+         WHERE id = $21 RETURNING *`,
+        [
+          name, ragione_sociale || null, vat_number || null, codice_fiscale || null, codice_univoco || null, codice_ateco || null, codice_inarcassa || null,
+          contact_email || null, phone || null, fax || null, address || null, localita || null, cap || null, province || null, stato || null,
+          contabilita_prefix || null, contabilita_name || null, contabilita_email || null, contabilita_phone || null, notes || null,
+          req.params.id
+        ]
       );
       if (rows.length === 0) return res.status(404).json({ error: "Client not found" });
       
