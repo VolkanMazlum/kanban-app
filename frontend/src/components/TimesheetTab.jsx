@@ -130,15 +130,15 @@ export default function TimesheetTab({
                                 {task.title}
                               </div>
                               <input
-                                type="number" min="0" max="24" step="0.5" disabled={!isPast || isWeekend}
+                                type="number" min="0" max="24" step="0.5" disabled={!isPast}
                                 value={entry.hours || ""}
                                 onChange={e => setDailyHours(p => ({...p, [task.id]: {...(p[task.id]||{}), [dateStr]: {...(p[task.id]?.[dateStr]||{}), hours: e.target.value}}}))}
-                                onBlur={e => isPast && !isWeekend && handleDaySave(task.id, dateStr, e.target.value, entry.note)}
+                                onBlur={e => isPast && handleDaySave(task.id, dateStr, e.target.value, entry.note)}
                                 placeholder="h"
                                 style={{
-                                  width:"100%", border:`1px solid ${entry.hours ? "#86EFAC" : "#E5E7EB"}`,
+                                  width:"100%", border:`1px solid ${entry.hours ? (isWeekend ? "#FDBA74" : "#86EFAC") : "#E5E7EB"}`,
                                   borderRadius:4, padding:"4px 6px", fontSize:11, textAlign:"right",
-                                  background: isWeekend ? "#F3F4F6" : "#fff", color:"#111827", outline:"none"
+                                  background: isWeekend ? "#FFF7ED" : "#fff", color:"#111827", outline:"none"
                                 }}
                               />
                             </div>

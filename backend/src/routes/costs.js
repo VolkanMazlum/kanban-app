@@ -17,9 +17,57 @@ module.exports = (app, query, authenticate, authenticateHR) => {
          RETURNING *`,
         [employee_id, task_id, date, hours, note || null]
       );
-      res.json(result.rows[0]);
-    } catch (err) { res.status(500).json({ error: "Database error" }); }
+      const savedLog = result.rows[0];
+      const logDate = new Date(date);
+      const year = logDate.getFullYear();
+      const month = logDate.getMonth() + 1;
+
+      // Recalculate monthly overtime automatically
+      await updateMonthlyOvertime(query, employee_id, year, month);
+
+      res.json(savedLog);
+    } catch (err) { 
+      console.error("POST /api/work-hours error:", err);
+      res.status(500).json({ error: "Database error" }); 
+    }
   });
+
+  async function updateMonthlyOvertime(query, employeeId, year, month) {
+    try {
+      // 1. Calculate daily totals and then sum up the overtimes:
+      // - Weekend (Sat=6, Sun=0): all hours are overtime
+      // - Weekday: hours > 8 are overtime
+      const calcResult = await query(`
+        SELECT SUM(daily_overtime) as total_overtime
+        FROM (
+          SELECT 
+            date,
+            SUM(hours) as daily_total,
+            CASE 
+              WHEN EXTRACT(DOW FROM date) IN (0, 6) THEN SUM(hours)
+              ELSE GREATEST(0, SUM(hours) - 8)
+            END as daily_overtime
+          FROM employee_work_hours
+          WHERE employee_id = $1 
+            AND EXTRACT(YEAR FROM date) = $2 
+            AND EXTRACT(MONTH FROM date) = $3
+          GROUP BY date
+        ) sub
+      `, [employeeId, year, month]);
+
+      const totalOvertime = parseFloat(calcResult.rows[0].total_overtime) || 0;
+
+      // 2. Upsert into employee_overtime_costs
+      await query(`
+        INSERT INTO employee_overtime_costs (employee_id, year, month, hours)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (employee_id, year, month) 
+        DO UPDATE SET hours = EXCLUDED.hours
+      `, [employeeId, year, month, totalOvertime]);
+    } catch (err) {
+      console.error("updateMonthlyOvertime error:", err);
+    }
+  }
 
   app.get("/api/work-hours/:employeeId", authenticate, async (req, res) => {
     const { year, month } = req.query;
@@ -70,7 +118,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         const overtimeCost = overtimeHours * hourlyRateBase;
 
         const totalCost = gross + overtimeCost;
-        const totalHours = loggedHours + overtimeHours;
+        const totalHours = loggedHours; // loggedHours already includes everything from the timesheet
 
         const dynamicRate = totalCost > 0 && totalHours > 0 ? (totalCost / totalHours).toFixed(2) : hourlyRateBase.toFixed(2);
 
