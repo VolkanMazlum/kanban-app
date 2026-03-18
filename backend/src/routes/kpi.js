@@ -143,18 +143,49 @@ module.exports = (app, query, authenticate) => {
 
       const totalEmpRes = await query("SELECT COUNT(*) as count FROM employees WHERE is_active = TRUE");
 
-      // 6. Trend: Rolling 6 months completions
-      const trendRes = await query(`
-        SELECT 
-          to_char(updated_at, 'Mon YYYY') as month,
-          COUNT(*) as completed,
-          MIN(updated_at) as sort_date
-        FROM tasks
-        WHERE status = 'done'
-        AND updated_at >= CURRENT_DATE - INTERVAL '6 months'
-        GROUP BY to_char(updated_at, 'Mon YYYY')
-        ORDER BY sort_date ASC
-      `);
+      // 6. Cost Trend: Rolling 6 months historical costs
+      const costTrend = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(year, month - 1 - i, 1);
+        const ty = d.getFullYear();
+        const tm = d.getMonth() + 1;
+        const tmStart = `${ty}-${String(tm).padStart(2, '0')}-01`;
+        const tmEnd = new Date(ty, tm, 0).toISOString().slice(0, 10);
+
+        // Labor
+        const lRes = await query(`
+          SELECT e.category, COALESCE(wh_sum.hours, 0) as hours,
+                 (SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id AND ec.valid_from <= $3 ORDER BY ec.valid_from DESC LIMIT 1) as annual_gross
+          FROM employees e
+          LEFT JOIN (
+            SELECT employee_id, SUM(hours) as hours
+            FROM employee_work_hours
+            WHERE EXTRACT(YEAR FROM date) = $1 AND EXTRACT(MONTH FROM date) = $2
+            GROUP BY employee_id
+          ) wh_sum ON e.id = wh_sum.employee_id
+          WHERE e.is_active = TRUE
+            AND (wh_sum.hours > 0 OR e.category = 'consultant')
+        `, [ty, tm, tmEnd]);
+
+        const mLabor = lRes.rows.reduce((sum, r) => {
+          const h = parseFloat(r.hours || 0);
+          const g = parseFloat(r.annual_gross || 0);
+          if (r.category === 'consultant') return sum + (g / 12);
+          return sum + (h * (g / 2000));
+        }, 0);
+
+        // Overhead
+        const sRes = await query(`SELECT value FROM settings WHERE key LIKE 'gc_%_' || $1`, [ty]);
+        const yOver = sRes.rows.reduce((sum, r) => sum + (parseFloat(r.value) || 0), 0);
+        const mOver = yOver / 12;
+
+        costTrend.push({
+          month: d.toLocaleString('en-US', { month: 'short' }),
+          labor: Math.round(mLabor),
+          overhead: Math.round(mOver),
+          total: Math.round(mLabor + mOver)
+        });
+      }
 
       const summary = {
         total: monthTotalTasks,
@@ -174,7 +205,7 @@ module.exports = (app, query, authenticate) => {
       res.json({
         summary,
         by_status,
-        trend: trendRes.rows,
+        trend: costTrend,
         monthLabel: new Date(year, month - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
       });
     } catch (err) {

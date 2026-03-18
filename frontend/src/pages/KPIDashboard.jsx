@@ -125,7 +125,7 @@ export default function KPIDashboard({ employees }) {
   if (!kpiData) return null;
 
   const { summary, by_status, trend } = kpiData;
-  const maxTrend = trend.length ? Math.max(...trend.map(t => t.completed), 1) : 1;
+  const maxTrend = trend.length ? Math.max(...trend.map(t => t.total), 1) : 1;
   const maxForecast = summary.forecast?.length ? Math.max(...summary.forecast.map(f => f.total), 1) : 1;
 
   const cards = [
@@ -210,18 +210,21 @@ export default function KPIDashboard({ employees }) {
           </div>
         </div>
 
-        {/* Completion Trend */}
+        {/* Monthly Cost Trend */}
         <div style={{ background: "#fff", borderRadius: 12, padding: 20, border: "1px solid #E5E7EB", display: "flex", flexDirection: "column" }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: "0 0 20px" }}>Completions</h3>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: "0 0 20px" }}>Monthly Cost Trend</h3>
           {trend.length === 0
-            ? <div style={{ color: "#9CA3AF", fontSize: 12, textAlign: "center", padding: "20px 0", flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>No trend data</div>
+            ? <div style={{ color: "#9CA3AF", fontSize: 12, textAlign: "center", padding: "20px 0", flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>No cost data</div>
             : (
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 6, flex: 1, paddingBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flex: 1, paddingBottom: 10 }}>
                 {trend.map(t => (
-                  <div key={t.month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: "#059669" }}>{t.completed}</div>
-                    <div style={{ width: "100%", background: "#059669", height: `${Math.max((t.completed / maxTrend) * 70, 4)}px`, borderRadius: "4px 4px 0 0", opacity: 0.6 }} />
-                    <div style={{ fontSize: 8, color: "#9CA3AF", textAlign: "center", transform: "rotate(-45deg)", marginTop: 6 }}>{t.month.split(' ')[0]}</div>
+                  <div key={t.month} title={`Labor: €${t.labor?.toLocaleString('it-IT')}\nOverhead: €${t.overhead?.toLocaleString('it-IT')}\nTotal: €${t.total?.toLocaleString('it-IT')}`} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, cursor: "help" }}>
+                    <div style={{ fontSize: 8, fontWeight: 700, color: "#6B7280" }}>€{Math.round((t.total || 0) / 1000)}k</div>
+                    <div style={{ width: "100%", display: "flex", flexDirection: "column-reverse", height: `${Math.max(((t.total || 0) / maxTrend) * 70, 4)}px`, borderRadius: "4px 4px 0 0", overflow: "hidden" }}>
+                        <div style={{ background: "#EF4444", height: `${((t.labor || 0) / (t.total || 1)) * 100}%`, width: "100%" }} />
+                        <div style={{ background: "#FCA5A5", height: `${((t.overhead || 0) / (t.total || 1)) * 100}%`, width: "100%" }} />
+                    </div>
+                    <div style={{ fontSize: 8, color: "#9CA3AF", textAlign: "center", fontWeight: 600 }}>{t.month}</div>
                   </div>
                 ))}
               </div>
