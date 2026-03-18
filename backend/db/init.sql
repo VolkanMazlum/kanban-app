@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS employees (
   name VARCHAR(100) UNIQUE NOT NULL,
   position VARCHAR(100) DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  is_active BOOLEAN DEFAULT TRUE
+  is_active BOOLEAN DEFAULT TRUE,
+  category VARCHAR(20) DEFAULT 'internal' CHECK (category IN ('internal', 'consultant'))
 );
 
 CREATE TABLE IF NOT EXISTS settings (

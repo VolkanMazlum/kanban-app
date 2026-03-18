@@ -17,7 +17,7 @@ export default function ProjectFinances({ isHR }) {
   const parseEuNum = (val) => {
     if (!val) return 0;
     if (typeof val === "number") return val;
-    let str = String(val).trim().replace(/[^0-9,.-]/g, ""); 
+    let str = String(val).trim().replace(/[^0-9,.-]/g, "");
     const lastComma = str.lastIndexOf(',');
     const lastDot = str.lastIndexOf('.');
     if (lastComma > lastDot) {
@@ -264,7 +264,7 @@ export default function ProjectFinances({ isHR }) {
                     { label: "Rimanente", align: "center", hint: "Valore Ordine - Fatturato" },
                     { label: "Net Profit", align: "center" },
                   ].map(h => (
-                    <th key={h.label} title={h.hint || ""} style={{ padding: "12px 16px", fontSize: 11, fontWeight: 700, color: "#374151", textAlign: h.align, letterSpacing: "0.05em", cursor: h.hint ? "help" : "default" }}>
+                    <th key={h.label} title={h.hint || ""} style={{ padding: "12px 16px", fontSize: 11, fontWeight: 700, color: "#43474dff", textAlign: h.align, letterSpacing: "0.05em", cursor: h.hint ? "help" : "default" }}>
                       {h.label.toUpperCase()}{h.hint ? " ℹ" : ""}
                     </th>
                   ))}
@@ -314,7 +314,7 @@ export default function ProjectFinances({ isHR }) {
                       <td style={{ padding: "14px 16px", textAlign: "center" }}>
                         {extraCost > 0 ? (
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: "#F59E0B" }}>- €{fmtEu(extraCost)}</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "#cd08f5ff" }}>- €{fmtEu(extraCost)}</span>
                             <span style={{ fontSize: 10, color: "#D1D5DB" }}>of overhead</span>
                           </div>
                         ) : <span style={{ color: "#D1D5DB", fontSize: 13 }}>—</span>}
@@ -379,7 +379,7 @@ export default function ProjectFinances({ isHR }) {
                       {selectedYear !== 'all' && (
                         <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 11, color: "#9CA3AF" }}>Σ €{totalWeight.toLocaleString("it-IT", { minimumFractionDigits: 0 })}</td>
                       )}
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#F59E0B" }}>- €{fmtEu(grandExtra)}</td>
+                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#cd08f5ff" }}>- €{fmtEu(grandExtra)}</td>
                       <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#DC2626" }}>- €{fmtEu(grandTotal)}</td>
                       <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#6366F1" }}>€{fmtEu(grandValore)}</td>
                       <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#059669" }}>

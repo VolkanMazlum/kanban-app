@@ -5,12 +5,14 @@ import Avatar from "./Avatar.jsx";
 export default function EmployeeManager({ employees, isHR, onAdd, onDelete, onClose }) {
   const [name, setName] = useState("");
   const [position, setPosition] = useState("");
+  const [category, setCategory] = useState("internal");
 
   const handleAdd = () => {
     if (!name.trim()) return;
-    onAdd(name, position);
+    onAdd(name, position, category);
     setName("");
     setPosition("");
+    setCategory("internal");
   };
 
   return (
@@ -45,6 +47,17 @@ export default function EmployeeManager({ employees, isHR, onAdd, onDelete, onCl
                 style={{width:"100%",padding:"10px 14px",borderRadius:8,border:"1px solid #E5E7EB",fontSize:13}}
               />
             </div>
+            <div style={{flex:1.2}}>
+              <div style={{fontSize:10,fontWeight:600,color:"#6B7280",marginBottom:4,marginLeft:2}}>CATEGORY</div>
+              <select 
+                value={category} 
+                onChange={e=>setCategory(e.target.value)}
+                style={{width:"100%",padding:"10px 14px",borderRadius:8,border:"1px solid #E5E7EB",fontSize:13,background:"#fff",cursor:"pointer"}}
+              >
+                <option value="internal">Internal</option>
+                <option value="consultant">Consultant</option>
+              </select>
+            </div>
             <button 
               onClick={handleAdd}
               style={{background:"#2563EB",color:"#fff",border:"none",borderRadius:8,height:38,padding:"0 16px",fontWeight:600,cursor:"pointer",fontSize:13}}
@@ -61,7 +74,12 @@ export default function EmployeeManager({ employees, isHR, onAdd, onDelete, onCl
                 <Avatar name={emp.name} size={36} idx={i} />
                 <div>
                   <div style={{fontSize:14,fontWeight:600,color:"#111827"}}>{emp.name}</div>
-                  <div style={{fontSize:12,color:"#6B7280"}}>{emp.position || "No position set"}</div>
+                  <div style={{fontSize:12,color:"#6B7280"}}>
+                    {emp.position || "No position set"} 
+                    <span style={{marginLeft:6,fontSize:10,background:emp.category==='consultant'?"#FDF2F8":"#F0FDF4",color:emp.category==='consultant'?"#9D174D":"#166534",padding:"1px 6px",borderRadius:4,fontWeight:700,textTransform:"uppercase"}}>
+                      {emp.category || "internal"}
+                    </span>
+                  </div>
                 </div>
               </div>
               {isHR && (

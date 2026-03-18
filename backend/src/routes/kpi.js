@@ -50,108 +50,64 @@ module.exports = (app, query, authenticate) => {
           AND (fl.fatturato_amount > 0 OR fl.invoice_date IS NOT NULL)
       `, [year, month]);
 
-      const monthlyRevenueTotal = billedRes.rows.reduce((sum, r) => sum + parseFloat(r.fatturato_amount || 0), 0);
-
-      const scheduledRes = await query(`
-        SELECT SUM(fl.valore_ordine * fo.percentage / 100) as total
-        FROM fatturato_ordini fo
-        JOIN fatturato_lines fl ON fo.fatturato_line_id = fl.id
-        LEFT JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
-        LEFT JOIN commesse c ON cc.commessa_id = c.id
-        LEFT JOIN tasks t ON c.task_id = t.id
-        WHERE (COALESCE(fo.expected_date, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end) >= $1 
-          AND COALESCE(fo.expected_date, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end) <= $2)
-          AND fl.fatturato_amount < fl.valore_ordine
-          AND (SELECT SUM(percentage) FROM fatturato_ordini fo2 WHERE fo2.fatturato_line_id = fl.id) >= 99.9
-          AND (
-            fl.invoice_date IS NULL AND (
-              EXISTS (SELECT 1 FROM task_phases tp WHERE tp.task_id = t.id AND LOWER(tp.name) = LOWER(fl.attivita) AND tp.status != 'done') OR
-              (NOT EXISTS (SELECT 1 FROM task_phases tp WHERE tp.task_id = t.id AND LOWER(tp.name) = LOWER(fl.attivita)) AND t.status != 'done')
-            )
-          )
-      `, [monthStart, monthEnd]);
+      const monthlyRevenue = billedRes.rows.reduce((sum, r) => sum + parseFloat(r.fatturato_amount || 0), 0);
 
 
-      // 4a. Revenue Forecast (Next 3 months) - Combine future scheduled and future line invoices
-      const forecast = [];
-      for (let i = 0; i < 4; i++) {
-        const fDate = new Date(year, month - 1 + i, 1);
-        const fStart = `${fDate.getFullYear()}-${String(fDate.getMonth() + 1).padStart(2, '0')}-01`;
-        const fEnd = new Date(fDate.getFullYear(), fDate.getMonth() + 1, 0).toISOString().slice(0, 10);
-
-        const fBilled = await query(`
-          SELECT fl.attivita, c.name as commessa_name, SUM(fl.fatturato_amount) as amount
-          FROM fatturato_lines fl
-          JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
-          JOIN commesse c ON cc.commessa_id = c.id
-          LEFT JOIN tasks t ON c.task_id = t.id
-          WHERE (EXTRACT(YEAR FROM COALESCE(fl.invoice_date, fl.updated_at, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end)) = $1
-            AND EXTRACT(MONTH FROM COALESCE(fl.invoice_date, fl.updated_at, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end)) = $2)
-            AND (fl.fatturato_amount > 0 OR fl.invoice_date IS NOT NULL)
-          GROUP BY fl.attivita, c.name
-        `, [fDate.getFullYear(), fDate.getMonth() + 1]);
-
-        const fScheduled = await query(`
-          SELECT fl.attivita, c.name as commessa_name, SUM(fl.valore_ordine * fo.percentage / 100) as amount
-          FROM fatturato_ordini fo
-          JOIN fatturato_lines fl ON fo.fatturato_line_id = fl.id
-          LEFT JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
-          LEFT JOIN commesse c ON cc.commessa_id = c.id
-          LEFT JOIN tasks t ON c.task_id = t.id
-          WHERE (COALESCE(fo.expected_date, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end) >= $1 
-            AND COALESCE(fo.expected_date, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end) <= $2)
-            AND fl.fatturato_amount < fl.valore_ordine
-            AND (SELECT SUM(percentage) FROM fatturato_ordini fo2 WHERE fo2.fatturato_line_id = fl.id) >= 99.9
-            AND (
-              fl.invoice_date IS NULL AND (
-                EXISTS (SELECT 1 FROM task_phases tp WHERE tp.task_id = t.id AND LOWER(tp.name) = LOWER(fl.attivita) AND tp.status != 'done') OR
-                (NOT EXISTS (SELECT 1 FROM task_phases tp WHERE tp.task_id = t.id AND LOWER(tp.name) = LOWER(fl.attivita)) AND t.status != 'done')
-              )
-            )
-          GROUP BY fl.attivita, c.name
-        `, [fStart, fEnd]);
-
-        const totalBilled = fBilled.rows.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
-        const totalScheduled = fScheduled.rows.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
-
-        // Combine details
-        const detailsMap = {};
-        fBilled.rows.forEach(r => {
-          const name = r.commessa_name ? `${r.commessa_name}: ${r.attivita}` : (r.attivita || "Unnamed Activity");
-          detailsMap[name] = (detailsMap[name] || 0) + parseFloat(r.amount || 0);
-        });
-        fScheduled.rows.forEach(r => {
-          const name = r.commessa_name ? `${r.commessa_name}: ${r.attivita}` : (r.attivita || "Unnamed Activity");
-          detailsMap[name] = (detailsMap[name] || 0) + parseFloat(r.amount || 0);
-        });
-
-        const details = Object.entries(detailsMap)
-          .map(([name, amount]) => ({ name, amount }))
-          .sort((a, b) => b.amount - a.amount);
-
-        forecast.push({
-          month: fDate.toLocaleString('en-US', { month: 'short' }),
-          total: totalBilled + totalScheduled,
-          details
-        });
-      }
+        // 4a. Actual Revenue Details for Forecast History
+        const forecast = [];
+        for (let i = 0; i < 4; i++) {
+          const fDate = new Date(year, month - 1 + i, 1);
+  
+          const fBilled = await query(`
+            SELECT fl.attivita, c.name as commessa_name, SUM(fl.fatturato_amount) as amount
+            FROM fatturato_lines fl
+            JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
+            JOIN commesse c ON cc.commessa_id = c.id
+            LEFT JOIN tasks t ON c.task_id = t.id
+            WHERE (EXTRACT(YEAR FROM COALESCE(fl.invoice_date, fl.updated_at, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end)) = $1
+              AND EXTRACT(MONTH FROM COALESCE(fl.invoice_date, fl.updated_at, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end)) = $2)
+              AND (fl.fatturato_amount > 0 OR fl.invoice_date IS NOT NULL)
+            GROUP BY fl.attivita, c.name
+          `, [fDate.getFullYear(), fDate.getMonth() + 1]);
+  
+          const details = fBilled.rows.map(r => ({
+            name: r.commessa_name ? `${r.commessa_name}: ${r.attivita}` : (r.attivita || "Unnamed Activity"),
+            amount: parseFloat(r.amount || 0)
+          })).sort((a, b) => b.amount - a.amount);
+  
+          forecast.push({
+            month: fDate.toLocaleString('en-US', { month: 'short' }),
+            total: details.reduce((sum, d) => sum + d.amount, 0),
+            details
+          });
+        }
 
       // 4b. Monthly Labor Costs
       const laborRes = await query(`
-        SELECT e.name, SUM(wh.hours) as hours,
+        SELECT e.id, e.name, e.category, COALESCE(wh_sum.hours, 0) as hours,
                (SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id AND ec.valid_from <= $3 ORDER BY ec.valid_from DESC LIMIT 1) as annual_gross
-        FROM employee_work_hours wh
-        JOIN employees e ON wh.employee_id = e.id
-        WHERE EXTRACT(YEAR FROM wh.date) = $1 AND EXTRACT(MONTH FROM wh.date) = $2
-        GROUP BY e.id, e.name
+        FROM employees e
+        LEFT JOIN (
+          SELECT employee_id, SUM(hours) as hours
+          FROM employee_work_hours
+          WHERE EXTRACT(YEAR FROM date) = $1 AND EXTRACT(MONTH FROM date) = $2
+          GROUP BY employee_id
+        ) wh_sum ON e.id = wh_sum.employee_id
+        WHERE e.is_active = TRUE
+          AND (wh_sum.hours > 0 OR e.category = 'consultant')
       `, [year, month, monthEnd]);
 
       const labor_details = laborRes.rows.map(r => {
         const hours = parseFloat(r.hours || 0);
         const gross = parseFloat(r.annual_gross || 0);
-        const cost = (hours * (gross / 2000)); // Using 2000 as constant theoretical hours
+        let cost = 0;
+        if (r.category === 'consultant') {
+          cost = gross / 12;
+        } else {
+          cost = hours * (gross / 2000);
+        }
         return { name: r.name, hours, cost };
-      }).filter(l => l.hours > 0);
+      }).filter(l => l.cost > 0 || l.hours > 0);
 
       const totalLaborCost = labor_details.reduce((sum, l) => sum + l.cost, 0);
 
@@ -199,8 +155,6 @@ module.exports = (app, query, authenticate) => {
         GROUP BY to_char(updated_at, 'Mon YYYY')
         ORDER BY sort_date ASC
       `);
-
-      const monthlyRevenue = monthlyRevenueTotal + parseFloat(scheduledRes.rows[0].total || 0);
 
       const summary = {
         total: monthTotalTasks,

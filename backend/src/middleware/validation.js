@@ -67,7 +67,8 @@ const taskUpdateSchema = z.object({
 // Validation schema for employee creation
 const employeeSchema = z.object({
   name: z.string().min(1, "Name is required").trim(),
-  position: z.string().optional().default("")
+  position: z.string().optional().default(""),
+  category: z.enum(['internal', 'consultant']).default('internal')
 });
 
 module.exports = {

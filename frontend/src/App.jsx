@@ -125,9 +125,9 @@ export default function App() {
     } catch(err) { toast(err.message, "error"); loadAll(); }
   };
 
-  const handleEmpAdd = async (name, position) => {
+  const handleEmpAdd = async (name, position, category = "internal") => {
     try {
-      const e = await api.createEmployee(name, position);
+      const e = await api.createEmployee(name, position, category);
       setEmployees(p => [...p, e]); toast(`${e.name} added`);
       if (isHR) {
         const k = await api.getKPI(); setKpi(k);
@@ -233,8 +233,7 @@ export default function App() {
                 {employees.map(e=><option key={e.id} value={String(e.id)}>{e.name}</option>)}
               </select>
             )}
-            <button onClick={()=>setModal({type:"employees"})}
-              style={{background:"#fff",border:"1px solid #E5E7EB",borderRadius:6,padding:"5px 10px",color:"#374151",fontSize:11,fontFamily:"'Inter',sans-serif",cursor:"pointer",fontWeight:600}}>👥 Team</button>
+            {/* Removed separate Team button as it is now integrated into Users & Audit */}
             <button onClick={()=>setModal({type:"task"})}
               style={{background:"#2563EB",color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",fontFamily:"'Inter',sans-serif",fontSize:12,fontWeight:700,cursor:"pointer",boxShadow:"0 2px 4px rgba(37,99,235,0.2)"}}>+ Task</button>
           </div>

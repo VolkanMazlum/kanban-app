@@ -35,7 +35,7 @@ export const patchTaskStatus = (id, status) => req(`/tasks/${id}/status`, { meth
 export const deleteTask      = (id) => req(`/tasks/${id}`,  { method: "DELETE" });
 
 export const getEmployees    = ()           => req(`/employees?t=${Date.now()}`);
-export const createEmployee  = (name, position) => req("/employees", { method: "POST", body: JSON.stringify({ name, position }) });
+export const createEmployee  = (name, position, category = "internal") => req("/employees", { method: "POST", body: JSON.stringify({ name, position, category }) });
 export const deleteEmployee  = (id)         => req(`/employees/${id}`, { method: "DELETE" });
 
 export const getKPI = (year, month) => {

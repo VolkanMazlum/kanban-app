@@ -1,15 +1,25 @@
 const bcrypt = require('bcrypt');
 const { authenticateHR } = require('../middleware/auth');
+const { logAudit, getAuditContext } = require('../middleware/auditLog');
 
 module.exports = (app, query) => {
   // GET /api/users — List all users (HR only)
   app.get('/api/users', authenticateHR, async (req, res) => {
     try {
       const result = await query(`
-        SELECT u.id, u.email, u.name, u.role, u.is_active, u.created_at, e.position
-        FROM users u
-        LEFT JOIN employees e ON u.employee_id = e.id
-        ORDER BY u.created_at ASC
+        SELECT 
+          e.id AS id, 
+          u.id AS user_id, 
+          u.email, 
+          e.name, 
+          u.role, 
+          e.is_active, 
+          e.created_at, 
+          e.position, 
+          e.category
+        FROM employees e
+        LEFT JOIN users u ON e.id = u.employee_id
+        ORDER BY e.name ASC
       `);
       res.json(result.rows);
     } catch (err) {
@@ -20,7 +30,7 @@ module.exports = (app, query) => {
 
   // POST /api/users — Create a new user (HR only)
   app.post('/api/users', authenticateHR, async (req, res) => {
-    const { email, name, password, role, position } = req.body;
+    const { email, name, password, role, position, category } = req.body;
 
     if (!email || !name || !password) {
       return res.status(400).json({ error: 'Email, name, and password are required' });
@@ -38,14 +48,14 @@ module.exports = (app, query) => {
 
       const trimmedName = name.trim();
       let empId;
-      
+
       // Sync with employees table
       const empExists = await query('SELECT id FROM employees WHERE name = $1', [trimmedName]);
       if (empExists.rows.length > 0) {
         empId = empExists.rows[0].id;
-        await query('UPDATE employees SET is_active = TRUE, position = COALESCE($2, position) WHERE id = $1', [empId, position || null]);
+        await query('UPDATE employees SET is_active = TRUE, position = COALESCE($2, position), category = COALESCE($3, category) WHERE id = $1', [empId, position || null, category || null]);
       } else {
-        const newEmp = await query('INSERT INTO employees (name, is_active, position) VALUES ($1, TRUE, $2) RETURNING id', [trimmedName, position || '']);
+        const newEmp = await query('INSERT INTO employees (name, is_active, position, category) VALUES ($1, TRUE, $2, $3) RETURNING id', [trimmedName, position || '', category || 'internal']);
         empId = newEmp.rows[0].id;
       }
 
@@ -55,7 +65,13 @@ module.exports = (app, query) => {
         [email, name, hash, userRole, empId]
       );
 
-      res.status(201).json(result.rows[0]);
+      const newUser = result.rows[0];
+      
+      // Audit log: user created
+      const ctx = getAuditContext(req);
+      logAudit(query, { ...ctx, action: 'CREATE', entityType: 'user', entityId: newUser.id, details: { email: newUser.email, role: newUser.role } });
+
+      res.status(201).json(newUser);
     } catch (err) {
       console.error('POST /users error:', err);
       res.status(500).json({ error: 'Database error' });
@@ -65,7 +81,7 @@ module.exports = (app, query) => {
   // PATCH /api/users/:id — Update user (HR only)
   app.patch('/api/users/:id', authenticateHR, async (req, res) => {
     const { id } = req.params;
-    const { name, role, is_active, password, position } = req.body;
+    const { name, role, is_active, password, position, category } = req.body;
 
     try {
       const updates = [];
@@ -81,7 +97,7 @@ module.exports = (app, query) => {
         values.push(hash);
       }
 
-      if (updates.length === 0 && position === undefined) {
+      if (updates.length === 0 && position === undefined && category === undefined) {
         return res.status(400).json({ error: 'No valid fields to update' });
       }
 
@@ -99,19 +115,26 @@ module.exports = (app, query) => {
 
       // Sync is_active status and position with employees table if they were updated
       const empId = result.rows[0].employee_id;
-      if ((is_active !== undefined || position !== undefined) && empId) {
+      if ((is_active !== undefined || position !== undefined || category !== undefined) && empId) {
         const empUpdates = [];
         const empValues = [];
         let eIdx = 1;
         if (is_active !== undefined) { empUpdates.push(`is_active = $${eIdx++}`); empValues.push(is_active); }
         if (position !== undefined) { empUpdates.push(`position = $${eIdx++}`); empValues.push(position); }
+        if (category !== undefined) { empUpdates.push(`category = $${eIdx++}`); empValues.push(category); }
         if (empUpdates.length > 0) {
           empValues.push(empId);
           await query(`UPDATE employees SET ${empUpdates.join(', ')} WHERE id = $${eIdx}`, empValues);
         }
       }
 
-      res.json(result.rows[0]);
+      const updatedUser = result.rows[0];
+
+      // Audit log: user updated
+      const ctx = getAuditContext(req);
+      logAudit(query, { ...ctx, action: 'UPDATE', entityType: 'user', entityId: updatedUser.id, details: { email: updatedUser.email, role: updatedUser.role, is_active: updatedUser.is_active } });
+
+      res.json(updatedUser);
     } catch (err) {
       console.error('PATCH /users error:', err);
       res.status(500).json({ error: 'Database error' });
