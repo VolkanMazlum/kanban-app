@@ -17,9 +17,9 @@ async function sendWorkbook(res, workbook, filename) {
 
 /**
  * EXPORT TASKS
- * Visible to all authenticated users
+ * HR Only
  */
-router.get('/tasks', async (req, res) => {
+router.get('/tasks', authenticateHR, async (req, res) => {
   try {
     const result = await query(`
       SELECT t.id as task_id, t.title as task_title, t.status as task_status, t.label as task_type, 
@@ -62,6 +62,9 @@ router.get('/tasks', async (req, res) => {
     result.rows.forEach(t => {
       sheet.addRow({
         ...t,
+        task_total_hours: t.task_total_hours ? Number(t.task_total_hours) : 0,
+        phase_total_hours: t.phase_total_hours ? Number(t.phase_total_hours) : 0,
+        individual_hours: t.individual_hours ? Number(t.individual_hours) : 0,
         phase_start: t.phase_start ? t.phase_start.toISOString().split('T')[0] : '-',
         phase_end: t.phase_end ? t.phase_end.toISOString().split('T')[0] : '-',
         planned_start: t.planned_start ? t.planned_start.toISOString().split('T')[0] : '',
@@ -93,7 +96,10 @@ router.get('/finances', authenticateHR, async (req, res) => {
         t.title as task_title,
         cl.name as client_name,
         fl.attivita as line_description,
-        fl.valore_ordine
+        fl.valore_ordine,
+        fl.fatturato_amount as total_billed,
+        fl.rimanente_probabile as remainder,
+        fl.proforma
       FROM fatturato_realized fr
       JOIN fatturato_lines fl ON fr.fatturato_line_id = fl.id
       JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
@@ -112,8 +118,12 @@ router.get('/finances', authenticateHR, async (req, res) => {
       { header: 'Commessa (Task)', key: 'task_title', width: 30 },
       { header: 'Client', key: 'client_name', width: 25 },
       { header: 'Activity', key: 'line_description', width: 25 },
-      { header: 'Amount (€)', key: 'amount', width: 15 },
-      { header: '% of Activity', key: 'percentage', width: 15 },
+      { header: 'Payment (€)', key: 'amount', width: 15 },
+      { header: 'Order Value (€)', key: 'valore_ordine', width: 18 },
+      { header: 'Total Billed (€)', key: 'total_billed', width: 18 },
+      { header: 'Prob. Remainder (€)', key: 'remainder', width: 18 },
+      { header: 'Proforma (€)', key: 'proforma', width: 15 },
+      { header: '% of Order', key: 'percentage', width: 12 },
       { header: 'Notes', key: 'notes', width: 40 },
     ];
 
@@ -130,16 +140,62 @@ router.get('/finances', authenticateHR, async (req, res) => {
       sheet.addRow({
         ...r,
         registration_date: r.registration_date ? r.registration_date.toISOString().split('T')[0] : '',
-        amount: amount,
-        percentage: pct
+        amount: Number(amount),
+        valore_ordine: Number(r.valore_ordine || 0),
+        total_billed: Number(r.total_billed || 0),
+        remainder: Number(r.remainder || 0),
+        proforma: Number(r.proforma || 0),
+        percentage: pct,
+        notes: r.note
       });
     });
 
-    // Add total row
-    const totalRow = sheet.addRow(['TOTAL', '', '', '', total, '', '']);
+    // Add total row (spanning numeric columns correctly)
+    const totalRow = sheet.addRow(['TOTAL', '', '', '', Number(total)]);
     totalRow.font = { bold: true };
 
-    await sendWorkbook(res, workbook, `Finance_Report_${year || 'all'}.xlsx`);
+    // ADDED: Detailed Orders Sheet
+    const sheet2 = workbook.addWorksheet('Contract Details');
+    sheet2.columns = [
+      { header: 'Comm. #', key: 'comm_number', width: 12 },
+      { header: 'Project Name', key: 'comm_name', width: 25 },
+      { header: 'Client', key: 'client_name', width: 25 },
+      { header: 'Client #', key: 'n_cliente', width: 10 },
+      { header: 'Order Ref', key: 'n_ordine', width: 20 },
+      { header: 'Activity', key: 'attivita', width: 25 },
+      { header: 'Order Value (€)', key: 'valore_ordine', width: 18 },
+      { header: 'Total Billed (€)', key: 'fatturato_amount', width: 18 },
+      { header: 'Probable Rem. (€)', key: 'rimanente_probabile', width: 18 },
+      { header: 'Proforma (€)', key: 'proforma', width: 15 },
+      { header: 'Notes', key: 'note', width: 30 },
+    ];
+    sheet2.getRow(1).font = { bold: true };
+    sheet2.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+
+    const ordersRes = await query(`
+      SELECT 
+        c.comm_number, c.name as comm_name,
+        cl.name as client_name,
+        cc.n_cliente, cc.n_ordine,
+        fl.attivita, fl.valore_ordine, fl.fatturato_amount, fl.rimanente_probabile, fl.proforma, fl.note
+      FROM commesse c
+      JOIN commessa_clients cc ON c.id = cc.commessa_id
+      LEFT JOIN clients cl ON cc.client_id = cl.id
+      JOIN fatturato_lines fl ON cc.id = fl.commessa_client_id
+      ORDER BY c.comm_number ASC, cc.n_cliente ASC, fl.id ASC
+    `);
+
+    ordersRes.rows.forEach(r => {
+      sheet2.addRow({
+        ...r,
+        valore_ordine: Number(r.valore_ordine || 0),
+        fatturato_amount: Number(r.fatturato_amount || 0),
+        rimanente_probabile: Number(r.rimanente_probabile || 0),
+        proforma: Number(r.proforma || 0)
+      });
+    });
+
+    await sendWorkbook(res, workbook, `Financial_Detailed_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   } catch (err) {
     console.error('Export finances error:', err);
     res.status(500).json({ error: 'Failed to export finances' });
@@ -299,8 +355,15 @@ router.get('/workload', authenticateHR, async (req, res) => {
     sheet4.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
 
     laborRes.rows.sort((a,b) => a.month - b.month || a.name.localeCompare(b.name)).forEach(r => {
-      const cost = calculateMonthlyLaborCost({ hours: r.hours, annual_gross: r.annual_gross, category: r.category });
-      sheet4.addRow({ month_name: MONTH_NAMES[parseInt(r.month)-1], name: r.name, category: r.category, hours: parseFloat(r.hours), cost: Math.round(cost) });
+      const hours = Number(r.hours || 0);
+      const cost = calculateMonthlyLaborCost({ hours, annual_gross: Number(r.annual_gross || 0), category: r.category });
+      sheet4.addRow({ 
+        month_name: MONTH_NAMES[parseInt(r.month)-1], 
+        name: r.name, 
+        category: r.category, 
+        hours: hours, 
+        cost: Math.round(cost) 
+      });
     });
 
     await sendWorkbook(res, workbook, `Full_KPI_Dashboard_${targetYear}.xlsx`);
@@ -408,7 +471,11 @@ router.get('/employees', authenticateHR, async (req, res) => {
         position: r.position,
         category: r.category,
         is_active: r.is_active ? 'Active' : 'Disabled',
-        ...hr
+        ...hr,
+        ral: hr.ral ? Number(hr.ral) : 0,
+        lordo_azienda: hr.lordo_azienda ? Number(hr.lordo_azienda) : 0,
+        totale_annuo: hr.totale_annuo ? Number(hr.totale_annuo) : 0,
+        presenza: hr.presenza ? Number(hr.presenza) : 0,
       };
       
       sheet.addRow(rowData);
@@ -418,6 +485,64 @@ router.get('/employees', authenticateHR, async (req, res) => {
   } catch (err) {
     console.error('Export employees error:', err);
     res.status(500).json({ error: 'Failed to export employee data' });
+  }
+});
+
+/**
+ * EXPORT CLIENTS
+ * HR Only
+ */
+router.get('/clients', authenticateHR, async (req, res) => {
+  try {
+    const result = await query(`SELECT * FROM clients ORDER BY name ASC`);
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Clients List');
+
+    sheet.columns = [
+      { header: 'ID', key: 'id', width: 10 },
+      { header: 'Client Name (Short)', key: 'name', width: 25 },
+      { header: 'Ragione Sociale', key: 'ragione_sociale', width: 30 },
+      { header: 'VAT Number', key: 'vat_number', width: 20 },
+      { header: 'Codice Fiscale', key: 'codice_fiscale', width: 20 },
+      { header: 'Codice Univoco (SDI)', key: 'codice_univoco', width: 15 },
+      { header: 'ATECO', key: 'codice_ateco', width: 15 },
+      { header: 'Inarcassa', key: 'codice_inarcassa', width: 15 },
+      { header: 'Contact Email', key: 'contact_email', width: 25 },
+      { header: 'Phone', key: 'phone', width: 15 },
+      { header: 'Fax', key: 'fax', width: 15 },
+      { header: 'Address', key: 'address', width: 30 },
+      { header: 'Località', key: 'localita', width: 20 },
+      { header: 'CAP', key: 'cap', width: 10 },
+      { header: 'Province', key: 'province', width: 10 },
+      { header: 'Stato', key: 'stato', width: 15 },
+      { header: 'Accounting Contact', key: 'contabilita_name', width: 25 },
+      { header: 'Accounting Email', key: 'contabilita_email', width: 25 },
+      { header: 'Accounting Phone', key: 'contabilita_phone', width: 15 },
+      { header: 'Notes', key: 'notes', width: 30 },
+      { header: 'Created At', key: 'created_at', width: 20 }
+    ];
+
+    sheet.getRow(1).font = { bold: true };
+    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } };
+
+    const rows = result.rows.map(r => ({
+      ...r,
+      valore_ordine: Number(r.valore_ordine || 0),
+      fatturato_amount: Number(r.fatturato_amount || 0),
+      rimanente: Number(r.rimanente || 0),
+      labor_cost: Number(r.labor_cost || 0),
+      margin: Number(r.margin || 0)
+    }));
+
+    rows.forEach(r => sheet.addRow({
+        ...r,
+        created_at: r.created_at ? r.created_at.toISOString() : ''
+      }));
+
+    await sendWorkbook(res, workbook, `Clients_List_${new Date().toISOString().split('T')[0]}.xlsx`);
+  } catch (err) {
+    console.error('Export clients error:', err);
+    res.status(500).json({ error: 'Failed to export client data' });
   }
 });
 

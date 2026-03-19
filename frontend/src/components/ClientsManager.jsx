@@ -124,9 +124,14 @@ export default function ClientsManager({ isHR }) {
           <p style={{ color: "#6B7280", margin: 0, fontSize: 14 }}>Manage client profiles, tax information, and contacts</p>
         </div>
 
-        <button onClick={openNewClient} style={{ background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-          + Add New Client
-        </button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={() => window.location.href = api.exportClients()} style={{ background: "#F3F4F6", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+            📥 Export
+          </button>
+          <button onClick={openNewClient} style={{ background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+            + Add New Client
+          </button>
+        </div>
       </div>
 
       {/* DATA TABLE */}

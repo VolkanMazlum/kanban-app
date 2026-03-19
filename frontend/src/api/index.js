@@ -191,6 +191,7 @@ export const exportTasks = () => `${BASE}/reports/tasks?token=${localStorage.get
 export const exportFinances = (year) => `${BASE}/reports/finances?year=${year}&token=${localStorage.getItem("token")}`;
 export const exportWorkload = (year) => `${BASE}/reports/workload?year=${year}&token=${localStorage.getItem("token")}`;
 export const exportEmployees = () => `${BASE}/reports/employees?token=${localStorage.getItem("token")}`;
+export const exportClients = () => `${BASE}/reports/clients?token=${localStorage.getItem("token")}`;
 
 // ── AUDIT LOGS ──
 export const getAuditLogs = (limit = 100) => req(`/audit-logs?limit=${limit}`);
