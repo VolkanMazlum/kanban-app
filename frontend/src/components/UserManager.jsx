@@ -12,6 +12,11 @@ export default function UserManager({ isHR, onUserAdded }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
+  // Edit user modal
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "", password: "", role: "standard", position: "", category: "internal" });
+
   useEffect(() => {
     if (!isHR) return;
     api.getUsers().then(setUsers).catch(console.error);
@@ -47,6 +52,40 @@ export default function UserManager({ isHR, onUserAdded }) {
     setSaving(false);
   };
 
+  const openEditUser = (user) => {
+    setEditingUser(user);
+    setEditForm({
+      name: user.name || "",
+      email: user.email || "",
+      password: "", // Always empty initially
+      role: user.role || "standard",
+      position: user.position || "",
+      category: user.category || "internal"
+    });
+    setError(null);
+    setShowEditModal(true);
+  };
+
+  const handleUpdateUser = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const data = { ...editForm };
+      // Remove password if empty (backend won't update it)
+      if (!data.password.trim()) delete data.password;
+      
+      const targetId = editingUser.user_id || editingUser.id;
+      await api.updateUser(targetId, data);
+      
+      setShowEditModal(false);
+      await refreshUsers();
+      if (onUserAdded) onUserAdded(true);
+    } catch (err) {
+      setError(err.message);
+    }
+    setSaving(false);
+  };
+
   const handleToggleActive = async (user) => {
     try {
       await api.updateUser(user.id, { is_active: !user.is_active });
@@ -58,14 +97,6 @@ export default function UserManager({ isHR, onUserAdded }) {
   const handleRoleChange = async (user, newRole) => {
     try {
       await api.updateUser(user.id, { role: newRole });
-      await refreshUsers();
-      if (onUserAdded) onUserAdded(true);
-    } catch (err) { console.error(err); }
-  };
-
-  const handlePositionChange = async (user, newPos) => {
-    try {
-      await api.updateUser(user.id, { position: newPos });
       await refreshUsers();
       if (onUserAdded) onUserAdded(true);
     } catch (err) { console.error(err); }
@@ -260,18 +291,28 @@ export default function UserManager({ isHR, onUserAdded }) {
                       {new Date(user.created_at).toLocaleDateString("it-IT")}
                     </td>
                     <td style={{ padding: "12px 16px" }}>
-                      {user.user_id ? (
-                        <button onClick={() => handleToggleActive(user)} style={{
-                          background: user.is_active ? "#FEF2F2" : "#F0FDF4",
-                          color: user.is_active ? "#DC2626" : "#059669",
-                          border: `1px solid ${user.is_active ? "#FECACA" : "#BBF7D0"}`,
-                          borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer"
-                        }}>
-                          {user.is_active ? "Disable" : "Enable"}
-                        </button>
-                      ) : (
-                        <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>Create user to manage</span>
-                      )}
+                      <div style={{ display: "flex", gap: 8 }}>
+                        {user.user_id ? (
+                          <>
+                            <button onClick={() => openEditUser(user)} style={{
+                              background: "#EFF6FF", color: "#2563EB", border: "1px solid #DBEAFE",
+                              borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer"
+                            }}>
+                              Edit
+                            </button>
+                            <button onClick={() => handleToggleActive(user)} style={{
+                              background: user.is_active ? "#FEF2F2" : "#F0FDF4",
+                              color: user.is_active ? "#DC2626" : "#059669",
+                              border: `1px solid ${user.is_active ? "#FECACA" : "#BBF7D0"}`,
+                              borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer"
+                            }}>
+                              {user.is_active ? "Disable" : "Enable"}
+                            </button>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>Create user to manage</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -315,6 +356,98 @@ export default function UserManager({ isHR, onUserAdded }) {
           </table>
         </div>
       )}
+
+      {/* EDIT USER MODAL */}
+      {showEditModal && (
+        <EditUserModal
+          user={editingUser}
+          form={editForm}
+          setForm={setEditForm}
+          onSave={handleUpdateUser}
+          onClose={() => setShowEditModal(false)}
+          saving={saving}
+          error={error}
+        />
+      )}
+    </div>
+  );
+}
+
+// Sub-component for the Edit Modal
+function EditUserModal({ user, form, setForm, onSave, onClose, saving, error }) {
+  return (
+    <div style={{
+      position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+      background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 1000, backdropFilter: "blur(4px)"
+    }}>
+      <div style={{
+        background: "#fff", borderRadius: 16, width: 450, padding: 32,
+        boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)"
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+          <div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: 0 }}>Edit User Details</h3>
+            <p style={{ color: "#6B7280", fontSize: 13, margin: "4px 0 0 0" }}>Updating account for <b>{user.email}</b></p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 24, color: "#9CA3AF", cursor: "pointer" }}>&times;</button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 6 }}>FULL NAME</label>
+            <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+              style={{ padding: "10px 14px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 14, width: "100%", outline: "none" }} />
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 6 }}>NEW PASSWORD (LEAVE BLANK TO KEEP CURRENT)</label>
+            <input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+              placeholder="••••••••"
+              style={{ padding: "10px 14px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 14, width: "100%", outline: "none" }} />
+          </div>
+
+          <div style={{ display: "flex", gap: 16 }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 6 }}>POSITION</label>
+              <input value={form.position} onChange={e => setForm({ ...form, position: e.target.value })}
+                style={{ padding: "10px 14px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 14, width: "100%", outline: "none" }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 6 }}>CATEGORY</label>
+              <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
+                style={{ padding: "10px 14px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 14, width: "100%", cursor: "pointer", background: "#fff" }}>
+                <option value="internal">Internal</option>
+                <option value="consultant">Consultant</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 6 }}>SYSTEM ROLE</label>
+            <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}
+              style={{ padding: "10px 14px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 14, width: "100%", cursor: "pointer", background: "#fff" }}>
+              <option value="standard">Standard User</option>
+              <option value="hr">HR / Admin</option>
+            </select>
+          </div>
+        </div>
+
+        {error && <div style={{ marginTop: 16, color: "#DC2626", fontSize: 13, fontWeight: 600, background: "#FEF2F2", padding: "8px 12px", borderRadius: 8 }}>{error}</div>}
+
+        <div style={{ marginTop: 32, display: "flex", gap: 12 }}>
+          <button onClick={onClose} style={{
+            flex: 1, background: "#F3F4F6", color: "#374151", border: "none", borderRadius: 10,
+            padding: "12px", fontWeight: 600, fontSize: 14, cursor: "pointer"
+          }}>Cancel</button>
+          <button onClick={onSave} disabled={saving} style={{
+            flex: 1, background: "#2563EB", color: "#fff", border: "none", borderRadius: 10,
+            padding: "12px", fontWeight: 600, fontSize: 14, cursor: "pointer"
+          }}>
+            {saving ? "Updating..." : "Save Changes"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
