@@ -1,7 +1,9 @@
+import { useState, useEffect } from "react";
+import React from "react";
 import { TOPIC_STYLE } from "../constants/index.js";
 import Avatar from "../components/Avatar.jsx";
-import React, { useState, useEffect } from "react";
 import * as api from "../api";
+import { downloadAuthenticatedFile } from "../utils/downloadUtils";
 
 function MiniGantt({ phases, monthStart, monthEnd }) {
   const start = new Date(monthStart);
@@ -238,8 +240,8 @@ export default function KPIDashboard({ employees }) {
             <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: 0 }}>Monthly Profitability</h3>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 9, color: "#9CA3AF", fontWeight: 700 }}>NET PROFIT (EST.)</div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: (summary.monthly_revenue - (summary.total_labor_cost || 0) - (summary.monthly_overhead || 0)) >= 0 ? "#10B981" : "#EF4444" }}>
-                €{Math.round(summary.monthly_revenue - (summary.total_labor_cost || 0) - (summary.monthly_overhead || 0)).toLocaleString("it-IT")}
+              <div style={{ fontSize: 18, fontWeight: 800, color: (summary.monthly_revenue - (summary.total_labor_cost || 0) - (summary.total_consultant_labor || 0) - (summary.monthly_overhead || 0)) >= 0 ? "#10B981" : "#EF4444" }}>
+                €{Math.round(summary.monthly_revenue - (summary.total_labor_cost || 0) - (summary.total_consultant_labor || 0) - (summary.monthly_overhead || 0)).toLocaleString("it-IT")}
               </div>
             </div>
           </div>
@@ -266,11 +268,22 @@ export default function KPIDashboard({ employees }) {
 
                 {/* LABOR */}
                 <tr style={{ background: "#F9FAFB" }}>
-                  <td colSpan={2} style={{ padding: "4px 4px", fontWeight: 800, color: "#111827", fontSize: 9, paddingTop: 10 }}>🔴 LABOR COSTS</td>
+                  <td colSpan={2} style={{ padding: "4px 4px", fontWeight: 800, color: "#111827", fontSize: 9, paddingTop: 10 }}>🔴 INTERNAL LABOR (DIRECT)</td>
                 </tr>
                 {(summary.labor_costs || []).map((l, i) => (
                   <tr key={`lab-${i}`} style={{ borderBottom: "1px solid #F9FAFB" }}>
                     <td style={{ padding: "4px 4px", color: "#374151" }}>{l.name} <span style={{ fontSize: 8, color: "#9CA3AF" }}>({l.hours}h)</span></td>
+                    <td style={{ padding: "4px 4px", textAlign: "right", color: "#DC2626", fontWeight: 500 }}>-€{Math.round(l.cost).toLocaleString("it-IT")}</td>
+                  </tr>
+                ))}
+
+                {/* CONSULTANTS */}
+                <tr style={{ background: "#F9FAFB" }}>
+                  <td colSpan={2} style={{ padding: "4px 4px", fontWeight: 800, color: "#111827", fontSize: 9, paddingTop: 10 }}>🧑‍💻 CONSULTANTS (FIXED)</td>
+                </tr>
+                {(summary.consultant_costs || []).map((l, i) => (
+                  <tr key={`cons-${i}`} style={{ borderBottom: "1px solid #F9FAFB" }}>
+                    <td style={{ padding: "4px 4px", color: "#374151" }}>{l.name}</td>
                     <td style={{ padding: "4px 4px", textAlign: "right", color: "#DC2626", fontWeight: 500 }}>-€{Math.round(l.cost).toLocaleString("it-IT")}</td>
                   </tr>
                 ))}
@@ -301,11 +314,12 @@ export default function KPIDashboard({ employees }) {
             <button onClick={() => setMonthAnchor(a => a + 1)} style={{ background: "#fff", border: "1.5px solid #E5E7EB", borderRadius: 7, padding: "5px 10px", cursor: "pointer", fontSize: 12, color: "#374151", fontWeight: 600 }}>→</button>
             <button onClick={() => setMonthAnchor(0)} style={{ background: "#2563EB", color: "#fff", border: "none", borderRadius: 7, padding: "5px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>This Month</button>
             <button
-              onClick={() => window.location.href = api.exportWorkload(targetYear)}
-              style={{ background: "#EFF6FF", color: "#2563EB", border: "1.5px solid #DBEAFE", borderRadius: 7, padding: "5px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", marginLeft: 8 }}
-            >
-              📥 Export Data
-            </button>
+            onClick={() => downloadAuthenticatedFile(`/reports/workload?year=${targetYear}`, `Workload_KPI_${targetYear}_${new Date().toISOString().split('T')[0]}.xlsx`)}
+            style={{ padding: "10px 20px", background: "#F3F4F6", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all 0.2s", marginLeft: 8 }}
+            onMouseOver={e => e.currentTarget.style.background = "#E5E7EB"}
+            onMouseOut={e => e.currentTarget.style.background = "#F3F4F6"}>
+            📥 Export
+          </button>
           </div>
         </div>
 

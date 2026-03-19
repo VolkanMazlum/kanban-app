@@ -61,7 +61,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
     try {
       const result = await query(`
         SELECT 
-          e.id, e.name,
+          e.id, e.name, e.category,
           COALESCE((SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id AND ($1::int IS NULL OR ec.valid_from <= MAKE_DATE($1::int, 12, 31)) ORDER BY ec.valid_from DESC LIMIT 1), 0) AS current_annual_gross,
           (SELECT ec.valid_from::TEXT FROM employee_costs ec WHERE ec.employee_id = e.id AND ($1::int IS NULL OR ec.valid_from <= MAKE_DATE($1::int, 12, 31)) ORDER BY ec.valid_from DESC LIMIT 1) AS current_valid_from,
           COALESCE((SELECT SUM(wh.hours) FROM employee_work_hours wh WHERE wh.employee_id = e.id AND ($1::int IS NULL OR EXTRACT(YEAR FROM wh.date) = $1)), 0) AS logged_hours,
@@ -69,6 +69,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           COALESCE((SELECT json_agg(json_build_object('id', ec.id, 'annual_gross', ec.annual_gross, 'valid_from', ec.valid_from::TEXT) ORDER BY ec.valid_from DESC) FROM employee_costs ec WHERE ec.employee_id = e.id), '[]') AS cost_history
         FROM employees e 
         WHERE e.is_active = TRUE
+           OR EXISTS (SELECT 1 FROM employee_work_hours wh WHERE wh.employee_id = e.id AND ($1::int IS NULL OR EXTRACT(YEAR FROM wh.date) = $1))
         ORDER BY e.name
       `, [targetYear]);
 
@@ -144,17 +145,62 @@ module.exports = (app, query, authenticate, authenticateHR) => {
     const isAllTime = req.query.year === 'all';
     const targetYear = isAllTime ? null : (parseInt(req.query.year) || new Date().getFullYear());
     try {
-      // SADECE Seçili yılda aktif olan taskları getiriyoruz (yada All Time ise hepsi)
+      // 1. Get all relevant costs for normalization
+      const allCosts = await query(`
+        SELECT employee_id, annual_gross, 
+               EXTRACT(YEAR FROM valid_from) as start_year,
+               EXTRACT(MONTH FROM valid_from) as start_month
+        FROM employee_costs
+        ORDER BY valid_from DESC
+      `);
+
+      // 2. Get Employee categories
+      const emps = await query("SELECT id, category FROM employees");
+      const empMap = {};
+      emps.rows.forEach(e => empMap[e.id] = e.category);
+
+      // 3. Get Labor breakdown for the year
+      const laborRes = await query(`
+        SELECT 
+          wh.task_id, wh.employee_id,
+          EXTRACT(YEAR FROM wh.date) as work_year,
+          EXTRACT(MONTH FROM wh.date) as work_month,
+          SUM(wh.hours) as hours
+        FROM employee_work_hours wh
+        WHERE ($1::int IS NULL OR EXTRACT(YEAR FROM wh.date) = $1)
+        GROUP BY wh.task_id, wh.employee_id, work_year, work_month
+      `, [targetYear]);
+
+      // 4. Calculate costs per task
+      const taskCosts = {}; // task_id -> { internal_cost: 0, hours: 0 }
+      laborRes.rows.forEach(l => {
+        if (!taskCosts[l.task_id]) taskCosts[l.task_id] = { internal_cost: 0, hours: 0 };
+        taskCosts[l.task_id].hours += parseFloat(l.hours);
+
+        if (empMap[l.employee_id] === 'internal') {
+          // Find the gross that was valid at that time
+          const valid = allCosts.rows
+            .filter(c => c.employee_id === l.employee_id)
+            .filter(c => (c.start_year < l.work_year) || (c.start_year === l.work_year && c.start_month <= l.work_month))[0];
+          
+          if (valid) {
+            const rate = parseFloat(valid.annual_gross) / 2000;
+            taskCosts[l.task_id].internal_cost += parseFloat(l.hours) * rate;
+          }
+        }
+      });
+
+      // 5. Get Tasks (filtered by year)
       const tasksRes = await query(`
-        SELECT t.id, t.title, COALESCE(tr.revenue, 0) as revenue 
+        SELECT 
+          t.id, t.title, COALESCE(tr.revenue, 0) as revenue,
+          c.id as comm_id, c.comm_number, c.name as comm_name
         FROM tasks t 
         LEFT JOIN task_revenues tr ON t.id = tr.task_id 
+        LEFT JOIN commesse c ON t.id = c.task_id
         WHERE 
           $1::int IS NULL
-          OR EXISTS (
-            SELECT 1 FROM commesse c 
-            WHERE c.task_id = t.id AND c.comm_number LIKE RIGHT($1::text, 2) || '-%'
-          )
+          OR (c.comm_number LIKE RIGHT($1::text, 2) || '-%')
           OR EXISTS (
             SELECT 1 FROM employee_work_hours wh 
             WHERE wh.task_id = t.id AND EXTRACT(YEAR FROM wh.date) = $1
@@ -162,6 +208,13 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         ORDER BY t.created_at DESC
       `, [targetYear]);
 
+      const tasks = tasksRes.rows.map(t => ({
+        ...t,
+        internal_cost: taskCosts[t.id]?.internal_cost || 0,
+        total_hours: taskCosts[t.id]?.hours || 0
+      }));
+
+      // For backward compatibility or extra details
       const hoursRes = await query(`
         SELECT task_id, employee_id, SUM(hours) as total_hours 
         FROM employee_work_hours 
@@ -169,8 +222,11 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         GROUP BY task_id, employee_id
       `, [targetYear]);
 
-      res.json({ tasks: tasksRes.rows, task_hours: hoursRes.rows });
-    } catch (err) { res.status(500).json({ error: "Database error" }); }
+      res.json({ tasks, task_hours: hoursRes.rows });
+    } catch (err) { 
+      console.error("Task finances error:", err);
+      res.status(500).json({ error: "Database error" }); 
+    }
   });
 
   app.post("/api/task-finances/:taskId", authenticateHR, async (req, res) => {

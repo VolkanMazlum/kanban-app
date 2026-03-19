@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import * as api from "../api";
+import { downloadAuthenticatedFile } from "../utils/downloadUtils";
 import { inpStyle } from "../constants/costConstants.js";
 
 const EMPTY_CLIENT = {
@@ -125,7 +126,7 @@ export default function ClientsManager({ isHR }) {
         </div>
 
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => window.location.href = api.exportClients()} style={{ background: "#F3F4F6", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+          <button onClick={() => downloadAuthenticatedFile("/reports/clients", `Clients_List_${new Date().toISOString().split('T')[0]}.xlsx`)} style={{ background: "#F3F4F6", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
             📥 Export
           </button>
           <button onClick={openNewClient} style={{ background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>

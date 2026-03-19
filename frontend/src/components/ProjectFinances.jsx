@@ -104,6 +104,7 @@ export default function ProjectFinances({ isHR }) {
 
   const totalGeneralCost = GENERAL_COST_FIELDS.reduce((sum, f) => sum + (generalCosts[f.key] || 0), 0);
 
+
   // Weights are now year-aware. Group fatturatoByTask by year
   const fattByYear = {};
   fatturatoByTask.forEach(r => {
@@ -116,9 +117,23 @@ export default function ProjectFinances({ isHR }) {
     yearlyTotalWeights[y] = fattByYear[y].reduce((sum, r) => sum + parseEuNum(r.total_valore_ordine), 0);
   });
 
+  // Calculate Fixed Consultant costs for the period
+  const yearsInData = Object.keys(yearlyTotalWeights).length || 1;
+  const numYears = selectedYear === 'all' ? yearsInData : 1;
+  const totalConsultantFixed = costs
+    .filter(e => e.category === 'consultant')
+    .reduce((sum, e) => {
+      // If we are in 'all' view, we use the number of years they were actually present/active
+      // For now, using the numYears multiplier as a consistent baseline
+      return sum + (parseFloat(e.current_annual_gross) || 0) * numYears;
+    }, 0);
+
   // Task-specific summed values for display
-  const getTaskFattData = (taskId) => {
-    const relevant = fatturatoByTask.filter(r => r.task_id === taskId);
+  const getTaskFattData = (taskId, commNum) => {
+    const yearPrefix = commNum ? commNum.slice(0, 2) : null;
+    const relevant = fatturatoByTask.filter(r => 
+      r.task_id === taskId && (!yearPrefix || r.year_code === yearPrefix)
+    );
     return {
       total_valore_ordine: relevant.reduce((sum, r) => sum + parseEuNum(r.total_valore_ordine), 0),
       total_fatturato: relevant.reduce((sum, r) => sum + parseEuNum(r.total_fatturato), 0),
@@ -128,10 +143,12 @@ export default function ProjectFinances({ isHR }) {
   };
 
   // The core refined logic: sum of (YearlyProjectWeight / YearlyTotalWeight * YearlyTotalGeneralCost)
-  const getExtraCost = (taskId) => {
-    const taskData = getTaskFattData(taskId);
-    let totalExtra = 0;
+  const getExtraCost = (taskId, forcedPrefix = null) => {
+    // forcedPrefix is used when calculating summary where we already know the target year
+    const yearSuffix = forcedPrefix || (selectedYear === "all" ? null : String(selectedYear).slice(-2));
+    const taskData = getTaskFattData(taskId, yearSuffix ? `${yearSuffix}-` : null);
 
+    let totalExtra = 0;
     taskData.byYear.forEach(yData => {
       const year = yData.year_code;
       const yearTotalWeight = yearlyTotalWeights[year] || 0;
@@ -178,17 +195,27 @@ export default function ProjectFinances({ isHR }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
               <div>
                 <div style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 2 }}>OVERHEAD — {selectedYear}</div>
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#111827" }}>General Company Costs</h3>
-                <p style={{ margin: "4px 0 0", fontSize: 12, color: "#9CA3AF" }}>These costs will be distributed across projects based on weight</p>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#111827" }}>Structure & General Costs</h3>
+                <p style={{ margin: "4px 0 0", fontSize: 12, color: "#9CA3AF" }}>General company operating expenses</p>
               </div>
-              {totalGeneralCost > 0 && (
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 700, letterSpacing: "0.05em", marginBottom: 2 }}>TOTAL OVERHEAD</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: "#EF4444" }}>
-                    €{totalGeneralCost.toLocaleString("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              <div style={{ textAlign: "right", display: "flex", gap: 24 }}>
+                {totalConsultantFixed > 0 && (
+                   <div>
+                    <div style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 700, letterSpacing: "0.05em", marginBottom: 2 }}>CONSULTANTS (FIXED)</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: "#F59E0B" }}>
+                      €{totalConsultantFixed.toLocaleString("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+                {totalGeneralCost > 0 && (
+                  <div>
+                    <div style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 700, letterSpacing: "0.05em", marginBottom: 2 }}>TOTAL OVERHEAD (GC)</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: "#EF4444" }}>
+                      €{totalGeneralCost.toLocaleString("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
@@ -224,27 +251,9 @@ export default function ProjectFinances({ isHR }) {
                   <div style={{ marginTop: 6, fontSize: 11, color: field.color, fontWeight: 600 }}>
                     {generalCosts[field.key] > 0 ? `€${generalCosts[field.key].toLocaleString("it-IT", { minimumFractionDigits: 0 })}` : " "}
                   </div>
-                  {selectedYear !== 'all' && (
-                    <div style={{ fontSize: 9, color: "#9CA3AF", fontStyle: "italic", marginTop: 2 }}>Annual cost for {selectedYear}</div>
-                  )}
                 </div>
               ))}
             </div>
-
-            {totalGeneralCost > 0 && totalWeight > 0 && (
-              <div style={{ marginTop: 14, padding: "10px 14px", background: "#FFF7ED", border: "1px solid #FED7AA", borderRadius: 8, display: "flex", gap: 8, alignItems: "center" }}>
-                <span style={{ fontSize: 14 }}>📊</span>
-                <span style={{ fontSize: 12, color: "#92400E", fontWeight: 500 }}>
-                  Total overhead of <strong>€{totalGeneralCost.toLocaleString("it-IT", { minimumFractionDigits: 0 })}</strong> will be distributed based on <strong>Valore Ordine</strong> across <strong>{finances.tasks.filter(t => (getTaskFattData(t.id).total_valore_ordine) > 0).length}</strong> project{finances.tasks.filter(t => (getTaskFattData(t.id).total_valore_ordine) > 0).length !== 1 ? "s" : ""} (total base: <strong>€{totalWeight.toLocaleString("it-IT", { minimumFractionDigits: 0 })}</strong>)
-                </span>
-              </div>
-            )}
-            {totalGeneralCost > 0 && totalWeight === 0 && (
-              <div style={{ marginTop: 14, padding: "10px 14px", background: "#F3F4F6", border: "1px solid #E5E7EB", borderRadius: 8, display: "flex", gap: 8, alignItems: "center" }}>
-                <span style={{ fontSize: 14 }}>💡</span>
-                <span style={{ fontSize: 12, color: "#6B7280" }}>Set project weights below to distribute overhead costs across projects</span>
-              </div>
-            )}
           </div>
 
           {/* PROJE TABLOSU */}
@@ -255,13 +264,13 @@ export default function ProjectFinances({ isHR }) {
                   {[
                     { label: "Project / Task", align: "left" },
                     { label: "Logged Hours", align: "center" },
-                    { label: "Labour Cost", align: "center" },
-                    ...(selectedYear !== 'all' ? [{ label: "Weight", align: "center", hint: "Relative weight for overhead distribution" }] : []),
-                    { label: "Overhead Share", align: "center", hint: "Portion of general costs allocated to this project" },
+                    { label: "Internal Lab.", align: "center", hint: "Direct Labor (Internal Staff)" },
+                    { label: "Weight", align: "center" },
+                    { label: "Overhead", align: "center" },
                     { label: "Total Cost", align: "center" },
-                    { label: "Valore Ordine", align: "center", hint: "From Fatturato Register" },
-                    { label: "Fatturato", align: "center", hint: "Already Billed" },
-                    { label: "Rimanente", align: "center", hint: "Valore Ordine - Fatturato" },
+                    { label: "Valore Ordine", align: "center" },
+                    { label: "Fatturato", align: "center" },
+                    { label: "Rimanente", align: "center" },
                     { label: "Net Profit", align: "center" },
                   ].map(h => (
                     <th key={h.label} title={h.hint || ""} style={{ padding: "12px 16px", fontSize: 11, fontWeight: 700, color: "#43474dff", textAlign: h.align, letterSpacing: "0.05em", cursor: h.hint ? "help" : "default" }}>
@@ -272,26 +281,24 @@ export default function ProjectFinances({ isHR }) {
               </thead>
               <tbody>
                 {finances.tasks.map(task => {
-                  const tHours = finances.task_hours.filter(th => th.task_id === task.id);
-                  let labourCost = 0; let totalHours = 0;
-                  tHours.forEach(th => {
-                    const emp = costs.find(e => e.id === th.employee_id);
-                    const rate = emp ? parseFloat(emp.hourly_rate_theoretical) : 0;
-                    labourCost += (parseFloat(th.total_hours) * rate);
-                    totalHours += parseFloat(th.total_hours);
-                  });
+                  const commNum = task.comm_number || "";
+                  const ySuffix = selectedYear === 'all' ? "" : String(selectedYear).slice(-2);
+                  
+                  // Filter: If we are in a specific year, only show tasks belonging to that year's commessa prefix
+                  if (selectedYear !== 'all' && !commNum.startsWith(ySuffix + "-")) return null;
 
-                  const fattData = getTaskFattData(task.id);
+                  const internalLabourCost = task.internal_cost || 0;
+                  const totalHrs = task.total_hours || 0;
+
+                  const fattData = getTaskFattData(task.id, task.comm_number);
                   const valoreOrdine = fattData.total_valore_ordine;
                   const fatturato = fattData.total_fatturato;
 
-                  const extraCost = getExtraCost(task.id);
-                  const totalCost = labourCost + extraCost;
-                  const rimanente = Math.max(0, valoreOrdine - fatturato);
+                  const overheadGC = getExtraCost(task.id);
+                  const totalCost = internalLabourCost + overheadGC;
                   const profit = fatturato - totalCost;
                   const isProfitable = profit >= 0;
 
-                  // Weight percentage display (Project's share of Lifetime Order Value)
                   const weightPct = (totalWeight > 0 && valoreOrdine > 0)
                     ? ((valoreOrdine / totalWeight) * 100).toFixed(1)
                     : null;
@@ -299,107 +306,86 @@ export default function ProjectFinances({ isHR }) {
                   return (
                     <tr key={task.id} style={{ borderTop: "1px solid #F3F4F6", transition: "background 0.15s" }} onMouseEnter={(e) => e.currentTarget.style.background = "#F9FAFB"} onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
                       <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 600, color: "#111827" }}>{task.title}</td>
-                      <td style={{ padding: "14px 16px", textAlign: "center", fontSize: 13, fontWeight: 600, color: "#374151" }}>{totalHours.toFixed(1)}h</td>
-                      <td style={{ padding: "14px 16px", textAlign: "center", fontSize: 13, fontWeight: 600, color: "#DC2626" }}>- €{fmtEu(labourCost)}</td>
-                      {selectedYear !== 'all' && (
-                        <td style={{ padding: "14px 16px", textAlign: "center" }}>
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: (valoreOrdine > 0) ? "#4F46E5" : "#D1D5DB" }}>
-                              {weightPct ? `${weightPct}%` : "—"}
-                            </span>
-                            {valoreOrdine > 0 && <span style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 500 }}>€{valoreOrdine.toLocaleString("it-IT", { minimumFractionDigits: 0 })}</span>}
-                          </div>
-                        </td>
-                      )}
+                      <td style={{ padding: "14px 16px", textAlign: "center", fontSize: 13, fontWeight: 600, color: "#374151" }}>{totalHrs.toFixed(1)}h</td>
                       <td style={{ padding: "14px 16px", textAlign: "center" }}>
-                        {extraCost > 0 ? (
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: "#cd08f5ff" }}>- €{fmtEu(extraCost)}</span>
-                            <span style={{ fontSize: 10, color: "#D1D5DB" }}>of overhead</span>
-                          </div>
-                        ) : <span style={{ color: "#D1D5DB", fontSize: 13 }}>—</span>}
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>€{fmtEu(internalLabourCost)}</div>
                       </td>
                       <td style={{ padding: "14px 16px", textAlign: "center" }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: totalCost > 0 ? "#DC2626" : "#D1D5DB", background: totalCost > 0 ? "#FEF2F2" : "transparent", padding: totalCost > 0 ? "3px 8px" : "0", borderRadius: 6 }}>
-                          {totalCost > 0 ? `- €${fmtEu(totalCost)}` : "—"}
+                        <span style={{ fontSize: 13, fontWeight: 700, color: weightPct ? "#4F46E5" : "#D1D5DB" }}>{weightPct ? `${weightPct}%` : "—"}</span>
+                      </td>
+                      <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "#cd08f5ff" }}>€{fmtEu(overheadGC)}</span>
+                      </td>
+                      <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "#DC2626", background: "#FEF2F2", padding: "3px 8px", borderRadius: 6 }}>€{fmtEu(totalCost)}</span>
+                      </td>
+                      <td style={{ padding: "14px 16px", textAlign: "center", color: "#6366F1", fontWeight: 600 }}>€{fmtEu(valoreOrdine)}</td>
+                      <td style={{ padding: "14px 16px", textAlign: "center", color: "#059669", fontWeight: 700 }}>€{fmtEu(fatturato)}</td>
+                      <td style={{ padding: "14px 16px", textAlign: "center", color: (valoreOrdine - fatturato) > 1 ? "#F59E0B" : "#D1D5DB", fontWeight: 700 }}>
+                        €{fmtEu(Math.max(0, valoreOrdine - fatturato))}
+                      </td>
+                      <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                        <span style={{ fontSize: 14, fontWeight: 800, color: isProfitable ? "#059669" : "#DC2626", background: isProfitable ? "#F0FDF4" : "#FEF2F2", padding: "4px 10px", borderRadius: 6 }}>
+                          €{fmtEu(profit)}
                         </span>
-                      </td>
-                      <td style={{ padding: "14px 16px", textAlign: "center", color: "#6366F1", fontWeight: 600 }}>{valoreOrdine > 0 ? `€${fmtEu(valoreOrdine)}` : "—"}</td>
-                      <td style={{ padding: "14px 16px", textAlign: "center", color: "#059669", fontWeight: 700 }}>
-                        {fatturato > 0 ? (
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                            <span style={{ fontSize: 13, fontWeight: 700 }}>€{fmtEu(fatturato)}</span>
-                            {valoreOrdine > 0 && (
-                              <span style={{ fontSize: 10, color: "#94A3B8", fontWeight: 500 }}>({((fatturato / valoreOrdine) * 100).toFixed(1)}%)</span>
-                            )}
-                          </div>
-                        ) : "—"}
-                      </td>
-                      <td style={{ padding: "14px 16px", textAlign: "center", color: rimanente > 0 ? "#F59E0B" : "#6B7280", fontWeight: 600 }}>{valoreOrdine > 0 ? `€${fmtEu(rimanente)}` : "—"}</td>
-                      <td style={{ padding: "14px 16px", textAlign: "center" }}>
-                        {fatturato > 0 || totalCost > 0 ? (
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                            <span style={{ fontSize: 14, fontWeight: 800, color: isProfitable ? "#059669" : "#DC2626", background: isProfitable ? "#F0FDF4" : "#FEF2F2", padding: "4px 10px", borderRadius: 6 }}>
-                              {isProfitable ? "+" : ""}€{profit.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                            {extraCost > 0 && <span style={{ fontSize: 10, color: "#9CA3AF" }}>incl. overhead</span>}
-                          </div>
-                        ) : <span style={{ color: "#D1D5DB", fontSize: 13 }}>—</span>}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
-
-              {/* TOTALS ROW */}
-              {finances.tasks.length > 0 && (() => {
-                let grandLabour = 0, grandFatturato = 0, grandValore = 0, grandHours = 0, grandExtra = 0;
-                finances.tasks.forEach(task => {
-                  const tHours = finances.task_hours.filter(th => th.task_id === task.id);
-                  tHours.forEach(th => {
-                    const emp = costs.find(e => e.id === th.employee_id);
-                    const rate = emp ? parseFloat(emp.hourly_rate_theoretical) : 0;
-                    grandLabour += parseFloat(th.total_hours) * rate;
-                    grandHours += parseFloat(th.total_hours);
+              <tfoot>
+                {(() => {
+                  const tableData = finances.tasks.filter(task => {
+                    const commNum = task.comm_number || "";
+                    const ySuffix = selectedYear === 'all' ? "" : String(selectedYear).slice(-2);
+                    return selectedYear === 'all' || commNum.startsWith(ySuffix + "-");
+                  }).map(task => {
+                    const fattData = getTaskFattData(task.id, task.comm_number);
+                    return {
+                      hours: task.total_hours || 0,
+                      labor: task.internal_cost || 0,
+                      extra: getExtraCost(task.id),
+                      valore: fattData.total_valore_ordine,
+                      fatturato: fattData.total_fatturato
+                    };
                   });
-                  grandExtra += getExtraCost(task.id);
-                  const fattData = getTaskFattData(task.id);
-                  grandFatturato += fattData.total_fatturato;
-                  grandValore += fattData.total_valore_ordine;
-                });
-                const grandTotal = grandLabour + grandExtra;
-                const grandRimanente = Math.max(0, grandValore - grandFatturato);
-                const grandProfit = grandFatturato - grandTotal;
-                return (
-                  <tfoot>
-                    <tr style={{ background: "#F9FAFB", borderTop: "2px solid #E5E7EB" }}>
-                      <td style={{ padding: "12px 16px", fontSize: 12, fontWeight: 700, color: "#6B7280" }}>TOTALS</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#374151" }}>{grandHours.toFixed(1)}h</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#DC2626" }}>- €{fmtEu(grandLabour)}</td>
-                      {selectedYear !== 'all' && (
-                        <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 11, color: "#9CA3AF" }}>Σ €{totalWeight.toLocaleString("it-IT", { minimumFractionDigits: 0 })}</td>
-                      )}
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#cd08f5ff" }}>- €{fmtEu(grandExtra)}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#DC2626" }}>- €{fmtEu(grandTotal)}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#6366F1" }}>€{fmtEu(grandValore)}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: "#059669" }}>
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                          <span>€{fmtEu(grandFatturato)}</span>
-                          {grandValore > 0 && (
-                            <span style={{ fontSize: 10, color: "#94A3B8", fontWeight: 500 }}>({((grandFatturato / grandValore) * 100).toFixed(1)}%)</span>
-                          )}
-                        </div>
-                      </td>
-                      <td style={{ padding: "12px 16px", textAlign: "center", fontSize: 12, fontWeight: 700, color: grandRimanente > 0 ? "#F59E0B" : "#6B7280" }}>€{fmtEu(grandRimanente)}</td>
-                      <td style={{ padding: "12px 16px", textAlign: "center" }}>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: grandProfit >= 0 ? "#059669" : "#DC2626", background: grandProfit >= 0 ? "#F0FDF4" : "#FEF2F2", padding: "4px 10px", borderRadius: 6 }}>
-                          {grandProfit >= 0 ? "+" : ""}€{grandProfit.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </td>
-                    </tr>
-                  </tfoot>
-                );
-              })()}
+
+                  const tHours = tableData.reduce((s, d) => s + d.hours, 0);
+                  const tInt = tableData.reduce((s, d) => s + d.labor, 0);
+                  const tOver = tableData.reduce((s, d) => s + d.extra, 0);
+                  const tVal = tableData.reduce((s, d) => s + d.valore, 0);
+                  const tFat = tableData.reduce((s, d) => s + d.fatturato, 0);
+                  const tTotal = tInt + tOver;
+                  const tProf = tFat - tTotal;
+                  const finalCompanyNetProfit = tProf - totalConsultantFixed;
+
+                  return (
+                    <>
+                      <tr key="totals-row" style={{ background: "#F9FAFB", borderTop: "2px solid #E5E7EB", fontWeight: 800 }}>
+                        <td style={{ padding: "12px 16px" }}>GROSS TOTALS</td>
+                        <td style={{ padding: "12px 16px", textAlign: "center" }}>{tHours.toFixed(1)}h</td>
+                        <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tInt)}</td>
+                        <td style={{ padding: "12px 16px", textAlign: "center" }}>100%</td>
+                        <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tOver)}</td>
+                        <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tTotal)}</td>
+                        <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tVal)}</td>
+                        <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tFat)}</td>
+                        <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(Math.max(0, tVal - tFat))}</td>
+                        <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tProf)}</td>
+                      </tr>
+                      {/* Company Deductions */}
+                      <tr key="consultant-deduction" style={{ background: "#FEF2F2", fontWeight: 700 }}>
+                         <td colSpan={9} style={{ padding: "8px 16px", textAlign: "right", color: "#B91C1C", fontSize: 11 }}>TOTAL CONSULTANT WAGES (FIXED)</td>
+                         <td style={{ padding: "8px 16px", textAlign: "center", color: "#B91C1C" }}>-€{fmtEu(totalConsultantFixed)}</td>
+                      </tr>
+                      <tr key="final-profit" style={{ background: "#ECFDF5", borderTop: "2px solid #059669", fontWeight: 900, fontSize: 14 }}>
+                         <td colSpan={9} style={{ padding: "12px 16px", textAlign: "right", color: "#059669" }}>FINAL COMPANY NET PROFIT</td>
+                         <td style={{ padding: "12px 16px", textAlign: "center", color: "#059669" }}>€{fmtEu(finalCompanyNetProfit)}</td>
+                      </tr>
+                    </>
+                  )
+                })()}
+              </tfoot>
             </table>
           </div>
         </>

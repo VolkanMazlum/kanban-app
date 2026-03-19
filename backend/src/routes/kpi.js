@@ -95,21 +95,29 @@ module.exports = (app, query, authenticate) => {
           WHERE EXTRACT(YEAR FROM date) = $1 AND EXTRACT(MONTH FROM date) = $2
           GROUP BY employee_id
         ) wh_sum ON e.id = wh_sum.employee_id
-        WHERE e.is_active = TRUE
-          AND (wh_sum.hours > 0 OR e.category = 'consultant')
+        WHERE (e.is_active = TRUE 
+           OR EXISTS (SELECT 1 FROM employee_work_hours wh WHERE wh.employee_id = e.id AND EXTRACT(YEAR FROM wh.date) = $1))
       `, [year, month, monthEnd]);
 
-      const labor_details = laborRes.rows.map(r => {
+      const internal_labor = [];
+      const consultant_labor = [];
+
+      laborRes.rows.forEach(r => {
         const hours = parseFloat(r.hours || 0);
         const cost = calculateMonthlyLaborCost({
           hours,
           annual_gross: r.annual_gross,
           category: r.category
         });
-        return { name: r.name, hours, cost };
-      }).filter(l => l.cost > 0 || l.hours > 0);
+        if (cost > 0 || hours > 0) {
+          const item = { name: r.name, hours, cost, category: r.category };
+          if (r.category === 'consultant') consultant_labor.push(item);
+          else internal_labor.push(item);
+        }
+      });
 
-      const totalLaborCost = labor_details.reduce((sum, l) => sum + l.cost, 0);
+      const totalInternalLabor = internal_labor.reduce((sum, l) => sum + l.cost, 0);
+      const totalConsultantLabor = consultant_labor.reduce((sum, l) => sum + l.cost, 0);
 
       // 4c. Monthly Overhead (General Costs)
       const settingsRes = await query(`SELECT key, value FROM settings WHERE key LIKE 'gc_%_' || $1`, [year]);
@@ -138,7 +146,7 @@ module.exports = (app, query, authenticate) => {
           WHERE tp.start_date <= $2 AND tp.end_date >= $1
         ) as active_emp
         JOIN employees e ON active_emp.employee_id = e.id
-        WHERE e.is_active = TRUE
+        WHERE (e.is_active = TRUE OR active_emp.employee_id IS NOT NULL)
       `, [monthStart, monthEnd]);
 
       const totalEmpRes = await query("SELECT COUNT(*) as count FROM employees WHERE is_active = TRUE");
@@ -163,8 +171,8 @@ module.exports = (app, query, authenticate) => {
             WHERE EXTRACT(YEAR FROM date) = $1 AND EXTRACT(MONTH FROM date) = $2
             GROUP BY employee_id
           ) wh_sum ON e.id = wh_sum.employee_id
-          WHERE e.is_active = TRUE
-            AND (wh_sum.hours > 0 OR e.category = 'consultant')
+          WHERE (e.is_active = TRUE 
+             OR EXISTS (SELECT 1 FROM employee_work_hours wh WHERE wh.employee_id = e.id AND EXTRACT(YEAR FROM wh.date) = $1))
         `, [ty, tm, tmEnd]);
 
         const mLabor = lRes.rows.reduce((sum, r) => {
@@ -197,8 +205,10 @@ module.exports = (app, query, authenticate) => {
         completed_count: completedMonthCount,
         completed_phases: completedPhases,
         forecast,
-        labor_costs: labor_details,
-        total_labor_cost: totalLaborCost,
+        labor_costs: internal_labor,
+        consultant_costs: consultant_labor,
+        total_labor_cost: totalInternalLabor,
+        total_consultant_labor: totalConsultantLabor,
         monthly_overhead: monthlyOverhead,
         realized_details: billedRes.rows
       };

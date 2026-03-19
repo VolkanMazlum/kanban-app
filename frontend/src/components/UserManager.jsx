@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import * as api from "../api";
+import { downloadAuthenticatedFile } from "../utils/downloadUtils";
 
 export default function UserManager({ isHR, onUserAdded }) {
   const [users, setUsers] = useState([]);
@@ -74,6 +75,7 @@ export default function UserManager({ isHR, onUserAdded }) {
       role: user.role || "standard",
       position: user.position || "",
       category: user.category || "internal",
+      is_active: user.is_active !== undefined ? user.is_active : true,
       hr_details: user.hr_details || {}
     });
     setError(null);
@@ -99,7 +101,8 @@ export default function UserManager({ isHR, onUserAdded }) {
 
   const handleToggleActive = async (user) => {
     try {
-      await api.updateUser(user.id, { is_active: !user.is_active });
+      const targetId = user.user_id || user.id;
+      await api.updateUser(targetId, { is_active: !user.is_active });
       await refreshUsers();
       if (onUserAdded) onUserAdded(true);
     } catch (err) { console.error(err); }
@@ -107,7 +110,8 @@ export default function UserManager({ isHR, onUserAdded }) {
 
   const handleRoleChange = async (user, newRole) => {
     try {
-      await api.updateUser(user.id, { role: newRole });
+      const targetId = user.user_id || user.id;
+      await api.updateUser(targetId, { role: newRole });
       await refreshUsers();
       if (onUserAdded) onUserAdded(true);
     } catch (err) { console.error(err); }
@@ -115,7 +119,8 @@ export default function UserManager({ isHR, onUserAdded }) {
 
   const handleCategoryChange = async (user, newCat) => {
     try {
-      await api.updateUser(user.id, { category: newCat });
+      const targetId = user.user_id || user.id;
+      await api.updateUser(targetId, { category: newCat });
       await refreshUsers();
       if (onUserAdded) onUserAdded(true);
     } catch (err) { console.error(err); }
@@ -152,10 +157,10 @@ export default function UserManager({ isHR, onUserAdded }) {
               background: "#2563EB", color: "#fff", border: "none", borderRadius: 8,
               padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer", marginRight: 8
             }}>{showForm ? "Cancel" : "+ New User"}</button>
-            <a href={api.exportEmployees()} style={{
+            <button onClick={() => downloadAuthenticatedFile("/reports/employees", `Employees_HR_Report_${new Date().toISOString().split('T')[0]}.xlsx`)} style={{
               background: "#10B981", color: "#fff", border: "none", borderRadius: 8,
-              padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer", textDecoration: "none", display: "inline-block"
-            }}>📥 Export Employees (Excel)</a>
+              padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer", textDecoration: "none"
+            }}>📥 Export Employees (Excel)</button>
           </div>
           {showForm && (
             <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E5E7EB", padding: 20, marginBottom: 20, display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
@@ -195,7 +200,9 @@ export default function UserManager({ isHR, onUserAdded }) {
                     <td style={{ padding: "12px 16px" }}>{user.role}</td>
                     <td style={{ padding: "12px 16px", fontSize: 13 }}>{user.position}</td>
                     <td style={{ padding: "12px 16px" }}>{user.category}</td>
-                    <td style={{ padding: "12px 16px" }}>{user.is_active ? "✅" : "❌"}</td>
+                    <td style={{ padding: "12px 16px", cursor: "pointer", textAlign: "center" }} title={user.is_active ? "Click to Disable" : "Click to Enable"} onClick={() => handleToggleActive(user)}>
+                      {user.is_active ? "✅" : "❌"}
+                    </td>
                     <td style={{ padding: "12px 16px", fontSize: 11 }}>{new Date(user.created_at).toLocaleDateString()}</td>
                     <td style={{ padding: "12px 16px" }}><button onClick={() => openEditUser(user)} style={{ background: "#EFF6FF", color: "#2563EB", border: "none", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>Edit</button></td>
                   </tr>
@@ -295,6 +302,7 @@ function EditUserModal({ user, form, setForm, onSave, onClose, saving, error }) 
               <div><label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 6 }}>POSITION</label><input value={form.position} onChange={e => setForm({ ...form, position: e.target.value })} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid #E5E7EB" }} /></div>
               <div><label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 6 }}>CATEGORY</label><select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid #E5E7EB" }}><option value="internal">Internal</option><option value="consultant">Consultant</option></select></div>
               <div><label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 6 }}>ROLE</label><select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid #E5E7EB" }}><option value="standard">Standard</option><option value="hr">HR / Admin</option></select></div>
+              <div><label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 6 }}>STATUS</label><select value={form.is_active ? "true" : "false"} onChange={e => setForm({ ...form, is_active: e.target.value === "true" })} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid #E5E7EB" }}><option value="true">Active (✅)</option><option value="false">Disabled (❌)</option></select></div>
               <div><label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 6 }}>NEW PASSWORD (LEAVE BLANK FOR NO CHANGE)</label><input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid #E5E7EB" }} /></div>
             </div>
           )}

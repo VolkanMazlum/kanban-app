@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import * as api from "./api";
+import { downloadAuthenticatedFile } from "./utils/downloadUtils";
 import { COLUMNS } from "./constants/index.js";
 import Toast from "./components/Toast.jsx";
 import TaskModal from "./components/TaskModal.jsx";
@@ -235,7 +236,7 @@ export default function App() {
             )}
             {/* Removed separate Team button as it is now integrated into Users & Audit */}
             {isHR && (
-              <button onClick={()=>window.location.href=api.exportTasks()}
+              <button onClick={() => downloadAuthenticatedFile("/reports/tasks", `Board_Export_${new Date().toISOString().split('T')[0]}.xlsx`)}
                 style={{background:"#F3F4F6",color:"#374151",border:"1.5px solid #E5E7EB",borderRadius:6,padding:"6px 12px",fontFamily:"'Inter',sans-serif",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                 📥 Export
               </button>

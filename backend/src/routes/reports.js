@@ -38,21 +38,21 @@ router.get('/tasks', authenticateHR, async (req, res) => {
     `);
 
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Tasks Board');
+    const sheet = workbook.addWorksheet('Tabellone Task');
 
     sheet.columns = [
-      { header: 'Task ID', key: 'task_id', width: 10 },
-      { header: 'Task Title', key: 'task_title', width: 25 },
-      { header: 'Employee', key: 'employee_name', width: 20 },
-      { header: 'Indiv. Est. Hours', key: 'individual_hours', width: 15 },
-      { header: 'Phase Name', key: 'phase_name', width: 25 },
-      { header: 'Phase Status', key: 'phase_status', width: 15 },
-      { header: 'Phase Total Hours', key: 'phase_total_hours', width: 15 },
-      { header: 'Phase Start', key: 'phase_start', width: 15 },
-      { header: 'Phase End', key: 'phase_end', width: 15 },
-      { header: 'Task Total Hours', key: 'task_total_hours', width: 15 },
-      { header: 'Task Status', key: 'task_status', width: 15 },
-      { header: 'Task Deadline', key: 'deadline', width: 15 },
+      { header: 'ID Task', key: 'task_id', width: 10 },
+      { header: 'Titolo Task', key: 'task_title', width: 25 },
+      { header: 'Collaboratore', key: 'employee_name', width: 20 },
+      { header: 'Ore Previste (Indiv.)', key: 'individual_hours', width: 15 },
+      { header: 'Nome Fase', key: 'phase_name', width: 25 },
+      { header: 'Stato Fase', key: 'phase_status', width: 15 },
+      { header: 'Ore Totali Fase', key: 'phase_total_hours', width: 15 },
+      { header: 'Inizio Fase', key: 'phase_start', width: 15 },
+      { header: 'Fine Fase', key: 'phase_end', width: 15 },
+      { header: 'Ore Totali Task', key: 'task_total_hours', width: 15 },
+      { header: 'Stato Task', key: 'task_status', width: 15 },
+      { header: 'Scadenza Task', key: 'deadline', width: 15 },
     ];
 
     // Format headers
@@ -111,20 +111,20 @@ router.get('/finances', authenticateHR, async (req, res) => {
     `, [year || 'all']);
 
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Financial Report');
+    const sheet = workbook.addWorksheet('Registro Pagamenti');
 
     sheet.columns = [
-      { header: 'Date', key: 'registration_date', width: 15 },
+      { header: 'Data', key: 'registration_date', width: 15 },
       { header: 'Commessa (Task)', key: 'task_title', width: 30 },
-      { header: 'Client', key: 'client_name', width: 25 },
-      { header: 'Activity', key: 'line_description', width: 25 },
-      { header: 'Payment (€)', key: 'amount', width: 15 },
-      { header: 'Order Value (€)', key: 'valore_ordine', width: 18 },
-      { header: 'Total Billed (€)', key: 'total_billed', width: 18 },
-      { header: 'Prob. Remainder (€)', key: 'remainder', width: 18 },
+      { header: 'Cliente', key: 'client_name', width: 25 },
+      { header: 'Attività', key: 'line_description', width: 25 },
+      { header: 'Pagamento (€)', key: 'amount', width: 15 },
+      { header: 'Valore Ordine (€)', key: 'valore_ordine', width: 18 },
+      { header: 'Totale Fatturato (€)', key: 'total_billed', width: 18 },
+      { header: 'Rimanente Probabile (€)', key: 'remainder', width: 18 },
       { header: 'Proforma (€)', key: 'proforma', width: 15 },
-      { header: '% of Order', key: 'percentage', width: 12 },
-      { header: 'Notes', key: 'notes', width: 40 },
+      { header: '% su Ordine', key: 'percentage', width: 12 },
+      { header: 'Note', key: 'notes', width: 40 },
     ];
 
     sheet.getRow(1).font = { bold: true };
@@ -151,26 +151,28 @@ router.get('/finances', authenticateHR, async (req, res) => {
     });
 
     // Add total row (spanning numeric columns correctly)
-    const totalRow = sheet.addRow(['TOTAL', '', '', '', Number(total)]);
+    const totalRow = sheet.addRow(['TOTALE', '', '', '', Number(total)]);
     totalRow.font = { bold: true };
 
-    // ADDED: Detailed Orders Sheet
-    const sheet2 = workbook.addWorksheet('Contract Details');
+    // SHEET 2: CONTRACT DETAILS (Now filtered by year if provided)
+    const sheet2 = workbook.addWorksheet('Dettagli Contrattuali');
     sheet2.columns = [
-      { header: 'Comm. #', key: 'comm_number', width: 12 },
-      { header: 'Project Name', key: 'comm_name', width: 25 },
-      { header: 'Client', key: 'client_name', width: 25 },
-      { header: 'Client #', key: 'n_cliente', width: 10 },
-      { header: 'Order Ref', key: 'n_ordine', width: 20 },
-      { header: 'Activity', key: 'attivita', width: 25 },
-      { header: 'Order Value (€)', key: 'valore_ordine', width: 18 },
-      { header: 'Total Billed (€)', key: 'fatturato_amount', width: 18 },
-      { header: 'Probable Rem. (€)', key: 'rimanente_probabile', width: 18 },
+      { header: 'N. Commessa', key: 'comm_number', width: 12 },
+      { header: 'Nome Progetto', key: 'comm_name', width: 25 },
+      { header: 'Cliente', key: 'client_name', width: 25 },
+      { header: 'N. Cliente', key: 'n_cliente', width: 15 },
+      { header: 'Rif. Ordine', key: 'n_ordine', width: 20 },
+      { header: 'Attività', key: 'attivita', width: 25 },
+      { header: 'Valore Ordine (€)', key: 'valore_ordine', width: 18 },
+      { header: 'Totale Fatturato (€)', key: 'fatturato_amount', width: 18 },
+      { header: 'Rim. Probabile (€)', key: 'rimanente_probabile', width: 18 },
       { header: 'Proforma (€)', key: 'proforma', width: 15 },
-      { header: 'Notes', key: 'note', width: 30 },
+      { header: 'Note', key: 'note', width: 30 },
     ];
     sheet2.getRow(1).font = { bold: true };
     sheet2.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+
+    const yearSuffix = (year && year !== 'all') ? year.toString().slice(-2) : null;
 
     const ordersRes = await query(`
       SELECT 
@@ -182,8 +184,14 @@ router.get('/finances', authenticateHR, async (req, res) => {
       JOIN commessa_clients cc ON c.id = cc.commessa_id
       LEFT JOIN clients cl ON cc.client_id = cl.id
       JOIN fatturato_lines fl ON cc.id = fl.commessa_client_id
+      LEFT JOIN tasks t ON c.task_id = t.id
+      WHERE $1 = 'all' 
+         OR (c.comm_number LIKE $2 || '-%' AND (
+           EXISTS (SELECT 1 FROM fatturato_realized fr WHERE fr.fatturato_line_id = fl.id AND EXTRACT(YEAR FROM fr.registration_date) = $1::int)
+           OR EXISTS (SELECT 1 FROM employee_work_hours wh WHERE wh.task_id = t.id AND EXTRACT(YEAR FROM wh.date) = $1::int)
+         ))
       ORDER BY c.comm_number ASC, cc.n_cliente ASC, fl.id ASC
-    `);
+    `, [year || 'all', yearSuffix]);
 
     ordersRes.rows.forEach(r => {
       sheet2.addRow({
@@ -195,10 +203,218 @@ router.get('/finances', authenticateHR, async (req, res) => {
       });
     });
 
-    await sendWorkbook(res, workbook, `Financial_Detailed_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    // --- ADDED: SHEET 3: REDDITIVITÀ PROGETTI (Revenue vs Cost) ---
+    const sheet3 = workbook.addWorksheet('Redditività Progetti');
+    sheet3.columns = [
+      { header: 'Anno', key: 'year', width: 10 },
+      { header: 'N. Commessa', key: 'comm_number', width: 15 },
+      { header: 'Nome Progetto', key: 'name', width: 30 },
+      { header: 'Ricavi (€)', key: 'total_rev', width: 18 },
+      { header: 'Costo Lavoro (Int)', key: 'total_cost', width: 18 },
+      { header: 'Utile Lordo (€)', key: 'profit', width: 18 },
+      { header: 'Margine (%)', key: 'margin', width: 12 },
+    ];
+    sheet3.getRow(1).font = { bold: true };
+    sheet3.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+
+    // 1. Get Revenue Breakdown by Year/Commessa
+    const revenueDetails = await query(`
+      SELECT 
+        LEFT(c.comm_number, 2) as year_prefix,
+        c.id as comm_id,
+        SUM(fr.amount) as amount
+      FROM fatturato_realized fr
+      JOIN fatturato_lines fl ON fr.fatturato_line_id = fl.id
+      JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
+      JOIN commesse c ON cc.commessa_id = c.id
+      GROUP BY year_prefix, c.id
+    `);
+
+    // 2. Comprehensive Labor & Employee Cost Logic
+    // We need: total hours per month, hours per month/project, and EVERY employee's gross.
+    const allEmployeesCost = await query(`
+      SELECT e.id, e.name, e.category, ec.annual_gross, 
+             EXTRACT(YEAR FROM ec.valid_from)::int as start_year,
+             EXTRACT(MONTH FROM ec.valid_from)::int as start_month
+      FROM employees e
+      JOIN employee_costs ec ON e.id = ec.employee_id
+      WHERE $1 = 'all' OR EXTRACT(YEAR FROM ec.valid_from) <= $1::int
+    `, [year || 'all']);
+
+    const laborSplit = await query(`
+      SELECT 
+        LEFT(c.comm_number, 2) as year_prefix,
+        EXTRACT(MONTH FROM wh.date)::int as month,
+        c.id as comm_id,
+        wh.employee_id,
+        SUM(wh.hours) as project_hours
+      FROM employee_work_hours wh
+      JOIN tasks t ON wh.task_id = t.id
+      JOIN commesse c ON t.id = c.task_id
+      GROUP BY year_prefix, month, c.id, wh.employee_id
+    `);
+
+    const employeeMonthlyTotals = await query(`
+      SELECT employee_id, EXTRACT(YEAR FROM date)::int as year, EXTRACT(MONTH FROM date)::int as month, SUM(hours) as total_hours
+      FROM employee_work_hours
+      GROUP BY employee_id, year, month
+    `);
+
+    // 3. Structured Data Processing
+    const yearlyMap = {}; 
+    
+    // Discover all available years from commessa prefixes
+    const prefixes = new Set([
+      ...revenueDetails.rows.map(r => r.year_prefix),
+      ...laborSplit.rows.map(l => l.year_prefix)
+    ]);
+    const availableYears = Array.from(prefixes)
+      .filter(p => p && !isNaN(parseInt(p)))
+      .map(p => 2000 + parseInt(p))
+      .sort((a,b) => b-a);
+
+    const targetYears = (year && year !== 'all') ? [parseInt(year)] : availableYears;
+    
+    const commsResult = await query(`SELECT id, comm_number, name FROM commesse`);
+    const commInfo = {};
+    commsResult.rows.forEach(c => commInfo[c.id] = c);
+    
+    targetYears.forEach(y => {
+      yearlyMap[y] = { projects: {}, totalCompanyLabor: 0, revenue: 0, directLaborAttr: 0, totalConsultantCost: 0 };
+    });
+
+    revenueDetails.rows.forEach(r => {
+      const fullYear = 2000 + parseInt(r.year_prefix);
+      if (yearlyMap[fullYear]) {
+        yearlyMap[fullYear].revenue += parseFloat(r.amount);
+        if (!yearlyMap[fullYear].projects[r.comm_id]) yearlyMap[fullYear].projects[r.comm_id] = { rev: 0, cost: 0, consultant_cost: 0 };
+        yearlyMap[fullYear].projects[r.comm_id].rev += parseFloat(r.amount);
+      }
+    });
+
+    // A. Fill Revenue
+    revenueDetails.rows.forEach(r => {
+      if (yearlyMap[r.year]) {
+        if (!yearlyMap[r.year].projects[r.comm_id]) yearlyMap[r.year].projects[r.comm_id] = { rev: 0, cost: 0, consultant_cost: 0 };
+        yearlyMap[r.year].projects[r.comm_id].rev += parseFloat(r.amount);
+        yearlyMap[r.year].revenue += parseFloat(r.amount);
+      }
+    });
+
+    // B. Calculate Total Potential Company Cost for each year
+    // We'll iterate months 1-12 for each target year
+    for (const y of targetYears) {
+      for (let m = 1; m <= 12; m++) {
+        allEmployeesCost.rows.forEach(emp => {
+          // Find the latest annual_gross for this employee valid at (y-m-28)
+          const validCosts = allEmployeesCost.rows
+            .filter(c => c.id === emp.id)
+            .filter(c => (c.start_year < y) || (c.start_year === y && c.start_month <= m))
+            .sort((a,b) => (b.start_year - a.start_year) || (b.start_month - a.start_month));
+          
+          if (validCosts.length > 0) {
+            const currentGross = parseFloat(validCosts[0].annual_gross);
+              const workedInYear = employeeMonthlyTotals.rows.some(et => et.employee_id === emp.id && et.year === y);
+              const monthLog = employeeMonthlyTotals.rows.find(et => et.employee_id === emp.id && et.year === y && et.month === m);
+              if (emp.category === 'consultant') {
+                // If inactive, count for all months of that year if they worked at all in that year
+                if (emp.is_active || workedInYear) {
+                  yearlyMap[y].totalConsultantCost += (currentGross / 12);
+                }
+              } else if (monthLog) {
+                yearlyMap[y].totalCompanyLabor += (parseFloat(monthLog.total_hours) * currentGross / 2000);
+              }
+          }
+        });
+      }
+    }
+
+    laborSplit.rows.forEach(l => {
+      const fullYear = 2000 + parseInt(l.year_prefix);
+      if (yearlyMap[fullYear]) {
+        if (!yearlyMap[fullYear].projects[l.comm_id]) yearlyMap[fullYear].projects[l.comm_id] = { rev: 0, cost: 0, consultant_cost: 0 };
+        
+        // Find employee cost (Theoretical for this bucket year)
+        const emp = allEmployeesCost.rows.find(e => e.id === l.employee_id);
+        const validCosts = allEmployeesCost.rows
+          .filter(c => c.id === l.employee_id)
+          .filter(c => (c.start_year < fullYear) || (c.start_year === fullYear && c.start_month <= l.month))
+          .sort((a,b) => (b.start_year - a.start_year) || (b.start_month - a.start_month));
+        
+        if (validCosts.length > 0 && emp) {
+          const gross = parseFloat(validCosts[0].annual_gross);
+          const projectHours = parseFloat(l.project_hours);
+          
+          if (emp.category === 'internal') {
+            const cost = projectHours * (gross / 2000);
+            yearlyMap[fullYear].projects[l.comm_id].cost += cost;
+            yearlyMap[fullYear].directLaborAttr += cost;
+          }
+        }
+      }
+    });
+
+    // 4. Render Sheet
+    for (const y of targetYears) {
+      const ySuffix = y.toString().slice(-2);
+      sheet3.addRow([`--- ANNO ${y} ---`]).font = { bold: true };
+      
+      const projects = yearlyMap[y].projects;
+      const sortedIds = Object.keys(projects).sort((a,b) => (commInfo[a]?.comm_number || '').localeCompare(commInfo[b]?.comm_number || ''));
+
+      sortedIds.forEach(cid => {
+        const info = commInfo[cid];
+        if (!info || !info.comm_number.startsWith(ySuffix + '-')) return;
+        
+        const p = projects[cid];
+        const profit = p.rev - p.cost;
+        const margin = p.rev > 0 ? (profit / p.rev * 100).toFixed(1) + '%' : '-';
+
+        sheet3.addRow({
+          year: y,
+          comm_number: info.comm_number,
+          name: info.name,
+          total_rev: Number(p.rev.toFixed(2)),
+          total_cost: Number(p.cost.toFixed(2)),
+          profit: Number(profit.toFixed(2)),
+          margin: margin
+        });
+      });
+
+      // Overall calculations for the year
+      const settingsRes = await query(`SELECT key, value FROM settings WHERE key LIKE 'gc_%_' || $1`, [y]);
+      const overheadGC = settingsRes.rows.reduce((sum, r) => sum + (parseFloat(r.value) || 0), 0);
+      
+      const grossProfit = yearlyMap[y].revenue - yearlyMap[y].directLaborAttr;
+      const netProfit = grossProfit - yearlyMap[y].totalConsultantCost - overheadGC; // Include consultant cost here
+
+      sheet3.addRow([]);
+      
+      const sub1 = sheet3.addRow({ name: `TOTALE RICAVI ${y}`, total_rev: Number(yearlyMap[y].revenue.toFixed(2)) });
+      sub1.font = { bold: true };
+      
+      const sub2 = sheet3.addRow({ name: `TOTALE COSTO LAVORO DIRETTO ${y}`, total_rev: Number(yearlyMap[y].directLaborAttr.toFixed(2)) });
+      sub2.font = { bold: true };
+
+      const sub3 = sheet3.addRow({ name: `UTILE LORDO PROGETTI ${y}`, total_rev: Number(grossProfit.toFixed(2)) });
+      sub3.font = { bold: true, color: { argb: 'FF059669' } };
+
+      const sub5 = sheet3.addRow({ name: `COSTO CONSULENTI ${y}`, total_rev: Number(yearlyMap[y].totalConsultantCost.toFixed(2)) });
+      sub5.font = { italic: true, color: { argb: 'FFFF0000' } };
+
+      const sub6 = sheet3.addRow({ name: `SPESE GENERALI (GC) ${y}`, total_rev: Number(overheadGC.toFixed(2)) });
+      sub6.font = { italic: true };
+
+      const sub7 = sheet3.addRow({ name: `UTILE NETTO TOTALE ${y}`, total_rev: Number(netProfit.toFixed(2)) });
+      sub7.font = { bold: true, size: 12, color: { argb: 'FF2563EB' } };
+      
+      sheet3.addRow([]);
+    }
+
+    await sendWorkbook(res, workbook, `Rapporto_Finanziario_Completo_${year || 'Tutti'}_${new Date().toISOString().split('T')[0]}.xlsx`);
   } catch (err) {
     console.error('Export finances error:', err);
-    res.status(500).json({ error: 'Failed to export finances' });
+    res.status(500).json({ error: 'Errore durante l\'esportazione dei dati finanziari' });
   }
 });
 
@@ -217,7 +433,7 @@ router.get('/workload', authenticateHR, async (req, res) => {
       SELECT e.id as employee_id, e.name, e.position, pamh.month, SUM(pamh.hours) as monthly_total
       FROM employees e
       LEFT JOIN phase_assignee_monthly_hours pamh ON e.id = pamh.employee_id AND pamh.year = $1
-      WHERE e.is_active = true
+      WHERE (e.is_active = TRUE OR pamh.employee_id IS NOT NULL)
       GROUP BY e.id, e.name, e.position, pamh.month
       ORDER BY e.name, pamh.month
     `, [targetYear]);
@@ -252,10 +468,10 @@ router.get('/workload', authenticateHR, async (req, res) => {
     const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     // --- SHEET 1: WORKLOAD MATRIX ---
-    const sheet1 = workbook.addWorksheet(`Workload ${targetYear}`);
-    const columns1 = [{ header: 'Employee', key: 'name', width: 25 }, { header: 'Position', key: 'position', width: 20 }];
+    const sheet1 = workbook.addWorksheet(`Carico Lavoro ${targetYear}`);
+    const columns1 = [{ header: 'Collaboratore', key: 'name', width: 25 }, { header: 'Posizione', key: 'position', width: 20 }];
     MONTH_NAMES.forEach((m, i) => columns1.push({ header: m, key: `m${i+1}`, width: 10 }));
-    columns1.push({ header: 'TOTAL', key: 'total', width: 12 });
+    columns1.push({ header: 'TOTALE', key: 'total', width: 12 });
     sheet1.columns = columns1;
     sheet1.getRow(1).font = { bold: true };
     sheet1.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
@@ -276,22 +492,23 @@ router.get('/workload', authenticateHR, async (req, res) => {
     sheet1.getColumn('total').font = { bold: true };
 
     // --- SHEET 2: KPI TRENDS ---
-    const sheet2 = workbook.addWorksheet(`Financial Trends ${targetYear}`);
-    const columns2 = [{ header: 'Metric', key: 'metric', width: 30 }];
+    const sheet2 = workbook.addWorksheet(`Andamento Finanziario ${targetYear}`);
+    const columns2 = [{ header: 'Metrica', key: 'metric', width: 30 }];
     MONTH_NAMES.forEach((m, i) => columns2.push({ header: m, key: `m${i+1}`, width: 12 }));
-    columns2.push({ header: 'YEAR TOTAL', key: 'total', width: 15 });
+    columns2.push({ header: 'TOTALE ANNUO', key: 'total', width: 15 });
     sheet2.columns = columns2;
     sheet2.getRow(1).font = { bold: true };
     sheet2.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E7FF' } };
 
     const trends = {
-      revenue: { metric: '🟢 Income (Taken)', total: 0 },
-      labor: { metric: '🔴 Labor Cost', total: 0 },
-      overhead: { metric: '🔘 Overhead', total: 0 },
-      profit: { metric: '💰 NET PROFIT', total: 0 }
+      revenue: { metric: '🟢 Ricavi (Incassati)', total: 0 },
+      internal_labor: { metric: '🔴 Costo Lavoro Interno', total: 0 },
+      consultant_labor: { metric: '🔴 Costo Consulenti', total: 0 },
+      overhead: { metric: '🔘 Spese Generali', total: 0 },
+      profit: { metric: '💰 UTILE NETTO', total: 0 }
     };
     for(let i=1; i<=12; i++) {
-      trends.revenue[`m${i}`] = 0; trends.labor[`m${i}`] = 0;
+      trends.revenue[`m${i}`] = 0; trends.internal_labor[`m${i}`] = 0; trends.consultant_labor[`m${i}`] = 0;
       trends.overhead[`m${i}`] = monthlyOverheadValue; trends.overhead.total += monthlyOverheadValue;
     }
     revenueRes.rows.forEach(r => {
@@ -300,28 +517,34 @@ router.get('/workload', authenticateHR, async (req, res) => {
     });
     laborRes.rows.forEach(r => {
       const cost = calculateMonthlyLaborCost({ hours: r.hours, annual_gross: r.annual_gross, category: r.category });
-      trends.labor[`m${parseInt(r.month)}`] += cost;
-      trends.labor.total += cost;
+      if (r.category === 'consultant') {
+        trends.consultant_labor[`m${parseInt(r.month)}`] += cost;
+        trends.consultant_labor.total += cost;
+      } else {
+        trends.internal_labor[`m${parseInt(r.month)}`] += cost;
+        trends.internal_labor.total += cost;
+      }
     });
     for(let i=1; i<=12; i++) {
       const m = `m${i}`;
-      trends.profit[m] = trends.revenue[m] - trends.labor[m] - trends.overhead[m];
+      trends.profit[m] = trends.revenue[m] - trends.internal_labor[m] - trends.consultant_labor[m] - trends.overhead[m];
       trends.profit.total += trends.profit[m];
     }
     sheet2.addRow(trends.revenue);
-    sheet2.addRow(trends.labor);
+    sheet2.addRow(trends.internal_labor);
+    sheet2.addRow(trends.consultant_labor);
     sheet2.addRow(trends.overhead);
     const profRow = sheet2.addRow(trends.profit);
     profRow.font = { bold: true };
 
     // --- SHEET 3: REVENUE DETAILS ---
-    const sheet3 = workbook.addWorksheet(`Revenue Details ${targetYear}`);
+    const sheet3 = workbook.addWorksheet(`Dettaglio Ricavi ${targetYear}`);
     sheet3.columns = [
-      { header: 'Month', key: 'month_name', width: 12 },
+      { header: 'Mese', key: 'month_name', width: 12 },
       { header: 'Commessa (Task)', key: 'task_title', width: 30 },
-      { header: 'Client', key: 'client_name', width: 25 },
-      { header: 'Activity', key: 'line_description', width: 25 },
-      { header: 'Amount (€)', key: 'amount', width: 15 },
+      { header: 'Cliente', key: 'client_name', width: 25 },
+      { header: 'Attività', key: 'line_description', width: 25 },
+      { header: 'Importo (€)', key: 'amount', width: 15 },
     ];
     sheet3.getRow(1).font = { bold: true };
     sheet3.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
@@ -343,13 +566,13 @@ router.get('/workload', authenticateHR, async (req, res) => {
     });
 
     // --- SHEET 4: LABOR DETAILS ---
-    const sheet4 = workbook.addWorksheet(`Labor Details ${targetYear}`);
+    const sheet4 = workbook.addWorksheet(`Dettaglio Costo Lavoro ${targetYear}`);
     sheet4.columns = [
-      { header: 'Month', key: 'month_name', width: 12 },
-      { header: 'Employee', key: 'name', width: 25 },
-      { header: 'Category', key: 'category', width: 15 },
-      { header: 'Hours', key: 'hours', width: 10 },
-      { header: 'Cost (€)', key: 'cost', width: 15 },
+      { header: 'Mese', key: 'month_name', width: 12 },
+      { header: 'Collaboratore', key: 'name', width: 25 },
+      { header: 'Categoria', key: 'category', width: 15 },
+      { header: 'Ore', key: 'hours', width: 10 },
+      { header: 'Costo (€)', key: 'cost', width: 15 },
     ];
     sheet4.getRow(1).font = { bold: true };
     sheet4.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
@@ -387,16 +610,16 @@ router.get('/employees', authenticateHR, async (req, res) => {
     `);
 
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Employee HR List');
+    const sheet = workbook.addWorksheet('Anagrafica HR');
 
     // 1. Fixed Base Columns
     const cols = [
-      { header: 'Full Name', key: 'name', width: 25 },
+      { header: 'Nome e Cognome', key: 'name', width: 25 },
       { header: 'Username', key: 'username', width: 25 },
-      { header: 'Role', key: 'role', width: 12 },
-      { header: 'Position', key: 'position', width: 20 },
-      { header: 'Category', key: 'category', width: 15 },
-      { header: 'Status', key: 'is_active', width: 10 },
+      { header: 'Ruolo', key: 'role', width: 12 },
+      { header: 'Posizione', key: 'position', width: 20 },
+      { header: 'Categoria', key: 'category', width: 15 },
+      { header: 'Stato', key: 'is_active', width: 12 },
       // Personal
       { header: 'Sesso', key: 'sesso', width: 8 },
       { header: 'Data Nascita', key: 'data_nascita', width: 15 },
@@ -450,12 +673,12 @@ router.get('/employees', authenticateHR, async (req, res) => {
 
     // Add Languages to cols
     fixedLangs.forEach(l => {
-      cols.push({ header: `Lang: ${l}`, key: `lang_${l}`, width: 12 });
+      cols.push({ header: `Lingua: ${l}`, key: `lang_${l}`, width: 15 });
     });
 
     // Add Training to cols
     sortedYears.forEach(y => {
-      cols.push({ header: `Training ${y}`, key: `form_${y}`, width: 25 });
+      cols.push({ header: `Formazione ${y}`, key: `form_${y}`, width: 25 });
     });
 
     sheet.columns = cols;
@@ -496,30 +719,30 @@ router.get('/clients', authenticateHR, async (req, res) => {
   try {
     const result = await query(`SELECT * FROM clients ORDER BY name ASC`);
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Clients List');
+    const sheet = workbook.addWorksheet('Lista Clienti');
 
     sheet.columns = [
       { header: 'ID', key: 'id', width: 10 },
-      { header: 'Client Name (Short)', key: 'name', width: 25 },
+      { header: 'Nome Cliente', key: 'name', width: 25 },
       { header: 'Ragione Sociale', key: 'ragione_sociale', width: 30 },
-      { header: 'VAT Number', key: 'vat_number', width: 20 },
+      { header: 'P. IVA', key: 'vat_number', width: 20 },
       { header: 'Codice Fiscale', key: 'codice_fiscale', width: 20 },
-      { header: 'Codice Univoco (SDI)', key: 'codice_univoco', width: 15 },
+      { header: 'Codice SDI', key: 'codice_univoco', width: 15 },
       { header: 'ATECO', key: 'codice_ateco', width: 15 },
       { header: 'Inarcassa', key: 'codice_inarcassa', width: 15 },
-      { header: 'Contact Email', key: 'contact_email', width: 25 },
-      { header: 'Phone', key: 'phone', width: 15 },
+      { header: 'Email Contatto', key: 'contact_email', width: 25 },
+      { header: 'Telefono', key: 'phone', width: 15 },
       { header: 'Fax', key: 'fax', width: 15 },
-      { header: 'Address', key: 'address', width: 30 },
+      { header: 'Indirizzo', key: 'address', width: 30 },
       { header: 'Località', key: 'localita', width: 20 },
       { header: 'CAP', key: 'cap', width: 10 },
-      { header: 'Province', key: 'province', width: 10 },
+      { header: 'Provincia', key: 'province', width: 15 },
       { header: 'Stato', key: 'stato', width: 15 },
-      { header: 'Accounting Contact', key: 'contabilita_name', width: 25 },
-      { header: 'Accounting Email', key: 'contabilita_email', width: 25 },
-      { header: 'Accounting Phone', key: 'contabilita_phone', width: 15 },
-      { header: 'Notes', key: 'notes', width: 30 },
-      { header: 'Created At', key: 'created_at', width: 20 }
+      { header: 'Contabilità (Rif)', key: 'contabilita_name', width: 25 },
+      { header: 'Contabilità (Email)', key: 'contabilita_email', width: 25 },
+      { header: 'Contabilità (Tel)', key: 'contabilita_phone', width: 15 },
+      { header: 'Note', key: 'notes', width: 30 },
+      { header: 'Creato il', key: 'created_at', width: 20 }
     ];
 
     sheet.getRow(1).font = { bold: true };
