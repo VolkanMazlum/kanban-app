@@ -22,29 +22,37 @@ async function sendWorkbook(res, workbook, filename) {
 router.get('/tasks', async (req, res) => {
   try {
     const result = await query(`
-      SELECT t.*, 
-             e.name as employee_name,
-             array_agg(ta.employee_id) as assignee_ids
+      SELECT t.id as task_id, t.title as task_title, t.status as task_status, t.label as task_type, 
+             t.estimated_hours as task_total_hours, t.planned_start, t.planned_end, t.deadline,
+             tp.name as phase_name, tp.status as phase_status, tp.estimated_hours as phase_total_hours,
+             tp.start_date as phase_start, tp.end_date as phase_end,
+             pa.estimated_hours as individual_hours,
+             e.name as employee_name
       FROM tasks t
-      LEFT JOIN task_assignees ta ON t.id = ta.task_id
-      LEFT JOIN employees e ON ta.employee_id = e.id
-      GROUP BY t.id, e.name
-      ORDER BY t.created_at DESC
+      LEFT JOIN task_phases tp ON t.id = tp.task_id
+      LEFT JOIN phase_assignees pa ON tp.id = pa.phase_id
+      LEFT JOIN employees e ON pa.employee_id = e.id
+      WHERE t.status IN ('process', 'done')
+      AND (tp.id IS NULL OR tp.status IN ('active', 'done'))
+      ORDER BY t.created_at DESC, tp.id ASC, e.name ASC
     `);
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Tasks Board');
 
     sheet.columns = [
-      { header: 'ID', key: 'id', width: 10 },
-      { header: 'Title', key: 'title', width: 30 },
-      { header: 'Status', key: 'status', width: 15 },
-      { header: 'Type', key: 'label', width: 20 },
-      { header: 'Estimated Hours', key: 'estimated_hours', width: 15 },
-      { header: 'Planned Start', key: 'planned_start', width: 15 },
-      { header: 'Planned End', key: 'planned_end', width: 15 },
-      { header: 'Deadline', key: 'deadline', width: 15 },
-      { header: 'Created At', key: 'created_at', width: 20 },
+      { header: 'Task ID', key: 'task_id', width: 10 },
+      { header: 'Task Title', key: 'task_title', width: 25 },
+      { header: 'Employee', key: 'employee_name', width: 20 },
+      { header: 'Indiv. Est. Hours', key: 'individual_hours', width: 15 },
+      { header: 'Phase Name', key: 'phase_name', width: 25 },
+      { header: 'Phase Status', key: 'phase_status', width: 15 },
+      { header: 'Phase Total Hours', key: 'phase_total_hours', width: 15 },
+      { header: 'Phase Start', key: 'phase_start', width: 15 },
+      { header: 'Phase End', key: 'phase_end', width: 15 },
+      { header: 'Task Total Hours', key: 'task_total_hours', width: 15 },
+      { header: 'Task Status', key: 'task_status', width: 15 },
+      { header: 'Task Deadline', key: 'deadline', width: 15 },
     ];
 
     // Format headers
@@ -54,10 +62,11 @@ router.get('/tasks', async (req, res) => {
     result.rows.forEach(t => {
       sheet.addRow({
         ...t,
+        phase_start: t.phase_start ? t.phase_start.toISOString().split('T')[0] : '-',
+        phase_end: t.phase_end ? t.phase_end.toISOString().split('T')[0] : '-',
         planned_start: t.planned_start ? t.planned_start.toISOString().split('T')[0] : '',
         planned_end: t.planned_end ? t.planned_end.toISOString().split('T')[0] : '',
         deadline: t.deadline ? t.deadline.toISOString().split('T')[0] : '',
-        created_at: t.created_at ? t.created_at.toISOString() : ''
       });
     });
 
@@ -298,6 +307,117 @@ router.get('/workload', authenticateHR, async (req, res) => {
   } catch (err) {
     console.error('Export workload error:', err);
     res.status(500).json({ error: 'Failed to export workload' });
+  }
+});
+
+/**
+ * EXPORT EMPLOYEES (Extended HR Data)
+ * HR Only
+ */
+router.get('/employees', authenticateHR, async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT e.*, u.username, u.role
+      FROM employees e
+      LEFT JOIN users u ON e.id = u.employee_id
+      ORDER BY e.name ASC
+    `);
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Employee HR List');
+
+    // 1. Fixed Base Columns
+    const cols = [
+      { header: 'Full Name', key: 'name', width: 25 },
+      { header: 'Username', key: 'username', width: 25 },
+      { header: 'Role', key: 'role', width: 12 },
+      { header: 'Position', key: 'position', width: 20 },
+      { header: 'Category', key: 'category', width: 15 },
+      { header: 'Status', key: 'is_active', width: 10 },
+      // Personal
+      { header: 'Sesso', key: 'sesso', width: 8 },
+      { header: 'Data Nascita', key: 'data_nascita', width: 15 },
+      { header: 'Luogo Nascita', key: 'luogo_nascita', width: 20 },
+      { header: 'Età', key: 'eta', width: 8 },
+      { header: 'Residenza', key: 'residenza', width: 25 },
+      { header: 'Codice Fiscale', key: 'cf', width: 20 },
+      // Pro / Inquadramento
+      { header: 'Inizio Lavoro', key: 'inizio_lavoro', width: 15 },
+      { header: 'Anni Exp', key: 'anni_exp', width: 10 },
+      { header: 'Qualifica', key: 'qualifica', width: 20 },
+      { header: 'Ordine', key: 'ordine', width: 15 },
+      { header: 'Data Abilitazione', key: 'data_abilitazione', width: 15 },
+      { header: 'Posizione (Inq.)', key: 'posizione_inq', width: 20 },
+      { header: 'Assunzione', key: 'assunzione', width: 15 },
+      { header: 'Livello', key: 'livello', width: 12 },
+      { header: 'Contratto', key: 'contratto', width: 20 },
+      { header: 'Scadenza Contratto', key: 'scadenza_contratto', width: 15 },
+      { header: 'Team', key: 'team', width: 15 },
+      { header: 'Disciplina', key: 'disciplina', width: 15 },
+      { header: 'Presenza (%)', key: 'presenza', width: 12 },
+      { header: 'Smart Working', key: 'smart_working', width: 15 },
+      // Finance
+      { header: 'RAL (€)', key: 'ral', width: 12 },
+      { header: 'Lordo Azienda', key: 'lordo_azienda', width: 15 },
+      { header: 'Una Tantum', key: 'una_tantum', width: 15 },
+      { header: 'Auto', key: 'auto', width: 15 },
+      { header: 'Carta Carburante', key: 'carburante', width: 15 },
+      { header: 'Welfare', key: 'welfare', width: 15 },
+      { header: 'Buoni Pasto', key: 'buoni_pasto', width: 15 },
+      { header: 'Totale Annuo Lordo', key: 'totale_annuo', width: 18 },
+      // Safety
+      { header: 'Corsi Sicurezza', key: 'corsi_sic', width: 25 },
+      { header: 'Scadenza Corsi', key: 'scadenza_corsi', width: 15 },
+      { header: 'Visita Medica', key: 'visita_medica', width: 25 },
+      { header: 'Scadenza Visita', key: 'scadenza_visita', width: 15 },
+    ];
+
+    // 2. Discover Training Years only (Languages are now fixed list too)
+    const trainingYears = new Set();
+    const fixedLangs = ["Italiano", "Inglese", "Francese", "Spagnolo", "Tedesco", "Portoghese", "Arabo", "Russo", "Turco", "Persiano"];
+    
+    result.rows.forEach(r => {
+      const hr = r.hr_details || {};
+      Object.keys(hr).forEach(k => {
+        if (k.startsWith('form_')) trainingYears.add(k.replace('form_', ''));
+      });
+    });
+
+    const sortedYears = Array.from(trainingYears).sort();
+
+    // Add Languages to cols
+    fixedLangs.forEach(l => {
+      cols.push({ header: `Lang: ${l}`, key: `lang_${l}`, width: 12 });
+    });
+
+    // Add Training to cols
+    sortedYears.forEach(y => {
+      cols.push({ header: `Training ${y}`, key: `form_${y}`, width: 25 });
+    });
+
+    sheet.columns = cols;
+    sheet.getRow(1).font = { bold: true };
+    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } };
+
+    result.rows.forEach(r => {
+      const hr = r.hr_details || {};
+      const rowData = {
+        name: r.name,
+        username: r.username,
+        role: r.role,
+        position: r.position,
+        category: r.category,
+        is_active: r.is_active ? 'Active' : 'Disabled',
+        ...hr
+      };
+      
+      sheet.addRow(rowData);
+    });
+
+    await sendWorkbook(res, workbook, `Employee_HR_Data_${new Date().toISOString().split('T')[0]}.xlsx`);
+  } catch (err) {
+    console.error('Export employees error:', err);
+    res.status(500).json({ error: 'Failed to export employee data' });
   }
 });
 

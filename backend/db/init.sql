@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS employees (
   position VARCHAR(100) DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   is_active BOOLEAN DEFAULT TRUE,
-  category VARCHAR(20) DEFAULT 'internal' CHECK (category IN ('internal', 'consultant'))
+  category VARCHAR(20) DEFAULT 'internal' CHECK (category IN ('internal', 'consultant')),
+  hr_details JSONB DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -304,7 +305,7 @@ CREATE INDEX IF NOT EXISTS idx_fatturato_realized_line ON fatturato_realized(fat
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
-  email VARCHAR(255) UNIQUE NOT NULL,
+  username VARCHAR(255) UNIQUE NOT NULL,
   name VARCHAR(150) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   role VARCHAR(20) NOT NULL DEFAULT 'standard' CHECK (role IN ('standard', 'hr')),
@@ -318,12 +319,12 @@ CREATE TRIGGER users_updated_at
 BEFORE UPDATE ON users
 FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  user_email VARCHAR(255),
+  user_username VARCHAR(255),
   user_name VARCHAR(150),
   action VARCHAR(50) NOT NULL,
   entity_type VARCHAR(50) NOT NULL,

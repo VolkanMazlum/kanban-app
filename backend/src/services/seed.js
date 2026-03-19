@@ -6,19 +6,19 @@ const bcrypt = require('bcrypt');
  */
 async function seedUsers(query) {
   const defaultUsers = [
-    { email: 'admin', name: 'Admin', password: 'admin123', role: 'hr' },
-    { email: 'user', name: 'Standard User', password: 'user123', role: 'standard' },
+    { username: 'admin', name: 'Admin', password: 'admin123', role: 'hr' },
+    { username: 'user', name: 'Standard User', password: 'user123', role: 'standard' },
   ];
 
   for (const u of defaultUsers) {
-    const exists = await query('SELECT id FROM users WHERE email = $1', [u.email]);
+    const exists = await query('SELECT id FROM users WHERE username = $1', [u.username]);
     if (exists.rows.length === 0) {
       const hash = await bcrypt.hash(u.password, 10);
       const userRes = await query(
-        'INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id',
-        [u.email, u.name, hash, u.role]
+        'INSERT INTO users (username, name, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id',
+        [u.username, u.name, hash, u.role]
       );
-      console.log(`  ✔ Seeded user: ${u.email}`);
+      console.log(`  ✔ Seeded user: ${u.username}`);
     }
   }
   

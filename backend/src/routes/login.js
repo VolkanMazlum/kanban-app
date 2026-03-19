@@ -9,8 +9,8 @@ const login = (query) => async (req, res) => {
   }
 
   try {
-    // Look up user by email (username field maps to email column)
-    const result = await query('SELECT * FROM users WHERE email = $1 AND is_active = TRUE', [username]);
+    // Look up user by username
+    const result = await query('SELECT * FROM users WHERE username = $1 AND is_active = TRUE', [username]);
 
     if (result.rows.length === 0) {
       return res.status(401).json({ error: "Invalid credentials" });
@@ -28,7 +28,7 @@ const login = (query) => async (req, res) => {
     const token = generateToken({
       userId: user.id,
       employeeId: user.employee_id,
-      email: user.email,
+      username: user.username,
       name: user.name,
       role: user.role.trim()
     });
