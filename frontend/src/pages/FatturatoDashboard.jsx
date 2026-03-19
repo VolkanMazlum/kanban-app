@@ -60,15 +60,15 @@ export default function FatturatoDashboard({ isHR }) {
   }
 
   // ---- COMMESSA CRUD ----
-  const openNewFatt = () => { setEditingFatt(null); setFattForm(EMPTY_FORM); setShowFattModal(true); };
+  const openNewFatt = () => { setEditingFatt(null); setFattForm(getEmptyForm()); setShowFattModal(true); };
 
   const openEditFatt = (row) => {
     setEditingFatt(row);
     const linkedTask = allTasks.find(t => t.id === row.task_id);
 
     let initialClients = row.clients && row.clients.length > 0 ? row.clients.map(c => ({
-      ...c, lines: c.lines && c.lines.length > 0 ? c.lines : [{ ...EMPTY_LINE }]
-    })) : [{ ...EMPTY_CLIENT }];
+      ...c, lines: c.lines && c.lines.length > 0 ? c.lines : [{ ...getEmptyLine() }]
+    })) : [{ ...getEmptyClient() }];
 
     if (linkedTask && linkedTask.phases) {
       const relevantPhases = linkedTask.phases.filter(ph => ph.status === 'active' || ph.status === 'done');
@@ -76,7 +76,7 @@ export default function FatturatoDashboard({ isHR }) {
         const existingActivities = new Set(client.lines.map(l => l.attivita));
         const missingPhases = relevantPhases.filter(ph => !existingActivities.has(ph.name));
         if (missingPhases.length > 0) {
-          const linesToAdd = missingPhases.map(ph => ({ ...EMPTY_LINE, attivita: ph.name }));
+          const linesToAdd = missingPhases.map(ph => ({ ...getEmptyLine(), attivita: ph.name }));
           const filteredLines = client.lines.filter(l => l.attivita || l.valore_ordine || l.fatturato_amount);
           return { ...client, lines: [...(filteredLines.length > 0 ? filteredLines : []), ...linesToAdd] };
         }
@@ -190,6 +190,36 @@ export default function FatturatoDashboard({ isHR }) {
     const newClients = [...fattForm.clients];
     newClients[cIdx].lines[lIdx].ordini.splice(oIdx, 1);
     //updateFatturatoFromOrdini(newClients, cIdx, lIdx);
+    setFattForm({ ...fattForm, clients: newClients });
+  };
+
+  // ---- REALIZED REVENUE HANDLERS (Billing History) ----
+  const addRealizedToLine = (cIdx, lIdx) => {
+    const newClients = [...fattForm.clients];
+    if (!newClients[cIdx].lines[lIdx].realized) newClients[cIdx].lines[lIdx].realized = [];
+    newClients[cIdx].lines[lIdx].realized.push({ amount: "", registration_date: new Date().toISOString().split('T')[0], note: "" });
+    setFattForm({ ...fattForm, clients: newClients });
+  };
+
+  const handleRealizedChange = (cIdx, lIdx, rIdx, field, val) => {
+    const newClients = [...fattForm.clients];
+    newClients[cIdx].lines[lIdx].realized[rIdx][field] = val;
+    
+    // Auto-update total fatturato_amount for the line
+    const totalRealized = newClients[cIdx].lines[lIdx].realized.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+    newClients[cIdx].lines[lIdx].fatturato_amount = totalRealized > 0 ? totalRealized.toString() : "";
+    
+    setFattForm({ ...fattForm, clients: newClients });
+  };
+
+  const removeRealizedFromLine = (cIdx, lIdx, rIdx) => {
+    const newClients = [...fattForm.clients];
+    newClients[cIdx].lines[lIdx].realized.splice(rIdx, 1);
+    
+    // Auto-update total fatturato_amount for the line
+    const totalRealized = newClients[cIdx].lines[lIdx].realized.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+    newClients[cIdx].lines[lIdx].fatturato_amount = totalRealized > 0 ? totalRealized.toString() : "";
+
     setFattForm({ ...fattForm, clients: newClients });
   };
   const handleOrdineChange = (cIdx, lIdx, oIdx, field, val) => {
@@ -399,12 +429,12 @@ export default function FatturatoDashboard({ isHR }) {
                             const existingActivities = new Set(cleanedLines.map(l => l.attivita));
                             const missingPhases = relevantPhases.filter(ph => !existingActivities.has(ph.name));
                             if (missingPhases.length > 0) {
-                              const linesToAdd = missingPhases.map(ph => ({ ...EMPTY_LINE, attivita: ph.name }));
+                              const linesToAdd = missingPhases.map(ph => ({ ...getEmptyLine(), attivita: ph.name }));
                               cleanedLines = cleanedLines.filter(l => l.attivita || l.valore_ordine || l.fatturato_amount);
                               cleanedLines = [...(cleanedLines.length > 0 ? cleanedLines : []), ...linesToAdd];
                             }
                           }
-                          if (cleanedLines.length === 0) cleanedLines = [{ ...EMPTY_LINE }];
+                          if (cleanedLines.length === 0) cleanedLines = [{ ...getEmptyLine() }];
                           return { ...client, lines: cleanedLines };
                         });
                         setFattForm({ ...fattForm, task_id: selectedTaskId, name: selectedTask ? selectedTask.title : fattForm.name, clients: newClients });
@@ -456,33 +486,71 @@ export default function FatturatoDashboard({ isHR }) {
                         <div key={lIdx} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, padding: 10, marginBottom: 8 }}>
                           <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
                             <div style={{ flex: 2 }}><input placeholder="Attività" value={line.attivita} onChange={e => handleLineChange(cIdx, lIdx, "attivita", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
-                            <div style={{ flex: 1 }}><input type="number" placeholder="Valore €" value={line.valore_ordine} onChange={e => handleLineChange(cIdx, lIdx, "valore_ordine", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
-                            <div style={{ flex: 1 }}><input type="number" placeholder="Fatturato €" value={line.fatturato_amount} onChange={e => handleLineChange(cIdx, lIdx, "fatturato_amount", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
+                             <div style={{ flex: 1 }}><input type="number" placeholder="Valore €" value={line.valore_ordine} onChange={e => handleLineChange(cIdx, lIdx, "valore_ordine", e.target.value)} style={{ ...inpStyle, padding: "6px" }} /></div>
+                             <div style={{ flex: 1 }}>
+                               <input 
+                                 type="number" 
+                                 placeholder="Fatturato €" 
+                                 value={line.fatturato_amount} 
+                                 onChange={e => handleLineChange(cIdx, lIdx, "fatturato_amount", e.target.value)} 
+                                 style={{ ...inpStyle, padding: "6px", background: (line.realized && line.realized.length > 0) ? "#F3F4F6" : "#fff" }} 
+                                 readOnly={line.realized && line.realized.length > 0}
+                                 title={line.realized && line.realized.length > 0 ? "Calculated from Billing History" : ""}
+                               />
+                             </div>
                             <button onClick={() => removeLineFromClient(cIdx, lIdx)} disabled={client.lines.length === 1} style={{ background: "#F3F4F6", color: "#DC2626", border: "none", padding: "6px 10px", borderRadius: 6, cursor: client.lines.length > 1 ? "pointer" : "not-allowed" }}>✕</button>
                           </div>
 
-                          {/* Nested Ordini (Percentages) */}
-                          <div style={{ marginLeft: 20, borderLeft: "2px solid #E5E7EB", paddingLeft: 12 }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <span style={{ fontSize: 9, fontWeight: 700, color: "#6B7280" }}>PAYMENT SCHEDULE (%)</span>
-                                {(() => {
-                                  const total = (line.ordini || []).reduce((sum, o) => sum + (parseFloat(o.percentage) || 0), 0);
-                                  if (total > 100) return <span style={{ fontSize: 9, fontWeight: 700, color: "#EF4444" }}>TOTAL: {total.toFixed(1)}% (EXCEEDS 100!)</span>;
-                                  if (total > 0) return <span style={{ fontSize: 9, fontWeight: 700, color: total === 100 ? "#059669" : "#6B7280" }}>TOTAL: {total.toFixed(1)}%</span>;
-                                  return null;
-                                })()}
-                              </div>
-                              <button onClick={() => addOrdineToLine(cIdx, lIdx)} style={{ background: "#EEF2FF", color: "#4F46E5", border: "1px solid #C7D2FE", padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>+ Add %</button>
-                            </div>
-                            {(line.ordini || []).map((ord, oIdx) => (
-                              <div key={oIdx} style={{ display: "flex", gap: 4, marginBottom: 4 }}>
-                                <input placeholder="SAL 1" value={ord.label} onChange={e => handleOrdineChange(cIdx, lIdx, oIdx, "label", e.target.value)} style={{ ...inpStyle, flex: 2, padding: "4px", fontSize: 11 }} />
-                                <input type="number" placeholder="%" value={ord.percentage} onChange={e => handleOrdineChange(cIdx, lIdx, oIdx, "percentage", e.target.value)} style={{ ...inpStyle, flex: 1, padding: "4px", fontSize: 11 }} />
-                                <button onClick={() => removeOrdineFromLine(cIdx, lIdx, oIdx)} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 12 }}>✕</button>
-                              </div>
-                            ))}
-                          </div>
+                           {/* Nested Ordini (Percentages) */}
+                           <div style={{ marginLeft: 20, borderLeft: "2px solid #E5E7EB", paddingLeft: 12, marginBottom: 12 }}>
+                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                 <span style={{ fontSize: 9, fontWeight: 700, color: "#6B7280" }}>PAYMENT SCHEDULE (%)</span>
+                                 {(() => {
+                                   const total = (line.ordini || []).reduce((sum, o) => sum + (parseFloat(o.percentage) || 0), 0);
+                                   if (total > 100) return <span style={{ fontSize: 9, fontWeight: 700, color: "#EF4444" }}>TOTAL: {total.toFixed(1)}% (EXCEEDS 100!)</span>;
+                                   if (total > 0) return <span style={{ fontSize: 9, fontWeight: 700, color: total === 100 ? "#059669" : "#6B7280" }}>TOTAL: {total.toFixed(1)}%</span>;
+                                   return null;
+                                 })()}
+                               </div>
+                               <button onClick={() => addOrdineToLine(cIdx, lIdx)} style={{ background: "#EEF2FF", color: "#4F46E5", border: "1px solid #C7D2FE", padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>+ Add %</button>
+                             </div>
+                             {(line.ordini || []).map((ord, oIdx) => (
+                               <div key={oIdx} style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+                                 <input placeholder="SAL 1" value={ord.label} onChange={e => handleOrdineChange(cIdx, lIdx, oIdx, "label", e.target.value)} style={{ ...inpStyle, flex: 2, padding: "4px", fontSize: 11 }} />
+                                 <input type="number" placeholder="%" value={ord.percentage} onChange={e => handleOrdineChange(cIdx, lIdx, oIdx, "percentage", e.target.value)} style={{ ...inpStyle, flex: 1, padding: "4px", fontSize: 11 }} />
+                                 <button onClick={() => removeOrdineFromLine(cIdx, lIdx, oIdx)} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 12 }}>✕</button>
+                               </div>
+                             ))}
+                           </div>
+
+                           {/* Nested Realized (Billing History) */}
+                           <div style={{ marginLeft: 20, borderLeft: "2px solid #10B981", paddingLeft: 12 }}>
+                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                 <span style={{ fontSize: 9, fontWeight: 700, color: "#059669" }}>REGISTERED BILLING (REALIZED)</span>
+                                 {(() => {
+                                   const total = (line.realized || []).reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+                                   if (total > 0) return <span style={{ fontSize: 9, fontWeight: 700, color: "#059669" }}>TOTAL: €{fmtEu(total)}</span>;
+                                   return null;
+                                 })()}
+                               </div>
+                               <button onClick={() => addRealizedToLine(cIdx, lIdx)} style={{ background: "#ECFDF5", color: "#059669", border: "1px solid #A7F3D0", padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>+ Add Invoice</button>
+                             </div>
+                             {(line.realized || []).map((real, rIdx) => (
+                               <div key={rIdx} style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+                                 <input 
+                                   type="date" 
+                                   value={real.registration_date ? real.registration_date.split('T')[0] : ""} 
+                                   onChange={e => handleRealizedChange(cIdx, lIdx, rIdx, "registration_date", e.target.value)} 
+                                   style={{ ...inpStyle, flex: 1, padding: "4px", fontSize: 11 }} 
+                                 />
+                                 <input type="number" placeholder="Amount €" value={real.amount} onChange={e => handleRealizedChange(cIdx, lIdx, rIdx, "amount", e.target.value)} style={{ ...inpStyle, flex: 1, padding: "4px", fontSize: 11 }} />
+                                 <input placeholder="Note/Invoice #" value={real.note} onChange={e => handleRealizedChange(cIdx, lIdx, rIdx, "note", e.target.value)} style={{ ...inpStyle, flex: 2, padding: "4px", fontSize: 11 }} />
+                                 <button onClick={() => removeRealizedFromLine(cIdx, lIdx, rIdx)} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 12 }}>✕</button>
+                               </div>
+                             ))}
+                           </div>
                         </div>
                       ))}
                     </div>

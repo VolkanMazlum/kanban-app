@@ -28,17 +28,30 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       // 4. Tüm Ordini Çek (percentage schedules)
       const ordRes = await query(`SELECT * FROM fatturato_ordini ORDER BY id ASC`);
 
-      // İç içe yerleştirme (Ordini -> Lines -> Clients -> Commessa)
+      // 5. Tüm Realized Çek (billing history)
+      const realRes = await query(`SELECT * FROM fatturato_realized ORDER BY registration_date ASC, id ASC`);
+
+      // İç içe yerleştirme (Ordini/Realized -> Lines -> Clients -> Commessa)
       const ordByLine = {};
       ordRes.rows.forEach(o => {
         if (!ordByLine[o.fatturato_line_id]) ordByLine[o.fatturato_line_id] = [];
         ordByLine[o.fatturato_line_id].push(o);
       });
 
+      const realByLine = {};
+      realRes.rows.forEach(r => {
+        if (!realByLine[r.fatturato_line_id]) realByLine[r.fatturato_line_id] = [];
+        realByLine[r.fatturato_line_id].push(r);
+      });
+
       const linesByCc = {};
       linRes.rows.forEach(l => {
         if (!linesByCc[l.commessa_client_id]) linesByCc[l.commessa_client_id] = [];
-        linesByCc[l.commessa_client_id].push({ ...l, ordini: ordByLine[l.id] || [] });
+        linesByCc[l.commessa_client_id].push({ 
+          ...l, 
+          ordini: ordByLine[l.id] || [],
+          realized: realByLine[l.id] || []
+        });
       });
 
       const clientsByComm = {};
@@ -147,6 +160,15 @@ module.exports = (app, query, authenticate, authenticateHR) => {
                   `, [lineId, o.label || null, parseFloat(o.percentage) || 0, o.expected_date || null, o.note || null]);
                 }
               }
+
+              if (l.realized && l.realized.length > 0) {
+                for (const r of l.realized) {
+                  await query(`
+                    INSERT INTO fatturato_realized (fatturato_line_id, amount, registration_date, note)
+                    VALUES ($1, $2, $3, $4)
+                  `, [lineId, parseFloat(r.amount) || 0, r.registration_date || null, r.note || null]);
+                }
+              }
             }
           }
         }
@@ -208,6 +230,15 @@ module.exports = (app, query, authenticate, authenticateHR) => {
                     INSERT INTO fatturato_ordini (fatturato_line_id, label, percentage, expected_date, note)
                     VALUES ($1, $2, $3, $4, $5)
                   `, [lineId, o.label || null, parseFloat(o.percentage) || 0, o.expected_date || null, o.note || null]);
+                }
+              }
+
+              if (l.realized && l.realized.length > 0) {
+                for (const r of l.realized) {
+                  await query(`
+                    INSERT INTO fatturato_realized (fatturato_line_id, amount, registration_date, note)
+                    VALUES ($1, $2, $3, $4)
+                  `, [lineId, parseFloat(r.amount) || 0, r.registration_date || null, r.note || null]);
                 }
               }
             }

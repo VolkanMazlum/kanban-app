@@ -263,7 +263,6 @@ CREATE TABLE IF NOT EXISTS fatturato_lines (
   fatturato_amount NUMERIC(12,2) DEFAULT 0,
   rimanente_probabile NUMERIC(12,2) DEFAULT 0,  
   proforma NUMERIC(12,2) DEFAULT 0,
-  invoice_date DATE,
   note TEXT,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -283,9 +282,20 @@ CREATE TABLE IF NOT EXISTS fatturato_ordini (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 5. KATMAN: Gerçekleşen Faturalar (Realized Billing/Revenue History)
+CREATE TABLE IF NOT EXISTS fatturato_realized (
+  id SERIAL PRIMARY KEY,
+  fatturato_line_id INTEGER NOT NULL REFERENCES fatturato_lines(id) ON DELETE CASCADE,
+  amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+  registration_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  note TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_commesse_task ON commesse(task_id);
 CREATE INDEX IF NOT EXISTS idx_commessa_clients_comm ON commessa_clients(commessa_id);
 CREATE INDEX IF NOT EXISTS idx_fatturato_ordini_line ON fatturato_ordini(fatturato_line_id);
+CREATE INDEX IF NOT EXISTS idx_fatturato_realized_line ON fatturato_realized(fatturato_line_id);
 
 -- ==============================================================================
 -- 7. USERS & AUDIT LOGS

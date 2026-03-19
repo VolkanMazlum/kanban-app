@@ -1,4 +1,4 @@
-const { calculateMonthlyLaborCost, calculateNetProfit } = require("../utils/finance");
+const { calculateMonthlyLaborCost, calculateNetProfit, calculateTotalRealized } = require("../utils/finance");
 
 /**
  * ADVANCED FINANCE TEST SUITE
@@ -60,6 +60,29 @@ const tests = [
     fn: () => {
       const result = calculateNetProfit(2000, 3000, 500);
       return result === -1500;
+    }
+  },
+  {
+    name: "Total Realized - Multiple Entries",
+    fn: () => {
+      const entries = [{ amount: 1000.50 }, { amount: 500 }, { amount: "200.25" }];
+      const result = calculateTotalRealized(entries);
+      return result === 1700.75;
+    }
+  },
+  {
+    name: "Total Realized - Empty List",
+    fn: () => {
+      const result = calculateTotalRealized([]);
+      return result === 0;
+    }
+  },
+  {
+    name: "Total Realized - Null/Invalid Entries",
+    fn: () => {
+      const entries = [{ amount: 100 }, { amount: null }, { amount: "abc" }];
+      const result = calculateTotalRealized(entries);
+      return result === 100;
     }
   }
 ];

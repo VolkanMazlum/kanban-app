@@ -38,8 +38,19 @@ function calculateNetProfit(revenue, laborCost, overhead) {
   return (parseFloat(revenue) || 0) - (parseFloat(laborCost) || 0) - (parseFloat(overhead) || 0);
 }
 
+/**
+ * Calculates total realized revenue from history entries.
+ * @param {Array} realizedEntries - Array of {amount: number}
+ * @returns {number} Sum of amounts
+ */
+function calculateTotalRealized(realizedEntries) {
+  if (!Array.isArray(realizedEntries)) return 0;
+  return realizedEntries.reduce((sum, entry) => sum + (parseFloat(entry.amount) || 0), 0);
+}
+
 module.exports = {
   calculateMonthlyLaborCost,
   calculateNetProfit,
+  calculateTotalRealized,
   THEORETICAL_HOURS_PER_YEAR
 };

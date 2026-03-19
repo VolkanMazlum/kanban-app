@@ -46,7 +46,7 @@ async function seed() {
 
     // 5. Insert 3 lines with different updated_at (Registration Dates)
     console.log("Inserting test lines with custom registration dates...");
-    
+
     // Line 1: February 2026
     await client.query(`
       INSERT INTO fatturato_lines (commessa_client_id, attivita, valore_ordine, fatturato_amount, updated_at)
@@ -62,7 +62,7 @@ async function seed() {
     // Line 3: April 2026
     await client.query(`
       INSERT INTO fatturato_lines (commessa_client_id, attivita, valore_ordine, fatturato_amount, updated_at)
-      VALUES ($1, 'Activity Apr (Registered)', 10000, 12000, '2026-04-05 09:15:00')
+      VALUES ($1, 'Activity Apr (Registered)', 10000, 10000, '2026-04-05 09:15:00')
     `, [ccId]);
 
     console.log("Seed complete! You should now see these in Feb, Mar, and Apr 2026 in the KPI dashboard.");

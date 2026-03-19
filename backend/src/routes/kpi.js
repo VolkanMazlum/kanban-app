@@ -39,17 +39,17 @@ module.exports = (app, query, authenticate) => {
       `, [monthStart, monthEnd]);
       const completedMonthCount = parseInt(completedMonthRes.rows[0].count, 10);
 
-      // 4. Monthly Billed Revenue (from lines) + Scheduled Revenue (from installments)
+      // 4. Monthly Billed Revenue (from REALIZED entries)
       const billedRes = await query(`
-        SELECT fl.id, fl.attivita, fl.fatturato_amount, c.name as commessa_name,
-               COALESCE(fl.invoice_date, fl.updated_at, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end) as date
-        FROM fatturato_lines fl
+        SELECT fr.id, fl.attivita, fr.amount as fatturato_amount, c.name as commessa_name,
+               fr.registration_date as date
+        FROM fatturato_realized fr
+        JOIN fatturato_lines fl ON fr.fatturato_line_id = fl.id
         JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
         JOIN commesse c ON cc.commessa_id = c.id
         LEFT JOIN tasks t ON c.task_id = t.id
-        WHERE (EXTRACT(YEAR FROM COALESCE(fl.invoice_date, fl.updated_at, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end)) = $1
-          AND EXTRACT(MONTH FROM COALESCE(fl.invoice_date, fl.updated_at, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end)) = $2)
-          AND (fl.fatturato_amount > 0 OR fl.invoice_date IS NOT NULL)
+        WHERE EXTRACT(YEAR FROM fr.registration_date) = $1
+          AND EXTRACT(MONTH FROM fr.registration_date) = $2
       `, [year, month]);
 
       const monthlyRevenue = billedRes.rows.reduce((sum, r) => sum + parseFloat(r.fatturato_amount || 0), 0);
@@ -61,14 +61,14 @@ module.exports = (app, query, authenticate) => {
           const fDate = new Date(year, month - 1 + i, 1);
   
           const fBilled = await query(`
-            SELECT fl.attivita, c.name as commessa_name, SUM(fl.fatturato_amount) as amount
-            FROM fatturato_lines fl
+            SELECT fl.attivita, c.name as commessa_name, SUM(fr.amount) as amount
+            FROM fatturato_realized fr
+            JOIN fatturato_lines fl ON fr.fatturato_line_id = fl.id
             JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
             JOIN commesse c ON cc.commessa_id = c.id
             LEFT JOIN tasks t ON c.task_id = t.id
-            WHERE (EXTRACT(YEAR FROM COALESCE(fl.invoice_date, fl.updated_at, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end)) = $1
-              AND EXTRACT(MONTH FROM COALESCE(fl.invoice_date, fl.updated_at, (SELECT end_date FROM task_phases WHERE task_id = t.id AND LOWER(name) = LOWER(fl.attivita) LIMIT 1), t.planned_end)) = $2)
-              AND (fl.fatturato_amount > 0 OR fl.invoice_date IS NOT NULL)
+            WHERE EXTRACT(YEAR FROM fr.registration_date) = $1
+              AND EXTRACT(MONTH FROM fr.registration_date) = $2
             GROUP BY fl.attivita, c.name
           `, [fDate.getFullYear(), fDate.getMonth() + 1]);
   
