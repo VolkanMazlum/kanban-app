@@ -300,6 +300,12 @@ export default function KPIDashboard({ employees }) {
             <span style={{ fontSize: 13, fontWeight: 700, color: "#111827", minWidth: 140, textAlign: "center" }}>{monthLabel}</span>
             <button onClick={() => setMonthAnchor(a => a + 1)} style={{ background: "#fff", border: "1.5px solid #E5E7EB", borderRadius: 7, padding: "5px 10px", cursor: "pointer", fontSize: 12, color: "#374151", fontWeight: 600 }}>→</button>
             <button onClick={() => setMonthAnchor(0)} style={{ background: "#2563EB", color: "#fff", border: "none", borderRadius: 7, padding: "5px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>This Month</button>
+            <button
+              onClick={() => window.location.href = api.exportWorkload(targetYear)}
+              style={{ background: "#EFF6FF", color: "#2563EB", border: "1.5px solid #DBEAFE", borderRadius: 7, padding: "5px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", marginLeft: 8 }}
+            >
+              📥 Export Data
+            </button>
           </div>
         </div>
 

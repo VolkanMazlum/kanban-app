@@ -8,6 +8,7 @@ require('dotenv').config();
 const { query } = require("./config/db");
 const { seedUsers } = require("./services/seed");
 const { authenticate, authenticateHR } = require("./middleware/auth");
+const reportRoutes = require('./routes/reports');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -75,6 +76,9 @@ require("./routes/settings")(app, query, authenticate);
 require("./routes/costs")(app, query, authenticate, authenticateHR);
 require("./routes/fatturato")(app, query, authenticate, authenticateHR);
 require("./routes/users")(app, query, authenticateHR);
+
+// Reports
+app.use('/api/reports', authenticate, reportRoutes);
 
 app.get("/", (req, res) => res.send("Welcome to the TEKSER API!"));
 

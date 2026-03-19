@@ -2,13 +2,17 @@ const { verifyToken } = require('./jwt');
 
 // Standard authentication middleware using JWT Bearer tokens
 const authenticate = (req, res, next) => {
+  let token = "";
   const authHeader = req.headers['authorization'] || '';
-
-  if (!authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Authentication required. Bearer token missing.' });
+  if (authHeader.startsWith('Bearer ')) {
+    token = authHeader.replace('Bearer ', '');
+  } else if (req.query.token) {
+    token = req.query.token;
   }
 
-  const token = authHeader.replace('Bearer ', '');
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required. Token missing.' });
+  }
   const decoded = verifyToken(token);
   
   if (decoded) {
@@ -21,13 +25,17 @@ const authenticate = (req, res, next) => {
 
 // HR specific authentication middleware verifying the JWT role
 const authenticateHR = (req, res, next) => {
+  let token = "";
   const authHeader = req.headers['authorization'] || '';
-
-  if (!authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Authentication required. Bearer token missing.' });
+  if (authHeader.startsWith('Bearer ')) {
+    token = authHeader.replace('Bearer ', '');
+  } else if (req.query.token) {
+    token = req.query.token;
   }
 
-  const token = authHeader.replace('Bearer ', '');
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required. Token missing.' });
+  }
   const decoded = verifyToken(token);
 
   if (!decoded) {

@@ -234,6 +234,10 @@ export default function App() {
               </select>
             )}
             {/* Removed separate Team button as it is now integrated into Users & Audit */}
+            <button onClick={()=>window.location.href=api.exportTasks()}
+              style={{background:"#F3F4F6",color:"#374151",border:"1.5px solid #E5E7EB",borderRadius:6,padding:"6px 12px",fontFamily:"'Inter',sans-serif",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+              📥 Export
+            </button>
             <button onClick={()=>setModal({type:"task"})}
               style={{background:"#2563EB",color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",fontFamily:"'Inter',sans-serif",fontSize:12,fontWeight:700,cursor:"pointer",boxShadow:"0 2px 4px rgba(37,99,235,0.2)"}}>+ Task</button>
           </div>

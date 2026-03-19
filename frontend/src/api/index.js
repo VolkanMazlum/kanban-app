@@ -186,5 +186,10 @@ export const getUsers = () => req("/users");
 export const createUser = (data) => req("/users", { method: "POST", body: JSON.stringify(data) });
 export const updateUser = (id, data) => req(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) });
 
+// ── REPORTS ──
+export const exportTasks = () => `${BASE}/reports/tasks?token=${localStorage.getItem("token")}`;
+export const exportFinances = (year) => `${BASE}/reports/finances?year=${year}&token=${localStorage.getItem("token")}`;
+export const exportWorkload = (year) => `${BASE}/reports/workload?year=${year}&token=${localStorage.getItem("token")}`;
+
 // ── AUDIT LOGS ──
 export const getAuditLogs = (limit = 100) => req(`/audit-logs?limit=${limit}`);

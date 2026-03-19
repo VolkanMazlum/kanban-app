@@ -250,6 +250,12 @@ export default function FatturatoDashboard({ isHR }) {
             >
               {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y === "all" ? "All Time" : y}</option>)}
             </select>
+            <button
+              onClick={() => window.location.href = api.exportFinances(selectedYear)}
+              style={{ background: "#F0FDF4", color: "#166534", border: "1.5px solid #BBF7D0", borderRadius: 6, padding: "4px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all 0.15s" }}
+            >
+              📥 Export Report
+            </button>
           </div>
           <p style={{ color: "#6B7280", margin: 0, fontSize: 14 }}>Manage invoiced amounts and incoming revenue</p>
         </div>
