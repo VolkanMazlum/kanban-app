@@ -84,6 +84,30 @@ const tests = [
       const result = calculateTotalRealized(entries);
       return result === 100;
     }
+  },
+  {
+    name: "Total Realized - Floating Point Precision",
+    fn: () => {
+      const entries = [{ amount: 0.1 }, { amount: 0.2 }];
+      const result = calculateTotalRealized(entries);
+      // Precision should handle standard JS float issues if we use parseFloat properly
+      return Math.abs(result - 0.3) < 0.00001;
+    }
+  },
+  {
+    name: "Total Realized - Large Values",
+    fn: () => {
+      const entries = [{ amount: 1000000000 }, { amount: 500000000 }];
+      const result = calculateTotalRealized(entries);
+      return result === 1500000000;
+    }
+  },
+  {
+    name: "Net Profit - Zero Inputs",
+    fn: () => {
+      const result = calculateNetProfit(0, 0, 0);
+      return result === 0;
+    }
   }
 ];
 
