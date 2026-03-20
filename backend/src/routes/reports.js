@@ -167,6 +167,7 @@ router.get('/finances', authenticateHR, async (req, res) => {
       { header: 'Totale Fatturato (€)', key: 'fatturato_amount', width: 18 },
       { header: 'Rim. Probabile (€)', key: 'rimanente_probabile', width: 18 },
       { header: 'Proforma (€)', key: 'proforma', width: 15 },
+      { header: 'Costi Extra (€)', key: 'extra_costs', width: 15 },
       { header: 'Note', key: 'note', width: 30 },
     ];
     sheet2.getRow(1).font = { bold: true };
@@ -179,17 +180,18 @@ router.get('/finances', authenticateHR, async (req, res) => {
         c.comm_number, c.name as comm_name,
         cl.name as client_name,
         cc.n_cliente, cc.n_ordine,
-        fl.attivita, fl.valore_ordine, fl.fatturato_amount, fl.rimanente_probabile, fl.proforma, fl.note
+        fl.attivita, fl.valore_ordine, fl.fatturato_amount, fl.rimanente_probabile, fl.proforma, fl.note,
+        COALESCE((SELECT SUM(amount) FROM commessa_extra_costs WHERE commessa_id = c.id), 0) as extra_costs
       FROM commesse c
       JOIN commessa_clients cc ON c.id = cc.commessa_id
       LEFT JOIN clients cl ON cc.client_id = cl.id
       JOIN fatturato_lines fl ON cc.id = fl.commessa_client_id
       LEFT JOIN tasks t ON c.task_id = t.id
       WHERE $1 = 'all' 
-         OR (c.comm_number LIKE $2 || '-%' AND (
-           EXISTS (SELECT 1 FROM fatturato_realized fr WHERE fr.fatturato_line_id = fl.id AND EXTRACT(YEAR FROM fr.registration_date) = $1::int)
-           OR EXISTS (SELECT 1 FROM employee_work_hours wh WHERE wh.task_id = t.id AND EXTRACT(YEAR FROM wh.date) = $1::int)
-         ))
+         OR c.comm_number LIKE $2 || '-%'
+         OR EXISTS (SELECT 1 FROM fatturato_realized fr WHERE fr.fatturato_line_id = fl.id AND EXTRACT(YEAR FROM fr.registration_date) = $1::int)
+         OR EXISTS (SELECT 1 FROM employee_work_hours wh WHERE wh.task_id = t.id AND EXTRACT(YEAR FROM wh.date) = $1::int)
+         OR EXISTS (SELECT 1 FROM commessa_extra_costs cec WHERE cec.commessa_id = c.id AND EXTRACT(YEAR FROM cec.date) = $1::int)
       ORDER BY c.comm_number ASC, cc.n_cliente ASC, fl.id ASC
     `, [year || 'all', yearSuffix]);
 
@@ -199,7 +201,8 @@ router.get('/finances', authenticateHR, async (req, res) => {
         valore_ordine: Number(r.valore_ordine || 0),
         fatturato_amount: Number(r.fatturato_amount || 0),
         rimanente_probabile: Number(r.rimanente_probabile || 0),
-        proforma: Number(r.proforma || 0)
+        proforma: Number(r.proforma || 0),
+        extra_costs: Number(r.extra_costs || 0)
       });
     });
 
@@ -211,23 +214,33 @@ router.get('/finances', authenticateHR, async (req, res) => {
       { header: 'Nome Progetto', key: 'name', width: 30 },
       { header: 'Ricavi (€)', key: 'total_rev', width: 18 },
       { header: 'Costo Lavoro (Int)', key: 'total_cost', width: 18 },
+      { header: 'Costi Extra (€)', key: 'extra_costs', width: 18 },
       { header: 'Utile Lordo (€)', key: 'profit', width: 18 },
       { header: 'Margine (%)', key: 'margin', width: 12 },
     ];
     sheet3.getRow(1).font = { bold: true };
     sheet3.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
 
-    // 1. Get Revenue Breakdown by Year/Commessa
+    // 1. Get Revenue Breakdown by Year/Commessa (Using transaction dates)
     const revenueDetails = await query(`
       SELECT 
-        LEFT(c.comm_number, 2) as year_prefix,
+        EXTRACT(YEAR FROM fr.registration_date)::int as full_year,
         c.id as comm_id,
         SUM(fr.amount) as amount
       FROM fatturato_realized fr
       JOIN fatturato_lines fl ON fr.fatturato_line_id = fl.id
       JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
       JOIN commesse c ON cc.commessa_id = c.id
-      GROUP BY year_prefix, c.id
+      GROUP BY full_year, c.id
+    `);
+
+    const extraCostsPerYear = await query(`
+      SELECT 
+        EXTRACT(YEAR FROM date)::int as full_year,
+        commessa_id as comm_id,
+        SUM(amount) as extra_costs
+      FROM commessa_extra_costs
+      GROUP BY full_year, comm_id
     `);
 
     // 2. Comprehensive Labor & Employee Cost Logic
@@ -242,7 +255,7 @@ router.get('/finances', authenticateHR, async (req, res) => {
 
     const laborSplit = await query(`
       SELECT 
-        LEFT(c.comm_number, 2) as year_prefix,
+        EXTRACT(YEAR FROM wh.date)::int as full_year,
         EXTRACT(MONTH FROM wh.date)::int as month,
         c.id as comm_id,
         wh.employee_id,
@@ -250,7 +263,7 @@ router.get('/finances', authenticateHR, async (req, res) => {
       FROM employee_work_hours wh
       JOIN tasks t ON wh.task_id = t.id
       JOIN commesse c ON t.id = c.task_id
-      GROUP BY year_prefix, month, c.id, wh.employee_id
+      GROUP BY full_year, month, c.id, wh.employee_id
     `);
 
     const employeeMonthlyTotals = await query(`
@@ -262,14 +275,15 @@ router.get('/finances', authenticateHR, async (req, res) => {
     // 3. Structured Data Processing
     const yearlyMap = {}; 
     
-    // Discover all available years from commessa prefixes
-    const prefixes = new Set([
-      ...revenueDetails.rows.map(r => r.year_prefix),
-      ...laborSplit.rows.map(l => l.year_prefix)
+    // Discover all available years from transactions
+    const foundYears = new Set([
+      ...revenueDetails.rows.map(r => r.full_year),
+      ...laborSplit.rows.map(l => l.full_year),
+      ...extraCostsPerYear.rows.map(e => e.full_year),
+      new Date().getFullYear() // Always include current year as fallback
     ]);
-    const availableYears = Array.from(prefixes)
-      .filter(p => p && !isNaN(parseInt(p)))
-      .map(p => 2000 + parseInt(p))
+    const availableYears = Array.from(foundYears)
+      .filter(y => y !== null)
       .sort((a,b) => b-a);
 
     const targetYears = (year && year !== 'all') ? [parseInt(year)] : availableYears;
@@ -279,25 +293,25 @@ router.get('/finances', authenticateHR, async (req, res) => {
     commsResult.rows.forEach(c => commInfo[c.id] = c);
     
     targetYears.forEach(y => {
-      yearlyMap[y] = { projects: {}, totalCompanyLabor: 0, revenue: 0, directLaborAttr: 0, totalConsultantCost: 0 };
+      yearlyMap[y] = { projects: {}, totalCompanyLabor: 0, revenue: 0, directLaborAttr: 0, totalConsultantCost: 0, totalExtraCosts: 0 };
     });
 
     revenueDetails.rows.forEach(r => {
-      const fullYear = 2000 + parseInt(r.year_prefix);
+      const fullYear = r.full_year;
       if (yearlyMap[fullYear]) {
         yearlyMap[fullYear].revenue += parseFloat(r.amount);
-        if (!yearlyMap[fullYear].projects[r.comm_id]) yearlyMap[fullYear].projects[r.comm_id] = { rev: 0, cost: 0, consultant_cost: 0 };
+        if (!yearlyMap[fullYear].projects[r.comm_id]) yearlyMap[fullYear].projects[r.comm_id] = { rev: 0, cost: 0, consultant_cost: 0, extra: 0 };
         yearlyMap[fullYear].projects[r.comm_id].rev += parseFloat(r.amount);
       }
     });
 
-    // A. Fill Revenue
-    revenueDetails.rows.forEach(r => {
-      if (yearlyMap[r.year]) {
-        if (!yearlyMap[r.year].projects[r.comm_id]) yearlyMap[r.year].projects[r.comm_id] = { rev: 0, cost: 0, consultant_cost: 0 };
-        yearlyMap[r.year].projects[r.comm_id].rev += parseFloat(r.amount);
-        yearlyMap[r.year].revenue += parseFloat(r.amount);
-      }
+    extraCostsPerYear.rows.forEach(e => {
+        const fullYear = e.full_year;
+        if (yearlyMap[fullYear]) {
+          yearlyMap[fullYear].totalExtraCosts += parseFloat(e.extra_costs);
+          if (!yearlyMap[fullYear].projects[e.comm_id]) yearlyMap[fullYear].projects[e.comm_id] = { rev: 0, cost: 0, consultant_cost: 0, extra: 0 };
+          yearlyMap[fullYear].projects[e.comm_id].extra += parseFloat(e.extra_costs);
+        }
     });
 
     // B. Calculate Total Potential Company Cost for each year
@@ -353,9 +367,9 @@ router.get('/finances', authenticateHR, async (req, res) => {
     }
 
     laborSplit.rows.forEach(l => {
-      const fullYear = 2000 + parseInt(l.year_prefix);
+      const fullYear = l.full_year;
       if (yearlyMap[fullYear]) {
-        if (!yearlyMap[fullYear].projects[l.comm_id]) yearlyMap[fullYear].projects[l.comm_id] = { rev: 0, cost: 0, consultant_cost: 0 };
+        if (!yearlyMap[fullYear].projects[l.comm_id]) yearlyMap[fullYear].projects[l.comm_id] = { rev: 0, cost: 0, consultant_cost: 0, extra: 0 };
         
         // Find employee cost (Theoretical for this bucket year)
         const emp = allEmployeesCost.rows.find(e => e.id === l.employee_id);
@@ -387,10 +401,10 @@ router.get('/finances', authenticateHR, async (req, res) => {
 
       sortedIds.forEach(cid => {
         const info = commInfo[cid];
-        if (!info || !info.comm_number.startsWith(ySuffix + '-')) return;
+        if (!info) return;
         
         const p = projects[cid];
-        const profit = p.rev - p.cost;
+        const profit = p.rev - p.cost - (p.extra || 0);
         const margin = p.rev > 0 ? (profit / p.rev * 100).toFixed(1) + '%' : '-';
 
         sheet3.addRow({
@@ -399,6 +413,7 @@ router.get('/finances', authenticateHR, async (req, res) => {
           name: info.name,
           total_rev: Number(p.rev.toFixed(2)),
           total_cost: Number(p.cost.toFixed(2)),
+          extra_costs: Number((p.extra || 0).toFixed(2)),
           profit: Number(profit.toFixed(2)),
           margin: margin
         });
@@ -409,7 +424,7 @@ router.get('/finances', authenticateHR, async (req, res) => {
       const overheadGC = settingsRes.rows.reduce((sum, r) => sum + (parseFloat(r.value) || 0), 0);
       
       const grossProfit = yearlyMap[y].revenue - yearlyMap[y].directLaborAttr;
-      const netProfit = grossProfit - yearlyMap[y].totalConsultantCost - overheadGC; // Include consultant cost here
+      const netProfit = grossProfit - yearlyMap[y].totalConsultantCost - overheadGC - yearlyMap[y].totalExtraCosts; // Include consultant cost and extra costs here
 
       sheet3.addRow([]);
       
@@ -427,6 +442,9 @@ router.get('/finances', authenticateHR, async (req, res) => {
 
       const sub6 = sheet3.addRow({ name: `SPESE GENERALI (GC) ${y}`, total_rev: Number(overheadGC.toFixed(2)) });
       sub6.font = { italic: true };
+
+      const subExtra = sheet3.addRow({ name: `TOTALE COSTI EXTRA (COMMESSA) ${y}`, total_rev: Number(yearlyMap[y].totalExtraCosts.toFixed(2)) });
+      subExtra.font = { italic: true, color: { argb: 'FFFF0000' } };
 
       const sub7 = sheet3.addRow({ name: `UTILE NETTO TOTALE ${y}`, total_rev: Number(netProfit.toFixed(2)) });
       sub7.font = { bold: true, size: 12, color: { argb: 'FF2563EB' } };

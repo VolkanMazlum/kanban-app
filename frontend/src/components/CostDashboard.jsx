@@ -8,7 +8,7 @@ export default function CostDashboard({ employees, user }) {
   const isHR = user.role === 'hr';
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
-  const YEAR_OPTIONS = [currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
+  const YEAR_OPTIONS = Array.from({ length: currentYear - 2024 + 4 }, (_, i) => 2024 + i);
 
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [costs, setCosts] = useState([]);

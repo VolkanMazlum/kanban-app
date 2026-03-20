@@ -211,6 +211,16 @@ module.exports = (app, query, authenticate, authenticateHR) => {
             SELECT 1 FROM employee_work_hours wh 
             WHERE wh.task_id = t.id AND EXTRACT(YEAR FROM wh.date) = $1
           )
+          OR EXISTS (
+            SELECT 1 FROM fatturato_realized fr
+            JOIN fatturato_lines fl ON fr.fatturato_line_id = fl.id
+            JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
+            WHERE cc.commessa_id = c.id AND EXTRACT(YEAR FROM fr.registration_date) = $1
+          )
+          OR EXISTS (
+            SELECT 1 FROM commessa_extra_costs cec
+            WHERE cec.commessa_id = c.id AND EXTRACT(YEAR FROM cec.date) = $1
+          )
         ORDER BY t.created_at DESC
       `, [targetYear]);
 

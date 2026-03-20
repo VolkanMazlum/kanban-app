@@ -133,7 +133,7 @@ export default function KPIDashboard({ employees }) {
   const cards = [
     { icon: "📊", label: "Monthly Tasks", val: summary.total, color: "#2563EB", bg: "#EFF6FF" },
     { icon: "✅", label: "Completion Rate", val: summary.completed_month, color: "#059669", bg: "#ECFDF5" },
-    { icon: "🏗️", label: "Phase Completed", val: summary.completed_phases || 0, color: "#F59E0B", bg: "#FFF7ED" },
+    { icon: "🕒", label: "Proforma Pending", val: `€${(summary.total_proforma || 0).toLocaleString("it-IT", { minimumFractionDigits: 0 })}`, color: "#F59E0B", bg: "#FFF7ED" },
     { icon: "💶", label: "Scheduled Revenue", val: `€${(summary.monthly_revenue || 0).toLocaleString("it-IT", { minimumFractionDigits: 0 })}`, color: "#7C3AED", bg: "#F5F3FF" },
     { icon: "👥", label: "Utilization", val: monthlyData ? `${Math.round((monthlyData.employees.reduce((sum, emp) => sum + parseFloat(emp.phase_hours || 0), 0) / (employees.length * MAX_CAPACITY)) * 100)}%` : "0%", color: "#0891B2", bg: "#ECFEFF" },
   ];
@@ -240,8 +240,8 @@ export default function KPIDashboard({ employees }) {
             <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: 0 }}>Monthly Profitability</h3>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 9, color: "#9CA3AF", fontWeight: 700 }}>NET PROFIT (EST.)</div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: (summary.monthly_revenue - (summary.total_labor_cost || 0) - (summary.total_consultant_labor || 0) - (summary.monthly_overhead || 0)) >= 0 ? "#10B981" : "#EF4444" }}>
-                €{Math.round(summary.monthly_revenue - (summary.total_labor_cost || 0) - (summary.total_consultant_labor || 0) - (summary.monthly_overhead || 0)).toLocaleString("it-IT")}
+              <div style={{ fontSize: 18, fontWeight: 800, color: (summary.monthly_revenue - (summary.total_labor_cost || 0) - (summary.total_consultant_labor || 0) - (summary.monthly_overhead || 0) - (summary.total_extra_costs || 0)) >= 0 ? "#10B981" : "#EF4444" }}>
+                €{Math.round(summary.monthly_revenue - (summary.total_labor_cost || 0) - (summary.total_consultant_labor || 0) - (summary.monthly_overhead || 0) - (summary.total_extra_costs || 0)).toLocaleString("it-IT")}
               </div>
             </div>
           </div>
@@ -296,6 +296,19 @@ export default function KPIDashboard({ employees }) {
                   <td style={{ padding: "4px 4px", color: "#374151" }}>Monthly General Expenses</td>
                   <td style={{ padding: "4px 4px", textAlign: "right", color: "#DC2626", fontWeight: 500 }}>-€{Math.round(summary.monthly_overhead || 0).toLocaleString("it-IT")}</td>
                 </tr>
+ 
+                {/* EXTRA COSTS */}
+                {summary.total_extra_costs > 0 && (
+                  <>
+                    <tr style={{ background: "#F9FAFB" }}>
+                      <td colSpan={2} style={{ padding: "4px 4px", fontWeight: 800, color: "#111827", fontSize: 9, paddingTop: 10 }}>✈️ EXTRA COSTS (COMMESSA SPESIFIC)</td>
+                    </tr>
+                    <tr style={{ borderBottom: "1px solid #F9FAFB" }}>
+                      <td style={{ padding: "4px 4px", color: "#374151" }}>Travel, Tickets, etc.</td>
+                      <td style={{ padding: "4px 4px", textAlign: "right", color: "#DC2626", fontWeight: 500 }}>-€{Math.round(summary.total_extra_costs || 0).toLocaleString("it-IT")}</td>
+                    </tr>
+                  </>
+                )}
               </tbody>
             </table>
           </div>

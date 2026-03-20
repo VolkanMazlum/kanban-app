@@ -21,7 +21,7 @@ const fmtEu = (num) => parseFloat(num || 0).toLocaleString("it-IT", { minimumFra
 
 export default function FatturatoDashboard({ isHR }) {
   const currentYear = new Date().getFullYear();
-  const YEAR_OPTIONS = ["all", currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
+  const YEAR_OPTIONS = ["all", ...Array.from({ length: currentYear - 2024 + 4 }, (_, i) => 2024 + i)];
   const [selectedYear, setSelectedYear] = useState("all");
 
   const [fatturatoList, setFatturatoList] = useState([]);
@@ -89,7 +89,8 @@ export default function FatturatoDashboard({ isHR }) {
       task_id: row.task_id || "",
       comm_number: row.comm_number || "",
       name: row.name || "",
-      clients: initialClients
+      clients: initialClients,
+      extra_costs: row.extra_costs && row.extra_costs.length > 0 ? row.extra_costs : []
     });
     setShowFattModal(true);
   };
@@ -235,6 +236,14 @@ export default function FatturatoDashboard({ isHR }) {
     //if (field === "percentage") updateFatturatoFromOrdini(newClients, cIdx, lIdx);
     setFattForm({ ...fattForm, clients: newClients });
   };
+ 
+  const addExtraCost = () => setFattForm({ ...fattForm, extra_costs: [...(fattForm.extra_costs || []), { description: "", amount: "", date: new Date().toISOString().split('T')[0] }] });
+  const removeExtraCost = (idx) => { const newCosts = [...fattForm.extra_costs]; newCosts.splice(idx, 1); setFattForm({ ...fattForm, extra_costs: newCosts }); };
+  const handleExtraCostChange = (idx, field, val) => {
+    const newCosts = [...fattForm.extra_costs];
+    newCosts[idx] = { ...newCosts[idx], [field]: val };
+    setFattForm({ ...fattForm, extra_costs: newCosts });
+  };
 
   return (
     <div style={{ padding: "28px 32px", overflowY: "auto", height: "100%", fontFamily: "'Inter',sans-serif", background: "#F9FAFB" }}>
@@ -287,12 +296,12 @@ export default function FatturatoDashboard({ isHR }) {
             <thead>
               <tr style={{ background: "#F9FAFB" }}>
                 {/* 3 Sticky Columns */}
-                <th style={{ position: "sticky", left: 0, zIndex: 10, background: "#F9FAFB", padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB" }}>COMM.</th>
-                <th style={{ position: "sticky", left: 80, zIndex: 10, background: "#F9FAFB", padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB" }}>TASK (PROJECT)</th>
-                <th style={{ position: "sticky", left: 280, zIndex: 10, background: "#F9FAFB", padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB", borderRight: "2px solid #E5E7EB" }}>ACTIONS</th>
+                <th style={{ position: "sticky", left: 0, zIndex: 10, background: "#F9FAFB", padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB", width: 80, minWidth: 80, boxSizing: "border-box" }}>COMM.</th>
+                <th style={{ position: "sticky", left: 80, zIndex: 10, background: "#F9FAFB", padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB", width: 200, minWidth: 200, boxSizing: "border-box" }}>TASK (PROJECT)</th>
+                <th style={{ position: "sticky", left: 280, zIndex: 10, background: "#F9FAFB", padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB", borderRight: "2px solid #E5E7EB", width: 100, minWidth: 100, boxSizing: "border-box", boxShadow: "4px 0 4px -2px rgba(0,0,0,0.05)" }}>ACTIONS</th>
 
                 {/* Scrollable columns */}
-                {["N. Cliente", "Cliente", "Preventivo", "Ordine", "Attività", "Fatturato Ordine (%)", "Valore Ordine", "Fatturato", "Rimanente", "Rim. Prob.", "Proforma"].map(h =>
+                {["N. Cliente", "Cliente", "Preventivo", "Ordine", "Attività", "Fatturato %", "Valore Ordine", "Fatturato", "Rimanente", "Rim. Prob.", "Proforma", "Extra Costs"].map(h =>
                   <th key={h} style={{ padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB" }}>{h.toUpperCase()}</th>
                 )}
               </tr>
@@ -304,10 +313,10 @@ export default function FatturatoDashboard({ isHR }) {
 
                 return comm.clients.length === 0 ? (
                   <tr key={comm.id} style={{ borderBottom: "2px solid #E5E7EB" }}>
-                    <td style={{ position: "sticky", left: 0, zIndex: 5, background: "#FAFAFA", padding: "12px 14px", fontWeight: 700 }}>{comm.comm_number}</td>
-                    <td style={{ position: "sticky", left: 80, zIndex: 5, background: "#FAFAFA", padding: "12px 14px" }}>{comm.task_title}</td>
-                    <td style={{ position: "sticky", left: 280, zIndex: 5, background: "#FAFAFA", padding: "12px 14px", borderRight: "2px solid #E5E7EB" }}><button onClick={() => openEditFatt(comm)}>Edit</button></td>
-                    <td colSpan={11} style={{ color: "#9CA3AF", padding: "12px" }}>No clients added.</td>
+                    <td style={{ position: "sticky", left: 0, zIndex: 5, background: "#fff", padding: "12px 14px", fontWeight: 700, width: 80, minWidth: 80, boxSizing: "border-box" }}>{comm.comm_number}</td>
+                    <td style={{ position: "sticky", left: 80, zIndex: 5, background: "#fff", padding: "12px 14px", width: 200, minWidth: 200, boxSizing: "border-box" }}>{comm.task_title}</td>
+                    <td style={{ position: "sticky", left: 280, zIndex: 5, background: "#fff", padding: "12px 14px", borderRight: "2px solid #E5E7EB", width: 100, minWidth: 100, boxSizing: "border-box", boxShadow: "4px 0 4px -2px rgba(0,0,0,0.05)" }}><button onClick={() => openEditFatt(comm)}>Edit</button></td>
+                    <td colSpan={12} style={{ color: "#9CA3AF", padding: "12px" }}>No clients added.</td>
                   </tr>
                 ) : comm.clients.map((client, cIdx) => {
                   const clientLines = client.lines?.length > 0 ? client.lines : [{}];
@@ -327,12 +336,13 @@ export default function FatturatoDashboard({ isHR }) {
                         <tr style={{ background: "#fff", borderBottom: rowBorder }}>
                           {isFirstComm && (
                             <>
-                              <td rowSpan={totalLines} style={{ position: "sticky", left: 0, zIndex: 5, padding: "12px 14px", fontWeight: 800, color: "#4F46E5", verticalAlign: "top", borderRight: "1px solid #E5E7EB", background: "#FAFAFA" }}>{comm.comm_number || "—"}</td>
-                              <td rowSpan={totalLines} style={{ position: "sticky", left: 80, zIndex: 5, padding: "12px 14px", fontWeight: 600, color: "#111827", verticalAlign: "top", width: 200, maxWidth: 200, background: "#FAFAFA" }}>{comm.name ? (
-                                <div><div style={{ fontWeight: 700 }}>{comm.name}</div><div style={{ fontSize: 11, color: "#9CA3AF" }}>{comm.task_title || "—"}</div></div>
-                              ) : (comm.task_title || "—")}
+                              <td rowSpan={totalLines} style={{ position: "sticky", left: 0, zIndex: 5, padding: "12px 14px", fontWeight: 800, color: "#4F46E5", verticalAlign: "top", borderRight: "1px solid #E5E7EB", background: "#fff", width: 80, minWidth: 80, boxSizing: "border-box" }}>{comm.comm_number || "—"}</td>
+                              <td rowSpan={totalLines} style={{ position: "sticky", left: 80, zIndex: 5, padding: "12px 14px", fontWeight: 600, color: "#111827", verticalAlign: "top", width: 200, minWidth: 200, maxWidth: 200, background: "#fff", boxSizing: "border-box" }}>
+                                {comm.name ? (
+                                  <div><div style={{ fontWeight: 700 }}>{comm.name}</div><div style={{ fontSize: 11, color: "#9CA3AF" }}>{comm.task_title || "—"}</div></div>
+                                ) : (comm.task_title || "—")}
                               </td>
-                              <td rowSpan={totalLines} style={{ position: "sticky", left: 280, zIndex: 5, padding: "12px 14px", verticalAlign: "top", borderRight: "2px solid #E5E7EB", background: "#FAFAFA", width: 80 }}>
+                              <td rowSpan={totalLines} style={{ position: "sticky", left: 280, zIndex: 5, padding: "12px 14px", verticalAlign: "top", borderRight: "2px solid #E5E7EB", background: "#fff", width: 100, minWidth: 100, boxSizing: "border-box", boxShadow: "4px 0 4px -2px rgba(0,0,0,0.05)" }}>
                                 <div style={{ display: "flex", gap: 4, flexDirection: "column" }}>
                                   <button onClick={() => openEditFatt(comm)} style={{ background: "#F3F4F6", border: "1px solid #D1D5DB", borderRadius: 6, padding: "4px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Edit</button>
                                   <button onClick={() => handleDeleteFatt(comm.id)} style={{ background: "#FEF2F2", color: "#DC2626", border: "1px solid #FECACA", borderRadius: 6, padding: "4px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Delete</button>
@@ -387,8 +397,15 @@ export default function FatturatoDashboard({ isHR }) {
                           <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: rimanente > 0 ? "#F59E0B" : "#6B7280", whiteSpace: "nowrap" }}>{valOrdine ? `€${fmtEu(rimanente)}` : "—"}</td>
                           <td style={{ padding: "12px 14px", fontSize: 12, color: "#374151", whiteSpace: "nowrap" }}>{line.rimanente_probabile ? `€${fmtEu(line.rimanente_probabile)}` : "—"}</td>
                           <td style={{ padding: "12px 14px", fontSize: 12, color: "#374151", whiteSpace: "nowrap" }}>{line.proforma ? `€${fmtEu(line.proforma)}` : "—"}</td>
+                          {isFirstComm && (
+                            <td rowSpan={totalLines} style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: "#4B5563", verticalAlign: "top", background: "#FDFCF7" }}>
+                              {(() => {
+                                const totalExtra = (comm.extra_costs || []).reduce((sum, ec) => sum + (parseFloat(ec.amount) || 0), 0);
+                                return totalExtra > 0 ? `€${fmtEu(totalExtra)}` : "—";
+                              })()}
+                            </td>
+                          )}
                         </tr>
-
                       </React.Fragment>
                     );
                   })
@@ -488,6 +505,7 @@ export default function FatturatoDashboard({ isHR }) {
                         <div style={{ flex: 2, fontSize: 9, fontWeight: 700, color: "#9CA3AF" }}>ATTIVITÀ</div>
                         <div style={{ flex: 1, fontSize: 9, fontWeight: 700, color: "#9CA3AF" }}>VALORE €</div>
                         <div style={{ flex: 1, fontSize: 9, fontWeight: 700, color: "#9CA3AF" }}>FATTURATO €</div>
+                        <div style={{ flex: 1, fontSize: 9, fontWeight: 700, color: "#9CA3AF" }}>PROFORMA €</div>
                         <div style={{ width: 34 }}></div>
                       </div>
                       {client.lines.map((line, lIdx) => (
@@ -504,6 +522,16 @@ export default function FatturatoDashboard({ isHR }) {
                                 style={{ ...inpStyle, padding: "6px", background: (line.realized && line.realized.length > 0) ? "#F3F4F6" : "#fff" }}
                                 readOnly={line.realized && line.realized.length > 0}
                                 title={line.realized && line.realized.length > 0 ? "Calculated from Billing History" : ""}
+                              />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <input
+                                type="number"
+                                placeholder="Proforma €"
+                                value={line.proforma}
+                                onChange={e => handleLineChange(cIdx, lIdx, "proforma", e.target.value)}
+                                style={{ ...inpStyle, padding: "6px" }}
+                                title="Expected payment (Customer promised but not paid yet)"
                               />
                             </div>
                             <button onClick={() => removeLineFromClient(cIdx, lIdx)} disabled={client.lines.length === 1} style={{ background: "#F3F4F6", color: "#DC2626", border: "none", padding: "6px 10px", borderRadius: 6, cursor: client.lines.length > 1 ? "pointer" : "not-allowed" }}>✕</button>
@@ -564,6 +592,23 @@ export default function FatturatoDashboard({ isHR }) {
                     </div>
                   </div>
                 ))}
+              </div>
+ 
+              {/* Extra Costs Section */}
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <h4 style={{ margin: 0, fontSize: 13, fontWeight: 800, color: "#1F2937" }}>3. EXTRA COSTS (Travel, Tickets, etc.)</h4>
+                  <button onClick={addExtraCost} style={{ background: "#6366F1", color: "#fff", border: "none", padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>+ Add Extra Cost</button>
+                </div>
+                {(fattForm.extra_costs || []).map((ec, idx) => (
+                  <div key={idx} style={{ display: "flex", gap: 10, background: "#F5F3FF", padding: 12, borderRadius: 8, border: "1px solid #DDD6FE", marginBottom: 8 }}>
+                    <div style={{ flex: 2 }}><label style={{ fontSize: 9, fontWeight: 700 }}>Description</label><input value={ec.description} onChange={e => handleExtraCostChange(idx, "description", e.target.value)} style={inpStyle} placeholder="e.g. Flight to Rome" /></div>
+                    <div style={{ flex: 1 }}><label style={{ fontSize: 9, fontWeight: 700 }}>Amount €</label><input type="number" value={ec.amount} onChange={e => handleExtraCostChange(idx, "amount", e.target.value)} style={inpStyle} placeholder="0.00" /></div>
+                    <div style={{ flex: 1 }}><label style={{ fontSize: 9, fontWeight: 700 }}>Date</label><input type="date" value={ec.date ? ec.date.split('T')[0] : ""} onChange={e => handleExtraCostChange(idx, "date", e.target.value)} style={inpStyle} /></div>
+                    <button onClick={() => removeExtraCost(idx)} style={{ alignSelf: "flex-end", padding: "8px 12px", background: "none", border: "none", color: "#EF4444", cursor: "pointer" }}>✕</button>
+                  </div>
+                ))}
+                {(fattForm.extra_costs || []).length === 0 && <div style={{ textAlign: "center", fontSize: 12, color: "#9CA3AF" }}>No extra costs defined.</div>}
               </div>
 
               <button onClick={handleSaveFatt} disabled={savingFatt} style={{ width: "100%", padding: 14, background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>{savingFatt ? "Saving..." : "Save Commessa Structure"}</button>

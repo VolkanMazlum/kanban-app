@@ -7,13 +7,30 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       // 1. Tüm Ana İşleri Çek
       const year = req.query.year;
       const yearPrefix = (year && year !== 'all') ? String(year).slice(2) : null;
+      const yearNum = (year && year !== 'all') ? parseInt(year) : null;
 
       const commRes = await query(`
         SELECT c.*, t.title AS task_title 
-        FROM commesse c LEFT JOIN tasks t ON c.task_id = t.id
-        WHERE ($1::text IS NULL OR c.comm_number LIKE $1 || '-%' OR c.comm_number IS NULL)
+        FROM commesse c 
+        LEFT JOIN tasks t ON c.task_id = t.id
+        WHERE ($1::text IS NULL OR c.comm_number LIKE $1 || '-%' OR c.comm_number IS NULL
+               OR EXISTS (
+                 SELECT 1 FROM employee_work_hours wh 
+                 WHERE wh.task_id = c.task_id AND EXTRACT(YEAR FROM wh.date) = $2
+               )
+               OR EXISTS (
+                 SELECT 1 FROM fatturato_realized fr
+                 JOIN fatturato_lines fl ON fr.fatturato_line_id = fl.id
+                 JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
+                 WHERE cc.commessa_id = c.id AND EXTRACT(YEAR FROM fr.registration_date) = $2
+               )
+               OR EXISTS (
+                 SELECT 1 FROM commessa_extra_costs cec
+                 WHERE cec.commessa_id = c.id AND EXTRACT(YEAR FROM cec.date) = $2
+               )
+              )
         ORDER BY c.comm_number DESC
-      `, [yearPrefix]);
+      `, [yearPrefix, yearNum]);
 
       // 2. Tüm Müşterileri Çek
       const cliRes = await query(`
@@ -31,6 +48,9 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       // 5. Tüm Realized Çek (billing history)
       const realRes = await query(`SELECT * FROM fatturato_realized ORDER BY registration_date ASC, id ASC`);
 
+      // 6. Tüm Extra Costs Çek
+      const extraRes = await query(`SELECT * FROM commessa_extra_costs ORDER BY date ASC`);
+
       // İç içe yerleştirme (Ordini/Realized -> Lines -> Clients -> Commessa)
       const ordByLine = {};
       ordRes.rows.forEach(o => {
@@ -42,6 +62,12 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       realRes.rows.forEach(r => {
         if (!realByLine[r.fatturato_line_id]) realByLine[r.fatturato_line_id] = [];
         realByLine[r.fatturato_line_id].push(r);
+      });
+
+      const extraByComm = {};
+      extraRes.rows.forEach(e => {
+        if (!extraByComm[e.commessa_id]) extraByComm[e.commessa_id] = [];
+        extraByComm[e.commessa_id].push(e);
       });
 
       const linesByCc = {};
@@ -62,7 +88,8 @@ module.exports = (app, query, authenticate, authenticateHR) => {
 
       const nested = commRes.rows.map(comm => ({
         ...comm,
-        clients: clientsByComm[comm.id] || []
+        clients: clientsByComm[comm.id] || [],
+        extra_costs: extraByComm[comm.id] || []
       }));
 
       res.json(nested);
@@ -76,34 +103,61 @@ module.exports = (app, query, authenticate, authenticateHR) => {
     try {
       const year = req.query.year;
       const yearPrefix = (year && year !== 'all') ? String(year).slice(2) : null;
+      const yearNum = (year && year !== 'all') ? parseInt(year) : null;
 
       const result = await query(`
-        WITH line_agg AS (
-          SELECT 
-            fl.commessa_client_id,
-            SUM(fl.valore_ordine) as valore_sum,
-            SUM(fl.fatturato_amount) as fatturato_sum,
-            SUM(COALESCE((
-              SELECT SUM(fl.valore_ordine * fo.percentage / 100)
-              FROM fatturato_ordini fo
-              WHERE fo.fatturato_line_id = fl.id
-            ), 0)) as scheduled_sum
-          FROM fatturato_lines fl
-          GROUP BY fl.commessa_client_id
+        WITH activity_years AS (
+          SELECT id as commessa_id, task_id, (2000 + LEFT(comm_number, 2)::int) as year 
+          FROM commesse WHERE comm_number IS NOT NULL
+          UNION
+          SELECT c.id, c.task_id, EXTRACT(YEAR FROM wh.date)::int as year
+          FROM employee_work_hours wh JOIN commesse c ON wh.task_id = c.task_id
+          UNION
+          SELECT cc.commessa_id, c.task_id, EXTRACT(YEAR FROM fr.registration_date)::int as year
+          FROM fatturato_realized fr JOIN fatturato_lines fl ON fr.fatturato_line_id = fl.id
+          JOIN commessa_clients cc ON fl.commessa_client_id = cc.id JOIN commesse c ON cc.commessa_id = c.id
+          UNION
+          SELECT cec.commessa_id, c.task_id, EXTRACT(YEAR FROM cec.date)::int as year
+          FROM commessa_extra_costs cec JOIN commesse c ON cec.commessa_id = c.id
+        ),
+        target_years AS (
+          SELECT commessa_id, task_id, year FROM activity_years
+          WHERE ($1::int IS NULL OR year = $1)
+        ),
+        yearly_realized AS (
+          SELECT fl.commessa_client_id, EXTRACT(YEAR FROM fr.registration_date)::int as year, SUM(fr.amount) as amount_sum
+          FROM fatturato_realized fr JOIN fatturato_lines fl ON fr.fatturato_line_id = fl.id GROUP BY 1, 2
+        ),
+        yearly_extras AS (
+          SELECT cec.commessa_id, EXTRACT(YEAR FROM cec.date)::int as year, SUM(cec.amount) as amount_sum
+          FROM commessa_extra_costs cec GROUP BY 1, 2
+        ),
+        yearly_scheduled AS (
+          SELECT fl.commessa_client_id, EXTRACT(YEAR FROM fo.expected_date)::int as year, SUM(fl.valore_ordine * fo.percentage / 100) as scheduled_sum
+          FROM fatturato_ordini fo JOIN fatturato_lines fl ON fo.fatturato_line_id = fl.id GROUP BY 1, 2
+        ),
+        lifetime_valore AS (
+          SELECT fl.commessa_client_id, SUM(fl.valore_ordine) as life_valore
+          FROM fatturato_lines fl GROUP BY 1
         )
         SELECT 
-          c.task_id,
-          LEFT(c.comm_number, 2) as year_code,
-          SUM(la.valore_sum)    AS total_valore_ordine,
-          SUM(la.fatturato_sum) AS total_fatturato,
-          SUM(la.scheduled_sum) AS total_scheduled_amount
-        FROM commesse c
+          ty.task_id,
+          c.comm_number,
+          RIGHT(ty.year::text, 2) as year_code,
+          SUM(lv.life_valore)    AS total_valore_ordine,
+          SUM(COALESCE(yr.amount_sum, 0)) AS total_fatturato,
+          SUM(COALESCE(ys.scheduled_sum, 0)) AS total_scheduled_amount,
+          SUM(COALESCE(ye.amount_sum, 0)) as total_extra_costs
+        FROM target_years ty
+        JOIN commesse c ON ty.commessa_id = c.id
         JOIN commessa_clients cc ON c.id = cc.commessa_id
-        JOIN line_agg la ON cc.id = la.commessa_client_id
-        WHERE c.task_id IS NOT NULL
-          AND ($1::text IS NULL OR c.comm_number LIKE $1 || '-%')
-        GROUP BY c.task_id, LEFT(c.comm_number, 2)
-      `, [yearPrefix]);
+        LEFT JOIN lifetime_valore lv ON cc.id = lv.commessa_client_id
+        LEFT JOIN yearly_realized yr ON cc.id = yr.commessa_client_id AND yr.year = ty.year
+        LEFT JOIN yearly_scheduled ys ON cc.id = ys.commessa_client_id AND ys.year = ty.year
+        LEFT JOIN yearly_extras ye ON c.id = ye.commessa_id AND ye.year = ty.year
+        GROUP BY ty.task_id, c.comm_number, ty.year, c.id
+        ORDER BY ty.year DESC, c.id DESC
+      `, [yearNum]);
       res.json(result.rows);
     } catch (err) {
       console.error("GET /fatturato/by-task error:", err);
@@ -112,7 +166,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
   });
 
   app.post("/api/fatturato", authenticateHR, async (req, res) => {
-    const { task_id, comm_number, name, clients } = req.body;
+    const { task_id, comm_number, name, clients, extra_costs } = req.body;
     try {
       // Validation: Sum of percentages for any line must not exceed 100%
       if (clients && clients.length > 0) {
@@ -173,6 +227,16 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           }
         }
       }
+
+      if (extra_costs && extra_costs.length > 0) {
+        for (const ec of extra_costs) {
+          await query(`
+            INSERT INTO commessa_extra_costs (commessa_id, description, amount, date)
+            VALUES ($1, $2, $3, $4)
+          `, [commId, ec.description || '', parseFloat(ec.amount) || 0, ec.date || null]);
+        }
+      }
+
       await query("COMMIT");
 
       const ctx = getAuditContext(req);
@@ -186,7 +250,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
   });
 
   app.put("/api/fatturato/:id", authenticateHR, async (req, res) => {
-    const { task_id, comm_number, name, clients } = req.body;
+    const { task_id, comm_number, name, clients, extra_costs } = req.body;
     const commId = req.params.id;
     try {
       // Validation: Sum of percentages for any line must not exceed 100%
@@ -245,6 +309,17 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           }
         }
       }
+
+      await query(`DELETE FROM commessa_extra_costs WHERE commessa_id = $1`, [commId]);
+      if (extra_costs && extra_costs.length > 0) {
+        for (const ec of extra_costs) {
+          await query(`
+            INSERT INTO commessa_extra_costs (commessa_id, description, amount, date)
+            VALUES ($1, $2, $3, $4)
+          `, [commId, ec.description || '', parseFloat(ec.amount) || 0, ec.date || null]);
+        }
+      }
+
       await query("COMMIT");
 
       const ctx = getAuditContext(req);

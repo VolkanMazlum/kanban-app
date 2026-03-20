@@ -297,8 +297,19 @@ CREATE INDEX IF NOT EXISTS idx_commesse_task ON commesse(task_id);
 CREATE INDEX IF NOT EXISTS idx_commessa_clients_comm ON commessa_clients(commessa_id);
 CREATE INDEX IF NOT EXISTS idx_fatturato_ordini_line ON fatturato_ordini(fatturato_line_id);
 CREATE INDEX IF NOT EXISTS idx_fatturato_realized_line ON fatturato_realized(fatturato_line_id);
-
--- ==============================================================================
+ 
+ -- 6. KATMAN: Extra Costs (Travel, tickets, etc.)
+ CREATE TABLE IF NOT EXISTS commessa_extra_costs (
+   id SERIAL PRIMARY KEY,
+   commessa_id INTEGER NOT NULL REFERENCES commesse(id) ON DELETE CASCADE,
+   description TEXT NOT NULL,
+   amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+   date DATE NOT NULL DEFAULT CURRENT_DATE,
+   created_at TIMESTAMPTZ DEFAULT NOW()
+ );
+ CREATE INDEX IF NOT EXISTS idx_commessa_extra_costs_comm ON commessa_extra_costs(commessa_id);
+ 
+ -- ==============================================================================
 -- 7. USERS & AUDIT LOGS
 -- ==============================================================================
 

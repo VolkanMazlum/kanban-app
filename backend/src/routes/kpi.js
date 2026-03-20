@@ -139,14 +139,26 @@ module.exports = (app, query, authenticate) => {
       const yearlyOverhead = settingsRes.rows.reduce((sum, r) => sum + (parseFloat(r.value) || 0), 0);
       const monthlyOverhead = yearlyOverhead / 12;
 
-      // 5. Monthly Phase Completion
-      const phaseCompRes = await query(`
-        SELECT COUNT(*) as completed_phases
-        FROM task_phases
-        WHERE status = 'done'
-        AND end_date >= $1 AND end_date <= $2
+      // 5. Monthly Proforma (Pending payments)
+      const proformaRes = await query(`
+        SELECT SUM(fl.proforma) as total_proforma
+        FROM fatturato_lines fl
+        JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
+        JOIN commesse c ON cc.commessa_id = c.id
+        LEFT JOIN tasks t ON c.task_id = t.id
+        -- We only count proforma for commesse active in this month or with non-zero proforma
+        WHERE (t.planned_start <= $2 AND t.planned_end >= $1)
+           OR (fl.proforma > 0)
       `, [monthStart, monthEnd]);
-      const completedPhases = phaseCompRes.rows[0].completed_phases || 0;
+      const totalProforma = parseFloat(proformaRes.rows[0].total_proforma || 0);
+
+      // 5b. Extra Costs for the month
+      const extraCostsRes = await query(`
+        SELECT SUM(amount) as total_extra
+        FROM commessa_extra_costs
+        WHERE date >= $1 AND date <= $2
+      `, [monthStart, monthEnd]);
+      const totalExtraCosts = parseFloat(extraCostsRes.rows[0].total_extra || 0);
 
       // 5. Active Team Size (Active members on task/phases in that month)
       const teamRes = await query(`
@@ -231,8 +243,9 @@ module.exports = (app, query, authenticate) => {
         completed_month: monthTotalTasks > 0 ? `${((completedMonthCount / monthTotalTasks) * 100).toFixed(1)}%` : "0%",
         overdue,
         monthly_revenue: monthlyRevenue,
+        total_proforma: totalProforma,
+        total_extra_costs: totalExtraCosts,
         completed_count: completedMonthCount,
-        completed_phases: completedPhases,
         forecast,
         labor_costs: internal_labor,
         consultant_costs: consultant_labor,

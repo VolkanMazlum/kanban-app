@@ -4,7 +4,7 @@ import { GENERAL_COST_FIELDS } from "../constants/costConstants.js";
 
 export default function ProjectFinances({ isHR }) {
   const currentYear = new Date().getFullYear();
-  const YEAR_OPTIONS = ["all", currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
+  const YEAR_OPTIONS = ["all", ...Array.from({ length: currentYear - 2024 + 4 }, (_, i) => 2024 + i)];
   const [selectedYear, setSelectedYear] = useState("all");
 
   const [loading, setLoading] = useState(false);
@@ -105,17 +105,18 @@ export default function ProjectFinances({ isHR }) {
   const totalGeneralCost = GENERAL_COST_FIELDS.reduce((sum, f) => sum + (generalCosts[f.key] || 0), 0);
 
 
-  // Weights are now year-aware. Group fatturatoByTask by year
-  const fattByYear = {};
-  fatturatoByTask.forEach(r => {
-    if (!fattByYear[r.year_code]) fattByYear[r.year_code] = [];
-    fattByYear[r.year_code].push(r);
-  });
-
+  // Calculate weights for total overhead distribution
+  // If a specific year is selected, all active tasks in that year share the overhead
   const yearlyTotalWeights = {};
-  Object.keys(fattByYear).forEach(y => {
-    yearlyTotalWeights[y] = fattByYear[y].reduce((sum, r) => sum + parseEuNum(r.total_valore_ordine), 0);
-  });
+  if (selectedYear !== 'all') {
+    const yearCode = String(selectedYear).slice(2);
+    yearlyTotalWeights[yearCode] = fatturatoByTask.reduce((sum, r) => sum + parseEuNum(r.total_valore_ordine), 0);
+  } else {
+    // For 'all' view, group by starting year prefix
+    fatturatoByTask.forEach(r => {
+      yearlyTotalWeights[r.year_code] = (yearlyTotalWeights[r.year_code] || 0) + parseEuNum(r.total_valore_ordine);
+    });
+  }
 
   // Calculate Fixed Consultant costs for the period
   const weightYears = Object.keys(yearlyTotalWeights).map(y => parseInt("20" + y));
@@ -139,28 +140,26 @@ export default function ProjectFinances({ isHR }) {
   });
 
   // Task-specific summed values for display
-  const getTaskFattData = (taskId, commNum) => {
-    const yearPrefix = commNum ? commNum.slice(0, 2) : null;
-    const relevant = fatturatoByTask.filter(r => 
-      r.task_id === taskId && (!yearPrefix || r.year_code === yearPrefix)
-    );
+  const getTaskFattData = (taskId) => {
+    const relevant = fatturatoByTask.filter(r => r.task_id === taskId);
     return {
-      total_valore_ordine: relevant.reduce((sum, r) => sum + parseEuNum(r.total_valore_ordine), 0),
+      total_valore_ordine: relevant.length > 0 ? parseEuNum(relevant[0].total_valore_ordine) : 0,
       total_fatturato: relevant.reduce((sum, r) => sum + parseEuNum(r.total_fatturato), 0),
       total_scheduled: relevant.reduce((sum, r) => sum + parseEuNum(r.total_scheduled_amount), 0),
+      total_extra_costs: relevant.reduce((sum, r) => sum + (parseFloat(r.total_extra_costs) || 0), 0),
       byYear: relevant
     };
   };
 
   // The core refined logic: sum of (YearlyProjectWeight / YearlyTotalWeight * YearlyTotalGeneralCost)
-  const getExtraCost = (taskId, forcedPrefix = null) => {
-    // forcedPrefix is used when calculating summary where we already know the target year
-    const yearSuffix = forcedPrefix || (selectedYear === "all" ? null : String(selectedYear).slice(-2));
-    const taskData = getTaskFattData(taskId, yearSuffix ? `${yearSuffix}-` : null);
+  const getExtraCost = (taskId) => {
+    const taskData = getTaskFattData(taskId);
 
     let totalExtra = 0;
     taskData.byYear.forEach(yData => {
-      const year = yData.year_code;
+      // If we are in a specific year view, we use that year's overhead pool.
+      // If 'all', we use the pool matching the project's year_code.
+      const year = (selectedYear !== "all") ? String(selectedYear).slice(-2) : yData.year_code;
       const yearTotalWeight = yearlyTotalWeights[year] || 0;
       const yearTotalGC = yearlyGeneralCosts[year] || 0;
 
@@ -276,7 +275,8 @@ export default function ProjectFinances({ isHR }) {
                     { label: "Logged Hours", align: "center" },
                     { label: "Internal Lab.", align: "center", hint: "Direct Labor (Internal Staff)" },
                     { label: "Weight", align: "center" },
-                    { label: "Overhead", align: "center" },
+                    { label: "Overhead", align: "center", hint: "Allocated General Costs" },
+                    { label: "Direct Extra", align: "center", hint: "Commessa-specific costs (Tickets, etc.)" },
                     { label: "Total Cost", align: "center" },
                     { label: "Valore Ordine", align: "center" },
                     { label: "Fatturato", align: "center" },
@@ -291,11 +291,8 @@ export default function ProjectFinances({ isHR }) {
               </thead>
               <tbody>
                 {finances.tasks.map(task => {
-                  const commNum = task.comm_number || "";
-                  const ySuffix = selectedYear === 'all' ? "" : String(selectedYear).slice(-2);
-                  
-                  // Filter: If we are in a specific year, only show tasks belonging to that year's commessa prefix
-                  if (selectedYear !== 'all' && !commNum.startsWith(ySuffix + "-")) return null;
+                  // Dynamic Visibility: The API now returns tasks that are active in the selected year.
+                  // No more prefix-based filtering here.
 
                   const internalLabourCost = task.internal_cost || 0;
                   const totalHrs = task.total_hours || 0;
@@ -303,9 +300,10 @@ export default function ProjectFinances({ isHR }) {
                   const fattData = getTaskFattData(task.id, task.comm_number);
                   const valoreOrdine = fattData.total_valore_ordine;
                   const fatturato = fattData.total_fatturato;
-
+                  const directExtra = fattData.total_extra_costs;
+ 
                   const overheadGC = getExtraCost(task.id);
-                  const totalCost = internalLabourCost + overheadGC;
+                  const totalCost = internalLabourCost + overheadGC + directExtra;
                   const profit = fatturato - totalCost;
                   const isProfitable = profit >= 0;
 
@@ -327,6 +325,9 @@ export default function ProjectFinances({ isHR }) {
                         <span style={{ fontSize: 13, fontWeight: 700, color: "#cd08f5ff" }}>€{fmtEu(overheadGC)}</span>
                       </td>
                       <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "#6366F1" }}>€{fmtEu(directExtra)}</span>
+                      </td>
+                      <td style={{ padding: "14px 16px", textAlign: "center" }}>
                         <span style={{ fontSize: 13, fontWeight: 700, color: "#DC2626", background: "#FEF2F2", padding: "3px 8px", borderRadius: 6 }}>€{fmtEu(totalCost)}</span>
                       </td>
                       <td style={{ padding: "14px 16px", textAlign: "center", color: "#6366F1", fontWeight: 600 }}>€{fmtEu(valoreOrdine)}</td>
@@ -345,16 +346,13 @@ export default function ProjectFinances({ isHR }) {
               </tbody>
               <tfoot>
                 {(() => {
-                  const tableData = finances.tasks.filter(task => {
-                    const commNum = task.comm_number || "";
-                    const ySuffix = selectedYear === 'all' ? "" : String(selectedYear).slice(-2);
-                    return selectedYear === 'all' || commNum.startsWith(ySuffix + "-");
-                  }).map(task => {
+                  const tableData = finances.tasks.map(task => {
                     const fattData = getTaskFattData(task.id, task.comm_number);
                     return {
                       hours: task.total_hours || 0,
                       labor: task.internal_cost || 0,
-                      extra: getExtraCost(task.id),
+                      overhead: getExtraCost(task.id),
+                      directExtra: fattData.total_extra_costs,
                       valore: fattData.total_valore_ordine,
                       fatturato: fattData.total_fatturato
                     };
@@ -362,10 +360,11 @@ export default function ProjectFinances({ isHR }) {
 
                   const tHours = tableData.reduce((s, d) => s + d.hours, 0);
                   const tInt = tableData.reduce((s, d) => s + d.labor, 0);
-                  const tOver = tableData.reduce((s, d) => s + d.extra, 0);
+                  const tOver = tableData.reduce((s, d) => s + d.overhead, 0);
+                  const tDirExtra = tableData.reduce((s, d) => s + d.directExtra, 0);
                   const tVal = tableData.reduce((s, d) => s + d.valore, 0);
                   const tFat = tableData.reduce((s, d) => s + d.fatturato, 0);
-                  const tTotal = tInt + tOver;
+                  const tTotal = tInt + tOver + tDirExtra;
                   const tProf = tFat - tTotal;
                   const finalCompanyNetProfit = tProf - totalConsultantFixed;
 
@@ -377,6 +376,7 @@ export default function ProjectFinances({ isHR }) {
                         <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tInt)}</td>
                         <td style={{ padding: "12px 16px", textAlign: "center" }}>100%</td>
                         <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tOver)}</td>
+                        <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tDirExtra)}</td>
                         <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tTotal)}</td>
                         <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tVal)}</td>
                         <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tFat)}</td>
@@ -385,11 +385,11 @@ export default function ProjectFinances({ isHR }) {
                       </tr>
                       {/* Company Deductions */}
                       <tr key="consultant-deduction" style={{ background: "#FEF2F2", fontWeight: 700 }}>
-                         <td colSpan={9} style={{ padding: "8px 16px", textAlign: "right", color: "#B91C1C", fontSize: 11 }}>TOTAL CONSULTANT WAGES (FIXED)</td>
+                         <td colSpan={10} style={{ padding: "8px 16px", textAlign: "right", color: "#B91C1C", fontSize: 11 }}>TOTAL CONSULTANT WAGES (FIXED)</td>
                          <td style={{ padding: "8px 16px", textAlign: "center", color: "#B91C1C" }}>-€{fmtEu(totalConsultantFixed)}</td>
                       </tr>
                       <tr key="final-profit" style={{ background: "#ECFDF5", borderTop: "2px solid #059669", fontWeight: 900, fontSize: 14 }}>
-                         <td colSpan={9} style={{ padding: "12px 16px", textAlign: "right", color: "#059669" }}>FINAL COMPANY NET PROFIT</td>
+                         <td colSpan={10} style={{ padding: "12px 16px", textAlign: "right", color: "#059669" }}>FINAL COMPANY NET PROFIT</td>
                          <td style={{ padding: "12px 16px", textAlign: "center", color: "#059669" }}>€{fmtEu(finalCompanyNetProfit)}</td>
                       </tr>
                     </>

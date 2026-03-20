@@ -23,7 +23,8 @@ export const getEmptyClient = () => ({
 
 export const getEmptyForm = () => ({
   task_id: "", comm_number: "", name: "",
-  clients: [getEmptyClient()]
+  clients: [getEmptyClient()],
+  extra_costs: []
 });
 
 // Ortak input stili
