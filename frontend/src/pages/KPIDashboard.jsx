@@ -131,10 +131,12 @@ export default function KPIDashboard({ employees }) {
   const maxForecast = summary.forecast?.length ? Math.max(...summary.forecast.map(f => f.total), 1) : 1;
   const maxProformaTrend = proforma_trend?.length ? Math.max(...proforma_trend.map(p => p.total), 1) : 1;
 
+  const monthlyTotalCost = (summary.total_labor_cost || 0) + (summary.total_consultant_labor || 0) + (summary.monthly_overhead || 0) + (summary.total_extra_costs || 0);
+
   const cards = [
     { icon: "📊", label: "Monthly Tasks", val: summary.total, color: "#2563EB", bg: "#EFF6FF" },
-    { icon: "✅", label: "Completed", val: summary.completed_count, color: "#059669", bg: "#ECFDF5" },
-    { icon: "⚠️", label: "Overdue", val: summary.overdue, color: "#DC2626", bg: "#FEF2F2" },
+    { icon: "📉", label: "Monthly Cost", val: `€${Math.round(monthlyTotalCost).toLocaleString("it-IT")}`, color: "#DC2626", bg: "#FEF2F2" },
+    { icon: "📋", label: "Proforma (Month)", val: `€${(summary.total_proforma || 0).toLocaleString("it-IT", { minimumFractionDigits: 0 })}`, color: "#059669", bg: "#ECFDF5" },
     { icon: "👥", label: "Utilization", val: monthlyData ? `${Math.round((monthlyData.employees.reduce((sum, emp) => sum + parseFloat(emp.phase_hours || 0), 0) / (employees.length * MAX_CAPACITY)) * 100)}%` : "0%", color: "#0891B2", bg: "#ECFEFF" },
     { icon: "💰", label: "Fatturato (Taken)", val: `€${(summary.monthly_revenue || 0).toLocaleString("it-IT", { minimumFractionDigits: 0 })}`, color: "#7C3AED", bg: "#F5F3FF" },
   ];
