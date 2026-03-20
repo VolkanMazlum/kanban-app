@@ -55,9 +55,9 @@ module.exports = (app, query, authenticate) => {
       const monthlyRevenue = billedRes.rows.reduce((sum, r) => sum + parseFloat(r.fatturato_amount || 0), 0);
 
 
-        // 4a. Actual Revenue Details for Forecast History
+        // 4a. Actual Revenue Details for Forecast History (5 months centered)
         const forecast = [];
-        for (let i = 0; i < 4; i++) {
+        for (let i = -2; i <= 2; i++) {
           const fDate = new Date(year, month - 1 + i, 1);
   
           const fBilled = await query(`
@@ -173,10 +173,10 @@ module.exports = (app, query, authenticate) => {
 
       const totalEmpRes = await query("SELECT COUNT(*) as count FROM employees WHERE is_active = TRUE");
 
-      // 6. Cost Trend: Rolling 6 months historical costs
+      // 6. Cost Trend: 5 months centered
       const costTrend = [];
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(year, month - 1 - i, 1);
+      for (let i = -2; i <= 2; i++) {
+        const d = new Date(year, month - 1 + i, 1);
         const ty = d.getFullYear();
         const tm = d.getMonth() + 1;
         const tmStart = `${ty}-${String(tm).padStart(2, '0')}-01`;
@@ -232,9 +232,9 @@ module.exports = (app, query, authenticate) => {
         });
       }
 
-      // 7. Proforma Trend: Next 6 months (Projected)
+      // 7. Proforma Trend: 5 months centered
       const proformaTrend = [];
-      for (let i = 0; i < 6; i++) {
+      for (let i = -2; i <= 2; i++) {
         const d = new Date(year, month - 1 + i, 1);
         const ty = d.getFullYear();
         const tm = d.getMonth() + 1;

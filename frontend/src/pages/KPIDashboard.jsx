@@ -135,10 +135,10 @@ export default function KPIDashboard({ employees }) {
 
   const cards = [
     { icon: "📊", label: "Monthly Tasks", val: summary.total, color: "#2563EB", bg: "#EFF6FF" },
+    { icon: "💰", label: "Fatturato (Taken)", val: `€${(summary.monthly_revenue || 0).toLocaleString("it-IT", { minimumFractionDigits: 0 })}`, color: "#7C3AED", bg: "#F5F3FF" },
     { icon: "📉", label: "Monthly Cost", val: `€${Math.round(monthlyTotalCost).toLocaleString("it-IT")}`, color: "#DC2626", bg: "#FEF2F2" },
     { icon: "📋", label: "Proforma (Month)", val: `€${(summary.total_proforma || 0).toLocaleString("it-IT", { minimumFractionDigits: 0 })}`, color: "#059669", bg: "#ECFDF5" },
     { icon: "👥", label: "Utilization", val: monthlyData ? `${Math.round((monthlyData.employees.reduce((sum, emp) => sum + parseFloat(emp.phase_hours || 0), 0) / (employees.length * MAX_CAPACITY)) * 100)}%` : "0%", color: "#0891B2", bg: "#ECFEFF" },
-    { icon: "💰", label: "Fatturato (Taken)", val: `€${(summary.monthly_revenue || 0).toLocaleString("it-IT", { minimumFractionDigits: 0 })}`, color: "#7C3AED", bg: "#F5F3FF" },
   ];
 
   const statusColors = { new: "#6366F1", process: "#F59E0B", blocked: "#DC2626", done: "#059669" };
@@ -206,9 +206,9 @@ export default function KPIDashboard({ employees }) {
 
               return (
                 <div key={f.month} title={fullTitle} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, cursor: "help" }}>
-                  <div style={{ fontSize: 8, fontWeight: 700, color: idx === 0 ? "#7C3AED" : "#9CA3AF" }}>€{Math.round(f.total / 1000)}k</div>
-                  <div style={{ width: "100%", background: idx === 0 ? "#7C3AED" : "#C7D2FE", height: `${Math.max((f.total / maxForecast) * 70, 4)}px`, borderRadius: "4px 4px 0 0", opacity: idx === 0 ? 1 : 0.7 }} />
-                  <div style={{ fontSize: 9, color: "#9CA3AF", textAlign: "center", fontWeight: idx === 0 ? 700 : 400 }}>{f.month}</div>
+                  <div style={{ fontSize: 8, fontWeight: 700, color: idx === 2 ? "#7C3AED" : "#9CA3AF" }}>€{Math.round(f.total / 1000)}k</div>
+                  <div style={{ width: "100%", background: idx === 2 ? "#7C3AED" : "#C7D2FE", height: `${Math.max((f.total / maxForecast) * 70, 4)}px`, borderRadius: "4px 4px 0 0", opacity: idx === 2 ? 1 : 0.7 }} />
+                  <div style={{ fontSize: 9, color: "#9CA3AF", textAlign: "center", fontWeight: idx === 2 ? 700 : 400 }}>{f.month}</div>
                 </div>
               );
             })}
@@ -217,19 +217,19 @@ export default function KPIDashboard({ employees }) {
 
         {/* Monthly Cost Trend */}
         <div style={{ background: "#fff", borderRadius: 12, padding: 20, border: "1px solid #E5E7EB", display: "flex", flexDirection: "column" }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: "0 0 20px" }}>Monthly Cost Trend</h3>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: "0 0 20px" }}>Monthly Cost</h3>
           {trend?.length === 0
             ? <div style={{ color: "#9CA3AF", fontSize: 12, textAlign: "center", padding: "20px 0", flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>No cost data</div>
             : (
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flex: 1, paddingBottom: 10 }}>
-                {trend.map(t => (
+                {trend.map((t, idx) => (
                   <div key={t.month} title={`Labor: €${t.labor?.toLocaleString('it-IT')}\nOverhead: €${t.overhead?.toLocaleString('it-IT')}\nTotal: €${t.total?.toLocaleString('it-IT')}`} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, cursor: "help" }}>
-                    <div style={{ fontSize: 8, fontWeight: 700, color: "#6B7280" }}>€{Math.round((t.total || 0) / 1000)}k</div>
-                    <div style={{ width: "100%", display: "flex", flexDirection: "column-reverse", height: `${Math.max(((t.total || 0) / maxTrend) * 70, 4)}px`, borderRadius: "4px 4px 0 0", overflow: "hidden" }}>
-                        <div style={{ background: "#EF4444", height: `${((t.labor || 0) / (t.total || 1)) * 100}%`, width: "100%" }} />
-                        <div style={{ background: "#FCA5A5", height: `${((t.overhead || 0) / (t.total || 1)) * 100}%`, width: "100%" }} />
+                    <div style={{ fontSize: 8, fontWeight: 700, color: idx === 2 ? "#EF4444" : "#6B7280" }}>€{Math.round((t.total || 0) / 1000)}k</div>
+                    <div style={{ width: "100%", display: "flex", flexDirection: "column-reverse", height: `${Math.max(((t.total || 0) / maxTrend) * 70, 4)}px`, borderRadius: "4px 4px 0 0", overflow: "hidden", opacity: idx === 2 ? 1 : 0.7 }}>
+                      <div style={{ background: "#EF4444", height: `${((t.labor || 0) / (t.total || 1)) * 100}%`, width: "100%" }} />
+                      <div style={{ background: "#FCA5A5", height: `${((t.overhead || 0) / (t.total || 1)) * 100}%`, width: "100%" }} />
                     </div>
-                    <div style={{ fontSize: 8, color: "#9CA3AF", textAlign: "center", fontWeight: 600 }}>{t.month}</div>
+                    <div style={{ fontSize: 8, color: "#9CA3AF", textAlign: "center", fontWeight: idx === 2 ? 700 : 400 }}>{t.month}</div>
                   </div>
                 ))}
               </div>
@@ -239,16 +239,16 @@ export default function KPIDashboard({ employees }) {
 
         {/* Proforma Trend (Projected) */}
         <div style={{ background: "#fff", borderRadius: 12, padding: 20, border: "1px solid #E5E7EB", display: "flex", flexDirection: "column" }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: "0 0 20px" }}>Projected Proforma</h3>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: "0 0 20px" }}>Proforma</h3>
           {proforma_trend?.length === 0
             ? <div style={{ color: "#9CA3AF", fontSize: 12, textAlign: "center", padding: "20px 0", flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>No proforma data</div>
             : (
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flex: 1, paddingBottom: 10 }}>
-                {proforma_trend.map(p => (
+                {proforma_trend.map((p, idx) => (
                   <div key={p.month} title={`Projected: €${p.total?.toLocaleString('it-IT')}`} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, cursor: "help" }}>
-                    <div style={{ fontSize: 8, fontWeight: 700, color: "#2563EB" }}>€{Math.round((p.total || 0) / 1000)}k</div>
-                    <div style={{ width: "100%", background: "#3B82F6", height: `${Math.max(((p.total || 0) / maxProformaTrend) * 70, 4)}px`, borderRadius: "4px 4px 0 0", opacity: 0.8 }} />
-                    <div style={{ fontSize: 8, color: "#9CA3AF", textAlign: "center", fontWeight: 600 }}>{p.month}</div>
+                    <div style={{ fontSize: 8, fontWeight: 700, color: idx === 2 ? "#2563EB" : "#9CA3AF" }}>€{Math.round((p.total || 0) / 1000)}k</div>
+                    <div style={{ width: "100%", background: idx === 2 ? "#2563EB" : "#3B82F6", height: `${Math.max(((p.total || 0) / maxProformaTrend) * 70, 4)}px`, borderRadius: "4px 4px 0 0", opacity: idx === 2 ? 1 : 0.6 }} />
+                    <div style={{ fontSize: 8, color: "#9CA3AF", textAlign: "center", fontWeight: idx === 2 ? 700 : 400 }}>{p.month}</div>
                   </div>
                 ))}
               </div>
@@ -318,7 +318,7 @@ export default function KPIDashboard({ employees }) {
                   <td style={{ padding: "4px 4px", color: "#374151" }}>Monthly General Expenses</td>
                   <td style={{ padding: "4px 4px", textAlign: "right", color: "#DC2626", fontWeight: 500 }}>-€{Math.round(summary.monthly_overhead || 0).toLocaleString("it-IT")}</td>
                 </tr>
- 
+
                 {/* EXTRA COSTS */}
                 {summary.total_extra_costs > 0 && (
                   <>
@@ -349,12 +349,12 @@ export default function KPIDashboard({ employees }) {
             <button onClick={() => setMonthAnchor(a => a + 1)} style={{ background: "#fff", border: "1.5px solid #E5E7EB", borderRadius: 7, padding: "5px 10px", cursor: "pointer", fontSize: 12, color: "#374151", fontWeight: 600 }}>→</button>
             <button onClick={() => setMonthAnchor(0)} style={{ background: "#2563EB", color: "#fff", border: "none", borderRadius: 7, padding: "5px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>This Month</button>
             <button
-            onClick={() => downloadAuthenticatedFile(`/reports/workload?year=${targetYear}`, `Workload_KPI_${targetYear}_${new Date().toISOString().split('T')[0]}.xlsx`)}
-            style={{ padding: "10px 20px", background: "#F3F4F6", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all 0.2s", marginLeft: 8 }}
-            onMouseOver={e => e.currentTarget.style.background = "#E5E7EB"}
-            onMouseOut={e => e.currentTarget.style.background = "#F3F4F6"}>
-            📥 Export
-          </button>
+              onClick={() => downloadAuthenticatedFile(`/reports/workload?year=${targetYear}`, `Workload_KPI_${targetYear}_${new Date().toISOString().split('T')[0]}.xlsx`)}
+              style={{ padding: "10px 20px", background: "#F3F4F6", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all 0.2s", marginLeft: 8 }}
+              onMouseOver={e => e.currentTarget.style.background = "#E5E7EB"}
+              onMouseOut={e => e.currentTarget.style.background = "#F3F4F6"}>
+              📥 Export
+            </button>
           </div>
         </div>
 
