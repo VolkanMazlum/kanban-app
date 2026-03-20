@@ -90,7 +90,7 @@ export default function TimesheetTab({
                   <div key={`empty-${i}`} />
                 ))}
                 {days.map(day => {
-                  const dateStr   = day.toISOString().slice(0,10);
+                  const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
                   const isPast    = day <= today;
                   const isWeekend = day.getDay() === 0 || day.getDay() === 6;
                   const isToday   = day.toDateString() === today.toDateString();
