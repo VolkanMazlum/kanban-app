@@ -45,7 +45,7 @@ export default function UserManager({ isHR, onUserAdded }) {
       const nameParts = form.name.trim().split(" ");
       const firstName = nameParts[0] || "";
       const lastName = nameParts.slice(1).join(" ") || "";
-      
+
       const creationData = {
         ...form,
         hr_details: {
@@ -363,17 +363,17 @@ function EditUserModal({ user, form, setForm, onSave, onClose, saving, error }) 
 
           {modalTab === "skills" && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
-              {["Italiano", "Inglese", "Francese", "Spagnolo", "Tedesco", "Portoghese", "Arabo", "Russo", "Turco"].map(L => (
+              {["Italiano", "Inglese", "Francese", "Spagnolo", "Tedesco", "Portoghese", "Arabo", "Russo", "Turco", "Persiano"].map(L => (
                 <div key={L} style={{ border: "1px solid #F3F4F6", padding: 8, borderRadius: 8 }}>
                   <label style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF" }}>{L}</label>
                   <select value={form.hr_details?.[`lang_${L}`] || "N/A"} onChange={e => updateHR(`lang_${L}`, e.target.value)} style={{ width: "100%", border: "none", fontSize: 13, background: "transparent" }}>
                     <option value="N/A">-</option>
-                    <option value="A1">A1 (Breakthrough)</option>
-                    <option value="A2">A2 (Waystage)</option>
-                    <option value="B1">B1 (Threshold)</option>
-                    <option value="B2">B2 (Vantage)</option>
-                    <option value="C1">C1 (Effective Efficiency)</option>
-                    <option value="C2">C2 (Mastery)</option>
+                    <option value="A1">A1</option>
+                    <option value="A2">A2</option>
+                    <option value="B1">B1</option>
+                    <option value="B2">B2</option>
+                    <option value="C1">C1</option>
+                    <option value="C2">C2</option>
                     <option value="Native">Native</option>
                   </select>
                 </div>
