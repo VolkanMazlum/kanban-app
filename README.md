@@ -141,6 +141,28 @@ FRONTEND_URL=http://localhost:5173
 
 ---
 
+## 🧪 Testing
+ 
+The project includes a robust automated testing suite using **Jest** and **Supertest**. Tests run against an isolated database to ensure data integrity.
+ 
+### Running Tests in Docker (Recommended)
+```bash
+# Run the complete test suite
+docker exec -it kanban_backend npm test
+ 
+# Run specific test files
+docker exec -it kanban_backend npx jest src/tests/finance.test.js
+```
+ 
+### Running Tests Locally
+Ensure your `.env` has a valid `DATABASE_URL_TEST`:
+```bash
+cd backend
+npm test
+```
+ 
+---
+ 
 ## 📡 API Reference
 
 All endpoints are prefixed with `/api` and require **JWT Bearer Token Authentication** (see `backend/src/auth.js`).
@@ -222,8 +244,11 @@ All endpoints are prefixed with `/api` and require **JWT Bearer Token Authentica
 - **Secure Role-Based Access** via JWT with individual accounts (`standard` & `hr` roles) stored in the database.
 - **Bcrypt Password Protection** for all user credentials.
 - **Audit Logging** – Complete traceability for all creates, edits, and deletes with a dedicated admin viewer.
-- **Private HR Finance Dashboard** for tracking work hours, overtime, employee costs, and company overheads.
-- **Financial Module (Fatturato)** tracking client revenue, invoices, and remaining budgets.
+- **Private HR Finance Dashboard**: Tracking for work hours, overtime, employee costs, and company overheads.
+- **Identity & User Sync**: Automated "Full Name" synchronization and support for username updates.
+- **Financial Module (Fatturato)**: Itemized tracking for invoices and **Proforma** payments with dates/notes.
+- **Projected KPI Dashboard**: Visualizes future income via a 6-month Projected Proforma trend chart.
+- **Automated Testing**: Comprehensive Jest test suite with autonomous database isolation.
 - **Containerised** one-click deployment with Docker Compose.
 
 ---
