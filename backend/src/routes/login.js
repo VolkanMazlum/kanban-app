@@ -33,8 +33,15 @@ const login = (query) => async (req, res) => {
       role: user.role.trim()
     });
 
+    // Set httpOnly cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'None',
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    });
+ 
     return res.json({
-      token,
       employeeId: user.employee_id,
       role: user.role.trim(),
       name: user.name,

@@ -18,7 +18,8 @@
     "helmet": "^7.0.0",
     "bcrypt": "^5.1.0",
     "jsonwebtoken": "^9.0.0",
-    "exceljs": "^4.4.0"
+    "exceljs": "^4.4.0",
+    "cookie-parser": "^1.4.6"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

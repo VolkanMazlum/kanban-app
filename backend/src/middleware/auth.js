@@ -6,10 +6,12 @@ const authenticate = (req, res, next) => {
   const authHeader = req.headers['authorization'] || '';
   if (authHeader.startsWith('Bearer ')) {
     token = authHeader.replace('Bearer ', '');
+  } else if (req.cookies && req.cookies.token) {
+    token = req.cookies.token;
   } else if (req.query.token) {
     token = req.query.token;
   }
-
+ 
   if (!token) {
     return res.status(401).json({ error: 'Authentication required. Token missing.' });
   }
@@ -22,22 +24,24 @@ const authenticate = (req, res, next) => {
   
   return res.status(401).json({ error: 'Invalid or expired token' });
 };
-
+ 
 // HR specific authentication middleware verifying the JWT role
 const authenticateHR = (req, res, next) => {
   let token = "";
   const authHeader = req.headers['authorization'] || '';
   if (authHeader.startsWith('Bearer ')) {
     token = authHeader.replace('Bearer ', '');
+  } else if (req.cookies && req.cookies.token) {
+    token = req.cookies.token;
   } else if (req.query.token) {
     token = req.query.token;
   }
-
+ 
   if (!token) {
     return res.status(401).json({ error: 'Authentication required. Token missing.' });
   }
   const decoded = verifyToken(token);
-
+ 
   if (!decoded) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }

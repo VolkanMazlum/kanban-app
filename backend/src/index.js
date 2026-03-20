@@ -2,10 +2,11 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const cookieParser = require("cookie-parser");
 require('dotenv').config();
 
 // 1. Config & Bootstrap
-const { query } = require("./config/db");
+const { query, pool } = require("./config/db");
 const { seedUsers } = require("./services/seed");
 const { authenticate, authenticateHR } = require("./middleware/auth");
 const reportRoutes = require('./routes/reports');
@@ -36,6 +37,7 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization", "X-HR-Auth"]
 }));
 app.use(express.json({ limit: "50kb" }));
+app.use(cookieParser());
 app.use(limiter);
 
 // Auth Limiter for Login
@@ -67,7 +69,7 @@ app.get("/health", (req, res) => res.json({ status: "ok", timestamp: new Date().
 // Route Modules
 app.post('/api/login', authLimiter, require('./routes/login').login(query));
 
-require('./routes/tasks')(app, query, authenticate);
+require('./routes/tasks')(app, query, pool, authenticate);
 require('./routes/employees')(app, query, authenticate, authenticateHR);
 require('./routes/kpi')(app, query, authenticate);
 require('./routes/timeLogs')(app, query, authenticate);
@@ -79,6 +81,15 @@ require("./routes/users")(app, query, authenticateHR);
 
 // Reports
 app.use('/api/reports', authenticate, reportRoutes);
+
+app.post('/api/logout', (req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'None'
+  });
+  res.json({ success: true });
+});
 
 app.get("/", (req, res) => res.send("Welcome to the TEKSER API!"));
 

@@ -16,8 +16,7 @@ export default function Login() {
 
     try {
       const res = await api.login({ username, password });
-      if (res.success && res.token) {
-        localStorage.setItem("token", res.token);
+      if (res.success) {
         localStorage.setItem("role", res.role);
         localStorage.setItem("employeeId", res.employeeId || "");
         localStorage.setItem("isHR", res.role === "hr" ? "true" : "false");

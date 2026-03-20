@@ -28,28 +28,27 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const token = localStorage.getItem("token");
   const role = localStorage.getItem("role") || "standard";
   const employeeId = localStorage.getItem("employeeId") ? parseInt(localStorage.getItem("employeeId")) : null;
   const isHR = role === "hr";
   const userName = localStorage.getItem("userName") || "User";
-  const isAuthenticated = !!token;
+  const isAuthenticated = !!userName && (userName !== "User" || !!localStorage.getItem("role"));
   
   const user = { role, employeeId, name: userName };
-
+ 
   useEffect(() => {
     // Redirect to login if not authenticated and not already on login page
     if (!isAuthenticated && location.pathname !== "/login") {
       navigate("/login");
     }
   }, [isAuthenticated, location.pathname, navigate]);
-
+ 
   const toast = useCallback((msg, type="success") => {
     const id = Date.now();
     setToasts(p => [...p, {id, msg, type}]);
     setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3000);
   }, []);
-
+ 
   const loadAll = useCallback(async (silent = false) => {
     if (!isAuthenticated) {
       setLoading(false);
@@ -65,20 +64,27 @@ export default function App() {
     } catch(err) { 
       setError(err.message);
       if (err.message.includes("Token") || err.message.includes("Authentication required") || err.message.includes("Invalid or expired") || err.message.includes("401")) {
-        localStorage.removeItem("token");
         localStorage.removeItem("isHR");
+        localStorage.removeItem("role");
+        localStorage.removeItem("userName");
+        localStorage.removeItem("employeeId");
         navigate("/login");
       }
     } finally { if (!silent) setLoading(false); }
   }, [isAuthenticated, isHR, navigate]);
-
+ 
   useEffect(() => { loadAll(); }, [loadAll]);
-
-  const handleLogout = () => {
-    localStorage.removeItem("token");
+ 
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
     localStorage.removeItem("isHR");
     localStorage.removeItem("role");
     localStorage.removeItem("userName");
+    localStorage.removeItem("employeeId");
     navigate("/login");
   };
 

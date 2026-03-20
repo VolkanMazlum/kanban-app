@@ -1,21 +1,15 @@
 const BASE = "/api";
 
 async function req(path, options = {}) {
-  // Always attach JWT token if available
-  const token = localStorage.getItem("token");
-  
   const headers = {
     "Content-Type": "application/json",
     ...(options.headers || {}),
   };
-
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
+ 
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers,
+    credentials: "include",
   });
 
   if (!res.ok) {
@@ -26,6 +20,7 @@ async function req(path, options = {}) {
 }
 
 export const login = (data) => req("/login", { method: "POST", body: JSON.stringify(data) });
+export const logout = () => req("/logout", { method: "POST" });
 
 export const getTasks        = (params = {}) => req(`/tasks${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""}`);
 export const getTask         = (id) => req(`/tasks/${id}`);
@@ -187,11 +182,11 @@ export const createUser = (data) => req("/users", { method: "POST", body: JSON.s
 export const updateUser = (id, data) => req(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) });
 
 // ── REPORTS ──
-export const exportTasks = () => `${BASE}/reports/tasks?token=${localStorage.getItem("token")}`;
-export const exportFinances = (year) => `${BASE}/reports/finances?year=${year}&token=${localStorage.getItem("token")}`;
-export const exportWorkload = (year) => `${BASE}/reports/workload?year=${year}&token=${localStorage.getItem("token")}`;
-export const exportEmployees = () => `${BASE}/reports/employees?token=${localStorage.getItem("token")}`;
-export const exportClients = () => `${BASE}/reports/clients?token=${localStorage.getItem("token")}`;
+export const exportTasks = () => `${BASE}/reports/tasks`;
+export const exportFinances = (year) => `${BASE}/reports/finances${year ? `?year=${year}` : ""}`;
+export const exportWorkload = (year) => `${BASE}/reports/workload${year ? `?year=${year}` : ""}`;
+export const exportEmployees = () => `${BASE}/reports/employees`;
+export const exportClients = () => `${BASE}/reports/clients`;
 
 // ── AUDIT LOGS ──
 export const getAuditLogs = (limit = 100) => req(`/audit-logs?limit=${limit}`);

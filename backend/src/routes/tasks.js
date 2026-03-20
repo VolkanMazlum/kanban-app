@@ -2,7 +2,7 @@ const { taskSchema, taskUpdateSchema } = require("../middleware/validation");
 const { z } = require("zod");
 const { logAudit, getAuditContext } = require("../middleware/auditLog");
 
-module.exports = (app, query, authenticate) => {
+module.exports = (app, query, pool, authenticate) => {
   // ── Tasks ──────────────────────────────────────────────────────
   app.get("/api/tasks", authenticate, async (req, res) => {
     try {
@@ -214,11 +214,12 @@ module.exports = (app, query, authenticate) => {
         assignee_ids: validatedAssigneeIds, estimated_hours: validatedEstimatedHours, label: validatedLabel
       } = validatedData;
     
+      const client = await pool.connect();
       try {
-        // await query("BEGIN");
+        await client.query("BEGIN");
         
         // 1. Create main task 
-        const taskResult = await query(
+        const taskResult = await client.query(
           "INSERT INTO tasks (title, description, label, deadline, planned_start, planned_end, actual_start, actual_end, status, position, estimated_hours) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *",
           [validatedTitle, validatedDescription || "", validatedLabel || null, validatedDeadline || null,
            validatedPlannedStart || null, validatedPlannedEnd || null, validatedActualStart || null, validatedActualEnd || null,
@@ -228,37 +229,37 @@ module.exports = (app, query, authenticate) => {
         newTask.assignees = [];
         newTask.topics = [];
         newTask.phases = [];
-
+ 
         // Audit log: task created
         const ctx = getAuditContext(req);
-        logAudit(query, { ...ctx, action: 'CREATE', entityType: 'task', entityId: newTask.id, details: { title: newTask.title } });
+        logAudit(client.query.bind(client), { ...ctx, action: 'CREATE', entityType: 'task', entityId: newTask.id, details: { title: newTask.title } });
         
         // 2. Save assignees
         if (validatedAssigneeIds && validatedAssigneeIds.length > 0) {
-          await query(
+          await client.query(
             "INSERT INTO task_assignees (task_id, employee_id) SELECT $1, unnest($2::int[])",
             [newTask.id, validatedAssigneeIds]
           );
-          const emps = await query("SELECT id, name FROM employees WHERE id = ANY($1)", [validatedAssigneeIds]);
+          const emps = await client.query("SELECT id, name FROM employees WHERE id = ANY($1)", [validatedAssigneeIds]);
           newTask.assignees = emps.rows;
         }
-
+ 
         // 3. Save topics
         if (validatedTopics && validatedTopics.length > 0) {
-          await query(
+          await client.query(
             "INSERT INTO task_topics (task_id, topic) SELECT $1, unnest($2::varchar[])",
             [newTask.id, validatedTopics]
           );
           newTask.topics = validatedTopics;
         }
-
+ 
         // 4. Save Phases AND their Assignees
         if (phases && phases.length > 0) {
           for (let i = 0; i < phases.length; i++) {
             const ph = phases[i];
             
             // Insert Phase and get its ID
-            const phaseResult = await query(
+            const phaseResult = await client.query(
               "INSERT INTO task_phases (task_id, name, position, start_date, end_date, status, topic_source, note, estimated_hours) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
               [
                 newTask.id, 
@@ -274,11 +275,11 @@ module.exports = (app, query, authenticate) => {
             );
             
             const newPhaseId = phaseResult.rows[0].id;
-
+ 
             // Insert Phase Assignees & Hours
             if (ph.assignee_hours && ph.assignee_hours.length > 0) {
               for (const ah of ph.assignee_hours) {
-                await query(
+                await client.query(
                   "INSERT INTO phase_assignees (phase_id, employee_id, estimated_hours) VALUES ($1, $2, $3)",
                   [newPhaseId, ah.id, ah.estimated_hours || null]
                 );
@@ -288,12 +289,14 @@ module.exports = (app, query, authenticate) => {
           newTask.phases = phases;
         }
         
-        // await query("COMMIT");
+        await client.query("COMMIT");
         res.status(201).json(newTask);
       } catch (err) {
-        // await query("ROLLBACK");
+        await client.query("ROLLBACK");
         console.error("POST /tasks Error:", err);
         res.status(500).json({ error: "Database error" });
+      } finally {
+        client.release();
       }
     } catch (validationError) {
       if (validationError.errors) {
@@ -309,7 +312,10 @@ module.exports = (app, query, authenticate) => {
     const { title, description, label, topics, assignee_ids, deadline, status, position,
             planned_start, planned_end, actual_start, actual_end, estimated_hours, phases } = req.body;
     
+    const client = await pool.connect();
     try {
+      await client.query("BEGIN");
+      
       const validatedData = taskUpdateSchema.parse({
         title, description, label, topics, deadline, planned_start, planned_end, actual_start, actual_end, status, position, assignee_ids, estimated_hours
       });
@@ -322,17 +328,15 @@ module.exports = (app, query, authenticate) => {
       } = validatedData;
     
       try {
-        // await query("BEGIN");
-        
-        const existing = await query("SELECT * FROM tasks WHERE id = $1", [id]);
+        const existing = await client.query("SELECT * FROM tasks WHERE id = $1", [id]);
         if (!existing.rows.length) {
-          // await query("ROLLBACK");
+          await client.query("ROLLBACK");
           return res.status(404).json({ error: "Task not found" });
         }
         const t = existing.rows[0];
         
         // 1. Update main task
-        const taskResult = await query(
+        const taskResult = await client.query(
           "UPDATE tasks SET title=$1, description=$2, label=$3, deadline=$4, planned_start=$5, planned_end=$6, actual_start=$7, actual_end=$8, status=$9, position=$10, estimated_hours=$11 WHERE id=$12 RETURNING *",
           [validatedTitle ?? t.title, validatedDescription ?? t.description,
            validatedLabel ?? t.label,
@@ -348,44 +352,44 @@ module.exports = (app, query, authenticate) => {
 
         // Audit log: task updated
         const ctx = getAuditContext(req);
-        logAudit(query, { ...ctx, action: 'UPDATE', entityType: 'task', entityId: updatedTask.id, details: { title: updatedTask.title } });
+        logAudit(client.query.bind(client), { ...ctx, action: 'UPDATE', entityType: 'task', entityId: updatedTask.id, details: { title: updatedTask.title } });
 
         // 2. Update Assignees
         if (validatedAssigneeIds !== undefined) {
-          await query("DELETE FROM task_assignees WHERE task_id = $1", [id]);
+          await client.query("DELETE FROM task_assignees WHERE task_id = $1", [id]);
           if (validatedAssigneeIds.length > 0) {
-            await query("INSERT INTO task_assignees (task_id, employee_id) SELECT $1, unnest($2::int[])", [id, validatedAssigneeIds]);
-            const emps = await query("SELECT id, name FROM employees WHERE id = ANY($1)", [validatedAssigneeIds]);
+            await client.query("INSERT INTO task_assignees (task_id, employee_id) SELECT $1, unnest($2::int[])", [id, validatedAssigneeIds]);
+            const emps = await client.query("SELECT id, name FROM employees WHERE id = ANY($1)", [validatedAssigneeIds]);
             updatedTask.assignees = emps.rows;
           }
         } else {
-           const existingEmps = await query(`SELECT e.id, e.name FROM employees e JOIN task_assignees ta ON e.id = ta.employee_id WHERE ta.task_id = $1`, [id]);
+           const existingEmps = await client.query(`SELECT e.id, e.name FROM employees e JOIN task_assignees ta ON e.id = ta.employee_id WHERE ta.task_id = $1`, [id]);
            updatedTask.assignees = existingEmps.rows;
         }
 
         // 3. Update Topics
         if (validatedTopics !== undefined) {
-          await query("DELETE FROM task_topics WHERE task_id = $1", [id]);
+          await client.query("DELETE FROM task_topics WHERE task_id = $1", [id]);
           if (validatedTopics.length > 0) {
-            await query("INSERT INTO task_topics (task_id, topic) SELECT $1, unnest($2::varchar[])", [id, validatedTopics]);
+            await client.query("INSERT INTO task_topics (task_id, topic) SELECT $1, unnest($2::varchar[])", [id, validatedTopics]);
             updatedTask.topics = validatedTopics;
           } else {
             updatedTask.topics = [];
           }
         } else {
-           const existingTopics = await query(`SELECT topic FROM task_topics WHERE task_id = $1`, [id]);
+           const existingTopics = await client.query(`SELECT topic FROM task_topics WHERE task_id = $1`, [id]);
            updatedTask.topics = existingTopics.rows.map(row => row.topic);
         }
 
         // 4. Update Phases (Delete old, insert new)
         if (phases !== undefined) {
-          await query("DELETE FROM task_phases WHERE task_id = $1", [id]); 
+          await client.query("DELETE FROM task_phases WHERE task_id = $1", [id]); 
           
           if (phases.length > 0) {
             for (let i = 0; i < phases.length; i++) {
               const ph = phases[i];
               
-              const phaseResult = await query(
+              const phaseResult = await client.query(
                 "INSERT INTO task_phases (task_id, name, position, start_date, end_date, status, topic_source, note, estimated_hours) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
                 [
                   id, 
@@ -404,7 +408,7 @@ module.exports = (app, query, authenticate) => {
 
               if (ph.assignee_hours && ph.assignee_hours.length > 0) {
                 for (const ah of ph.assignee_hours) {
-                  await query(
+                  await client.query(
                     "INSERT INTO phase_assignees (phase_id, employee_id, estimated_hours) VALUES ($1, $2, $3)",
                     [newPhaseId, ah.id, ah.estimated_hours || null]
                   );
@@ -414,19 +418,22 @@ module.exports = (app, query, authenticate) => {
           }
         }
 
-        // await query("COMMIT");
+        await client.query("COMMIT");
         res.json(updatedTask);
       } catch (err) {
-        // await query("ROLLBACK");
+        await client.query("ROLLBACK");
         console.error("PUT /tasks Error:", err);
         res.status(500).json({ error: "Database error" });
       }
     } catch (validationError) {
+      await client.query("ROLLBACK");
       if (validationError.errors) {
         const errorMessage = validationError.errors.map(err => `${err.path.join('.')}: ${err.message}`).join(', ');
         return res.status(400).json({ error: errorMessage });
       }
       return res.status(400).json({ error: validationError.message });
+    } finally {
+      client.release();
     }
   });
 

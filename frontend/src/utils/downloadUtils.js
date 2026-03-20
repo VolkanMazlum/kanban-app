@@ -4,16 +4,11 @@
  * @param {string} filename - The default filename for the saved file
  */
 export async function downloadAuthenticatedFile(apiPath, filename) {
-  const token = localStorage.getItem("token");
-  
-  // Use the full URL if needed, or stick to the relative /api prefix
   const url = apiPath.startsWith('http') ? apiPath : `/api${apiPath}`;
-
+ 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
+    credentials: 'include'
   });
 
   if (!response.ok) {
