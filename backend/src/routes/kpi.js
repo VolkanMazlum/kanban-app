@@ -141,14 +141,9 @@ module.exports = (app, query, authenticate) => {
 
       // 5. Monthly Proforma (Pending payments)
       const proformaRes = await query(`
-        SELECT SUM(fl.proforma) as total_proforma
-        FROM fatturato_lines fl
-        JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
-        JOIN commesse c ON cc.commessa_id = c.id
-        LEFT JOIN tasks t ON c.task_id = t.id
-        -- We only count proforma for commesse active in this month or with non-zero proforma
-        WHERE (t.planned_start <= $2 AND t.planned_end >= $1)
-           OR (fl.proforma > 0)
+        SELECT SUM(amount) as total_proforma
+        FROM fatturato_proforma
+        WHERE date >= $1 AND date <= $2
       `, [monthStart, monthEnd]);
       const totalProforma = parseFloat(proformaRes.rows[0].total_proforma || 0);
 
@@ -237,6 +232,27 @@ module.exports = (app, query, authenticate) => {
         });
       }
 
+      // 7. Proforma Trend: Next 6 months (Projected)
+      const proformaTrend = [];
+      for (let i = 0; i < 6; i++) {
+        const d = new Date(year, month - 1 + i, 1);
+        const ty = d.getFullYear();
+        const tm = d.getMonth() + 1;
+        const tmStart = `${ty}-${String(tm).padStart(2, '0')}-01`;
+        const tmEnd = new Date(ty, tm, 0).toISOString().slice(0, 10);
+
+        const pRes = await query(`
+          SELECT SUM(amount) as total 
+          FROM fatturato_proforma 
+          WHERE date >= $1 AND date <= $2
+        `, [tmStart, tmEnd]);
+
+        proformaTrend.push({
+          month: d.toLocaleString('en-US', { month: 'short' }),
+          total: Math.round(parseFloat(pRes.rows[0].total || 0))
+        });
+      }
+
       const summary = {
         total: monthTotalTasks,
         working_employees_res: `${teamRes.rows[0].active_count} / ${totalEmpRes.rows[0].count}`,
@@ -259,6 +275,7 @@ module.exports = (app, query, authenticate) => {
         summary,
         by_status,
         trend: costTrend,
+        proforma_trend: proformaTrend,
         monthLabel: new Date(year, month - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
       });
     } catch (err) {

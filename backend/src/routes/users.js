@@ -82,7 +82,7 @@ module.exports = (app, query) => {
   // PATCH /api/users/:id — Update user (HR only)
   app.patch('/api/users/:id', authenticateHR, async (req, res) => {
     const { id } = req.params;
-    const { name, role, is_active, password, position, category, hr_details } = req.body;
+    const { name, username, role, is_active, password, position, category, hr_details } = req.body;
 
     try {
       const updates = [];
@@ -90,6 +90,7 @@ module.exports = (app, query) => {
       let paramIdx = 1;
 
       if (name !== undefined) { updates.push(`name = $${paramIdx++}`); values.push(name); }
+      if (username !== undefined) { updates.push(`username = $${paramIdx++}`); values.push(username); }
       if (role !== undefined && ['standard', 'hr'].includes(role)) { updates.push(`role = $${paramIdx++}`); values.push(role); }
       if (is_active !== undefined) { updates.push(`is_active = $${paramIdx++}`); values.push(is_active); }
       if (password) {
@@ -98,39 +99,46 @@ module.exports = (app, query) => {
         values.push(hash);
       }
 
-      if (updates.length === 0 && position === undefined && category === undefined && hr_details === undefined) {
+      const hasUserTableUpdates = updates.length > 0;
+      const hasEmployeeTableUpdates = position !== undefined || category !== undefined || hr_details !== undefined || name !== undefined || is_active !== undefined;
+
+      if (!hasUserTableUpdates && !hasEmployeeTableUpdates) {
         return res.status(400).json({ error: 'No valid fields to update' });
       }
 
-      updates.push(`updated_at = NOW()`);
-      values.push(id);
-
-      const result = await query(
-        `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIdx} RETURNING id, username, name, role, is_active, employee_id`,
-        values
-      );
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'User not found' });
+      let updatedUser;
+      if (hasUserTableUpdates) {
+        updates.push(`updated_at = NOW()`);
+        values.push(id);
+        const result = await query(
+          `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIdx} RETURNING id, username, name, role, is_active, employee_id`,
+          values
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+        updatedUser = result.rows[0];
+      } else {
+        const result = await query('SELECT id, username, name, role, is_active, employee_id FROM users WHERE id = $1', [id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+        updatedUser = result.rows[0];
       }
 
-      // Sync is_active status and position with employees table if they were updated
-      const empId = result.rows[0].employee_id;
-      if ((is_active !== undefined || position !== undefined || category !== undefined || hr_details !== undefined) && empId) {
+      // Sync with employees table
+      const empId = updatedUser.employee_id;
+      if (hasEmployeeTableUpdates && empId) {
         const empUpdates = [];
         const empValues = [];
         let eIdx = 1;
+        if (name !== undefined) { empUpdates.push(`name = $${eIdx++}`); empValues.push(name); }
         if (is_active !== undefined) { empUpdates.push(`is_active = $${eIdx++}`); empValues.push(is_active); }
         if (position !== undefined) { empUpdates.push(`position = $${eIdx++}`); empValues.push(position); }
         if (category !== undefined) { empUpdates.push(`category = $${eIdx++}`); empValues.push(category); }
         if (hr_details !== undefined) { empUpdates.push(`hr_details = $${eIdx++}`); empValues.push(hr_details); }
+        
         if (empUpdates.length > 0) {
           empValues.push(empId);
           await query(`UPDATE employees SET ${empUpdates.join(', ')} WHERE id = $${eIdx}`, empValues);
         }
       }
-
-      const updatedUser = result.rows[0];
 
       // Audit log: user updated
       const ctx = getAuditContext(req);

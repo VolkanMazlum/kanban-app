@@ -12,9 +12,14 @@ export default function EmployeeCostsTab({ costs, loadingCosts, setSelectedEmpHR
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ background: "#F9FAFB" }}>
-            {["Employee", "Annual Gross", "Overtime (h)", "Total Hours", "Rate (Theory)", "Rate (Dynamic)", "Valid From", "Actions"].map(header => (
-              <th key={header} style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: header === "Employee" ? "left" : "center", letterSpacing: "0.05em" }}>{header.toUpperCase()}</th>
-            ))}
+            <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "left", letterSpacing: "0.05em" }}>EMPLOYEE</th>
+            <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "center", letterSpacing: "0.05em" }}>ANNUAL GROSS</th>
+            <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "center", letterSpacing: "0.05em" }}>OVERTIME (H)</th>
+            <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "center", letterSpacing: "0.05em" }} title="Total hours worked (Timesheet records)">TOTAL HOURS (WORKED) ⓘ</th>
+            <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "center", letterSpacing: "0.05em" }} title="Based on 2000 hours per year">RATE (THEORY) ⓘ</th>
+            <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "center", letterSpacing: "0.05em" }} title="Calculation: Annual Gross / Total Worked Hours">RATE (DYNAMIC) ⓘ</th>
+            <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "center", letterSpacing: "0.05em" }}>VALID FROM</th>
+            <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "center", letterSpacing: "0.05em" }}>ACTIONS</th>
           </tr>
         </thead>
         <tbody>

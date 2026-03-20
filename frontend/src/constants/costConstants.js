@@ -12,7 +12,8 @@ export const getEmptyLine = () => ({
   attivita: "", descrizione: "", valore_ordine: "", fatturato_amount: "",
   rimanente_probabile: "", proforma: "", note: "",
   ordini: [],
-  realized: []
+  realized: [],
+  proforma_entries: []
 });
 
 export const getEmptyClient = () => ({

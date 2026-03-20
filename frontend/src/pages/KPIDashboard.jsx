@@ -126,16 +126,17 @@ export default function KPIDashboard({ employees }) {
   if (loading && !kpiData) return <div style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontFamily: "'Inter',sans-serif", fontSize: 14 }}>Loading KPIs...</div>;
   if (!kpiData) return null;
 
-  const { summary, by_status, trend } = kpiData;
-  const maxTrend = trend.length ? Math.max(...trend.map(t => t.total), 1) : 1;
+  const { summary, by_status, trend, proforma_trend } = kpiData;
+  const maxTrend = trend?.length ? Math.max(...trend.map(t => t.total), 1) : 1;
   const maxForecast = summary.forecast?.length ? Math.max(...summary.forecast.map(f => f.total), 1) : 1;
+  const maxProformaTrend = proforma_trend?.length ? Math.max(...proforma_trend.map(p => p.total), 1) : 1;
 
   const cards = [
     { icon: "📊", label: "Monthly Tasks", val: summary.total, color: "#2563EB", bg: "#EFF6FF" },
-    { icon: "✅", label: "Completion Rate", val: summary.completed_month, color: "#059669", bg: "#ECFDF5" },
-    { icon: "🕒", label: "Proforma Pending", val: `€${(summary.total_proforma || 0).toLocaleString("it-IT", { minimumFractionDigits: 0 })}`, color: "#F59E0B", bg: "#FFF7ED" },
-    { icon: "💶", label: "Scheduled Revenue", val: `€${(summary.monthly_revenue || 0).toLocaleString("it-IT", { minimumFractionDigits: 0 })}`, color: "#7C3AED", bg: "#F5F3FF" },
+    { icon: "✅", label: "Completed", val: summary.completed_count, color: "#059669", bg: "#ECFDF5" },
+    { icon: "⚠️", label: "Overdue", val: summary.overdue, color: "#DC2626", bg: "#FEF2F2" },
     { icon: "👥", label: "Utilization", val: monthlyData ? `${Math.round((monthlyData.employees.reduce((sum, emp) => sum + parseFloat(emp.phase_hours || 0), 0) / (employees.length * MAX_CAPACITY)) * 100)}%` : "0%", color: "#0891B2", bg: "#ECFEFF" },
+    { icon: "💰", label: "Fatturato (Taken)", val: `€${(summary.monthly_revenue || 0).toLocaleString("it-IT", { minimumFractionDigits: 0 })}`, color: "#7C3AED", bg: "#F5F3FF" },
   ];
 
   const statusColors = { new: "#6366F1", process: "#F59E0B", blocked: "#DC2626", done: "#059669" };
@@ -169,7 +170,7 @@ export default function KPIDashboard({ employees }) {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr 0.8fr 2fr", gap: 20, marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr 0.8fr 0.8fr 1.5fr", gap: 16, marginBottom: 24 }}>
         {/* Status Mix Graph */}
         <div style={{ background: "#fff", borderRadius: 12, padding: 20, border: "1px solid #E5E7EB", display: "flex", flexDirection: "column" }}>
           <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: "0 0 16px" }}>Monthly Status Mix</h3>
@@ -215,7 +216,7 @@ export default function KPIDashboard({ employees }) {
         {/* Monthly Cost Trend */}
         <div style={{ background: "#fff", borderRadius: 12, padding: 20, border: "1px solid #E5E7EB", display: "flex", flexDirection: "column" }}>
           <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: "0 0 20px" }}>Monthly Cost Trend</h3>
-          {trend.length === 0
+          {trend?.length === 0
             ? <div style={{ color: "#9CA3AF", fontSize: 12, textAlign: "center", padding: "20px 0", flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>No cost data</div>
             : (
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flex: 1, paddingBottom: 10 }}>
@@ -227,6 +228,25 @@ export default function KPIDashboard({ employees }) {
                         <div style={{ background: "#FCA5A5", height: `${((t.overhead || 0) / (t.total || 1)) * 100}%`, width: "100%" }} />
                     </div>
                     <div style={{ fontSize: 8, color: "#9CA3AF", textAlign: "center", fontWeight: 600 }}>{t.month}</div>
+                  </div>
+                ))}
+              </div>
+            )
+          }
+        </div>
+
+        {/* Proforma Trend (Projected) */}
+        <div style={{ background: "#fff", borderRadius: 12, padding: 20, border: "1px solid #E5E7EB", display: "flex", flexDirection: "column" }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: "0 0 20px" }}>Projected Proforma</h3>
+          {proforma_trend?.length === 0
+            ? <div style={{ color: "#9CA3AF", fontSize: 12, textAlign: "center", padding: "20px 0", flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>No proforma data</div>
+            : (
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flex: 1, paddingBottom: 10 }}>
+                {proforma_trend.map(p => (
+                  <div key={p.month} title={`Projected: €${p.total?.toLocaleString('it-IT')}`} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, cursor: "help" }}>
+                    <div style={{ fontSize: 8, fontWeight: 700, color: "#2563EB" }}>€{Math.round((p.total || 0) / 1000)}k</div>
+                    <div style={{ width: "100%", background: "#3B82F6", height: `${Math.max(((p.total || 0) / maxProformaTrend) * 70, 4)}px`, borderRadius: "4px 4px 0 0", opacity: 0.8 }} />
+                    <div style={{ fontSize: 8, color: "#9CA3AF", textAlign: "center", fontWeight: 600 }}>{p.month}</div>
                   </div>
                 ))}
               </div>

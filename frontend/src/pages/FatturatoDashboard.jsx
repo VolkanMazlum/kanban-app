@@ -224,6 +224,36 @@ export default function FatturatoDashboard({ isHR }) {
 
     setFattForm({ ...fattForm, clients: newClients });
   };
+
+  // ---- PROFORMA HANDLERS ----
+  const addProformaToLine = (cIdx, lIdx) => {
+    const newClients = [...fattForm.clients];
+    if (!newClients[cIdx].lines[lIdx].proforma_entries) newClients[cIdx].lines[lIdx].proforma_entries = [];
+    newClients[cIdx].lines[lIdx].proforma_entries.push({ amount: "", date: new Date().toISOString().split('T')[0], note: "" });
+    setFattForm({ ...fattForm, clients: newClients });
+  };
+
+  const handleProformaChange = (cIdx, lIdx, pIdx, field, val) => {
+    const newClients = [...fattForm.clients];
+    newClients[cIdx].lines[lIdx].proforma_entries[pIdx][field] = val;
+
+    // Auto-update total proforma for the line
+    const totalProf = newClients[cIdx].lines[lIdx].proforma_entries.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+    newClients[cIdx].lines[lIdx].proforma = totalProf > 0 ? totalProf.toString() : "";
+
+    setFattForm({ ...fattForm, clients: newClients });
+  };
+
+  const removeProformaFromLine = (cIdx, lIdx, pIdx) => {
+    const newClients = [...fattForm.clients];
+    newClients[cIdx].lines[lIdx].proforma_entries.splice(pIdx, 1);
+
+    // Auto-update total proforma for the line
+    const totalProf = newClients[cIdx].lines[lIdx].proforma_entries.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+    newClients[cIdx].lines[lIdx].proforma = totalProf > 0 ? totalProf.toString() : "";
+
+    setFattForm({ ...fattForm, clients: newClients });
+  };
   const handleOrdineChange = (cIdx, lIdx, oIdx, field, val) => {
     const newClients = [...fattForm.clients];
     const newLine = { ...newClients[cIdx].lines[lIdx] };
@@ -530,8 +560,9 @@ export default function FatturatoDashboard({ isHR }) {
                                 placeholder="Proforma €"
                                 value={line.proforma}
                                 onChange={e => handleLineChange(cIdx, lIdx, "proforma", e.target.value)}
-                                style={{ ...inpStyle, padding: "6px" }}
-                                title="Expected payment (Customer promised but not paid yet)"
+                                style={{ ...inpStyle, padding: "6px", background: (line.proforma_entries && line.proforma_entries.length > 0) ? "#F3F4F6" : "#fff" }}
+                                readOnly={line.proforma_entries && line.proforma_entries.length > 0}
+                                title={line.proforma_entries && line.proforma_entries.length > 0 ? "Calculated from Proforma History" : "Expected payment"}
                               />
                             </div>
                             <button onClick={() => removeLineFromClient(cIdx, lIdx)} disabled={client.lines.length === 1} style={{ background: "#F3F4F6", color: "#DC2626", border: "none", padding: "6px 10px", borderRadius: 6, cursor: client.lines.length > 1 ? "pointer" : "not-allowed" }}>✕</button>
@@ -560,8 +591,36 @@ export default function FatturatoDashboard({ isHR }) {
                             ))}
                           </div>
 
+                          {/* Nested Proforma Entries */}
+                          <div style={{ marginLeft: 20, borderLeft: "2px solid #3B82F6", paddingLeft: 12, marginTop: 12 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontSize: 9, fontWeight: 700, color: "#2563EB" }}>PROFORMA ENTRIES (ITEMIZED)</span>
+                                {(() => {
+                                  const total = (line.proforma_entries || []).reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+                                  if (total > 0) return <span style={{ fontSize: 9, fontWeight: 700, color: "#2563EB" }}>TOTAL: €{fmtEu(total)}</span>;
+                                  return null;
+                                })()}
+                              </div>
+                              <button onClick={() => addProformaToLine(cIdx, lIdx)} style={{ background: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE", padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>+ Add Proforma</button>
+                            </div>
+                            {(line.proforma_entries || []).map((prof, pIdx) => (
+                              <div key={pIdx} style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+                                <input
+                                  type="date"
+                                  value={prof.date ? prof.date.split('T')[0] : ""}
+                                  onChange={e => handleProformaChange(cIdx, lIdx, pIdx, "date", e.target.value)}
+                                  style={{ ...inpStyle, flex: 1, padding: "4px", fontSize: 11 }}
+                                />
+                                <input type="number" placeholder="Amount €" value={prof.amount} onChange={e => handleProformaChange(cIdx, lIdx, pIdx, "amount", e.target.value)} style={{ ...inpStyle, flex: 1, padding: "4px", fontSize: 11 }} />
+                                <input placeholder="Note" value={prof.note} onChange={e => handleProformaChange(cIdx, lIdx, pIdx, "note", e.target.value)} style={{ ...inpStyle, flex: 2, padding: "4px", fontSize: 11 }} />
+                                <button onClick={() => removeProformaFromLine(cIdx, lIdx, pIdx)} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 12 }}>✕</button>
+                              </div>
+                            ))}
+                          </div>
+
                           {/* Nested Realized (Billing History) */}
-                          <div style={{ marginLeft: 20, borderLeft: "2px solid #10B981", paddingLeft: 12 }}>
+                          <div style={{ marginLeft: 20, borderLeft: "2px solid #10B981", paddingLeft: 12, marginTop: 12 }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                 <span style={{ fontSize: 9, fontWeight: 700, color: "#059669" }}>REGISTERED BILLING (REALIZED)</span>
