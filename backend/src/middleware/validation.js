@@ -12,15 +12,15 @@ const taskSchema = z.object({
   description: z.string().optional(),
   topics: z.array(z.string()).optional().default([]),
   deadline: z.string().nullable().optional()
-    .refine(val => val === null || !isNaN(Date.parse(val)), {
+    .refine(val => val === null || val === undefined || !isNaN(Date.parse(val)), {
       message: "Invalid date format"
     }),
   planned_start: z.string().nullable().optional()
-    .refine(val => val === null || !isNaN(Date.parse(val)), {
+    .refine(val => val === null || val === undefined || !isNaN(Date.parse(val)), {
       message: "Invalid date format"
     }),
   planned_end: z.string().nullable().optional()
-    .refine(val => val === null || !isNaN(Date.parse(val)), {
+    .refine(val => val === null || val === undefined || !isNaN(Date.parse(val)), {
       message: "Invalid date format"
     }),
   actual_start: dateField, 
@@ -32,7 +32,7 @@ const taskSchema = z.object({
     v => (v === "" || v === null || v === undefined) ? null : Number(v),
     z.number().nullable().optional()
   ),
-  label: z.string().optional().default(null)
+  label: z.string().nullable().optional().default(null)
 });
 
 // Validation schema for task updates
@@ -41,15 +41,15 @@ const taskUpdateSchema = z.object({
   description: z.string().optional(),
   topics: z.array(z.string()).optional().default([]),
   deadline: z.string().nullable().optional()
-    .refine(val => val === null || !isNaN(Date.parse(val)) || val === undefined, {
+    .refine(val => val === null || val === undefined || !isNaN(Date.parse(val)), {
       message: "Invalid date format"
     }),
   planned_start: z.string().nullable().optional()
-    .refine(val => val === null || !isNaN(Date.parse(val)) || val === undefined, {
+    .refine(val => val === null || val === undefined || !isNaN(Date.parse(val)), {
       message: "Invalid date format"
     }),
   planned_end: z.string().nullable().optional()
-    .refine(val => val === null || !isNaN(Date.parse(val)) || val === undefined, {
+    .refine(val => val === null || val === undefined || !isNaN(Date.parse(val)), {
       message: "Invalid date format"
     }),
   actual_start: dateField,
@@ -61,7 +61,7 @@ const taskUpdateSchema = z.object({
     v => (v === "" || v === null || v === undefined) ? null : Number(v),
     z.number().nullable().optional()
   ),
-  label: z.string().optional().default(null)
+  label: z.string().nullable().optional().default(null)
 }).partial();
 
 // Validation schema for employee creation

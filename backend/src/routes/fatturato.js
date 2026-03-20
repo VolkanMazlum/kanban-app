@@ -181,6 +181,12 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           }
         }
       }
+      if (task_id) {
+        const existing = await query("SELECT id FROM commesse WHERE task_id = $1", [task_id]);
+        if (existing.rows.length > 0) {
+          return res.status(400).json({ error: "This task is already linked to another commessa." });
+        }
+      }
 
       await query("BEGIN");
 
@@ -264,6 +270,13 @@ module.exports = (app, query, authenticate, authenticateHR) => {
               }
             }
           }
+        }
+      }
+
+      if (task_id) {
+        const existing = await query("SELECT id FROM commesse WHERE task_id = $1 AND id <> $2", [task_id, commId]);
+        if (existing.rows.length > 0) {
+          return res.status(400).json({ error: "This task is already linked to another commessa." });
         }
       }
 

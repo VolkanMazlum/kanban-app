@@ -60,9 +60,11 @@ app.use('/api', (req, res, next) => {
 
 // 3. Routes & Logic
 // Seed default users on startup
-seedUsers(query)
-  .then(() => console.log(" User seeding complete"))
-  .catch(err => console.error(" Seed error:", err.message));
+if (process.env.NODE_ENV !== 'test') {
+  seedUsers(query)
+    .then(() => console.log(" User seeding complete"))
+    .catch(err => console.error(" Seed error:", err.message));
+}
 
 app.get("/health", (req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
 
@@ -93,4 +95,8 @@ app.post('/api/logout', (req, res) => {
 
 app.get("/", (req, res) => res.send("Welcome to the TEKSER API!"));
 
-app.listen(PORT, () => console.log(` TEKSER API running on http://localhost:${PORT}`));
+if (require.main === module && process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => console.log(` TEKSER API running on http://localhost:${PORT}`));
+}
+
+module.exports = app;
