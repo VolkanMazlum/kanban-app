@@ -233,13 +233,12 @@ router.get('/finances', authenticateHR, async (req, res) => {
     // 2. Comprehensive Labor & Employee Cost Logic
     // We need: total hours per month, hours per month/project, and EVERY employee's gross.
     const allEmployeesCost = await query(`
-      SELECT e.id, e.name, e.category, ec.annual_gross, 
+      SELECT e.id, e.name, e.category, e.hr_details, ec.annual_gross, 
              EXTRACT(YEAR FROM ec.valid_from)::int as start_year,
              EXTRACT(MONTH FROM ec.valid_from)::int as start_month
       FROM employees e
       JOIN employee_costs ec ON e.id = ec.employee_id
-      WHERE $1 = 'all' OR EXTRACT(YEAR FROM ec.valid_from) <= $1::int
-    `, [year || 'all']);
+    `);
 
     const laborSplit = await query(`
       SELECT 
@@ -307,19 +306,43 @@ router.get('/finances', authenticateHR, async (req, res) => {
       for (let m = 1; m <= 12; m++) {
         allEmployeesCost.rows.forEach(emp => {
           // Find the latest annual_gross for this employee valid at (y-m-28)
-          const validCosts = allEmployeesCost.rows
-            .filter(c => c.id === emp.id)
+          const allForEmp = allEmployeesCost.rows.filter(c => c.id === emp.id);
+          const validCosts = allForEmp
             .filter(c => (c.start_year < y) || (c.start_year === y && c.start_month <= m))
             .sort((a,b) => (b.start_year - a.start_year) || (b.start_month - a.start_month));
           
+          let currentGross = 0;
           if (validCosts.length > 0) {
-            const currentGross = parseFloat(validCosts[0].annual_gross);
+            currentGross = parseFloat(validCosts[0].annual_gross);
+          } else if (allForEmp.length > 0) {
+            // Fallback: Use the earliest available cost record if none exist for the period
+            const earliest = [...allForEmp].sort((a,b) => (a.start_year - b.start_year) || (a.start_month - b.start_month))[0];
+            currentGross = parseFloat(earliest.annual_gross);
+          }
+
+          if (currentGross > 0) {
               const workedInYear = employeeMonthlyTotals.rows.some(et => et.employee_id === emp.id && et.year === y);
               const monthLog = employeeMonthlyTotals.rows.find(et => et.employee_id === emp.id && et.year === y && et.month === m);
               if (emp.category === 'consultant') {
-                // If inactive, count for all months of that year if they worked at all in that year
-                if (emp.is_active || workedInYear) {
-                  yearlyMap[y].totalConsultantCost += (currentGross / 12);
+                // If we haven't processed this consultant for year 'y' yet, check eligibility for the WHOLE year
+                if (m === 1) { // We only need to do this once per consultant per year
+                  const hr = emp.hr_details || {};
+                  const startStr = hr.inizio_lavoro;
+                  const endStr = hr.scadenza_contratto;
+                  let isEligibleForYear = true;
+
+                  const startYear = startStr ? new Date(startStr).getFullYear() : -Infinity;
+                  const endYear = endStr ? new Date(endStr).getFullYear() : Infinity;
+
+                  if (y < startYear || y > endYear) {
+                    isEligibleForYear = false;
+                  }
+
+                  if (isEligibleForYear) {
+                    // For consultants, we add the full annual gross once per year 
+                    // (since the user said "it is given once, just add it to that year if they worked in it")
+                    yearlyMap[y].totalConsultantCost += currentGross;
+                  }
                 }
               } else if (monthLog) {
                 yearlyMap[y].totalCompanyLabor += (parseFloat(monthLog.total_hours) * currentGross / 2000);

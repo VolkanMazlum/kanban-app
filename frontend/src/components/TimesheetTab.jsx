@@ -79,76 +79,83 @@ export default function TimesheetTab({
               <span style={{fontSize:16,fontWeight:700,color:"#2563EB"}}>{totalWorkerHours.toFixed(1)}h</span>
             </div>
 
-            <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:8}}>
-              {Array.from({length: (days[0].getDay() + 6) % 7}).map((_, i) => (
-                <div key={`empty-${i}`} />
-              ))}
-              {days.map(day => {
-                const dateStr   = day.toISOString().slice(0,10);
-                const isPast    = day <= today;
-                const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-                const isToday   = day.toDateString() === today.toDateString();
-                const dayLabel  = day.toLocaleString("en-US", { weekday:"short" });
+            <div style={{ overflowX: "auto", paddingBottom: 10 }}>
+              <div style={{
+                display: "grid", 
+                gridTemplateColumns: "repeat(7, 1fr)", 
+                gap: 8,
+                minWidth: "850px" 
+              }}>
+                {Array.from({length: (days[0].getDay() + 6) % 7}).map((_, i) => (
+                  <div key={`empty-${i}`} />
+                ))}
+                {days.map(day => {
+                  const dateStr   = day.toISOString().slice(0,10);
+                  const isPast    = day <= today;
+                  const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+                  const isToday   = day.toDateString() === today.toDateString();
+                  const dayLabel  = day.toLocaleString("en-US", { weekday:"short" });
 
-                const activeTasksOnThisDay = assignedTasks.filter(t => {
-                  const dayTime = day.getTime();
-                  const start = t.actual_start || t.planned_start || t.created_at;
-                  const startTime = new Date(start).setHours(0,0,0,0);
-                  const end = t.actual_end || t.planned_end;
-                  const endTime = end ? new Date(end).setHours(23,59,59,999) : Infinity;
-                  return dayTime >= startTime && dayTime <= endTime;
-                });
+                  const activeTasksOnThisDay = assignedTasks.filter(t => {
+                    const dayTime = day.getTime();
+                    const start = t.actual_start || t.planned_start || t.created_at;
+                    const startTime = new Date(start).setHours(0,0,0,0);
+                    const end = t.actual_end || t.planned_end;
+                    const endTime = end ? new Date(end).setHours(23,59,59,999) : Infinity;
+                    return dayTime >= startTime && dayTime <= endTime;
+                  });
 
-                const dayTotal = assignedTasks.reduce((sum, t) => sum + (parseFloat(dailyHours[t.id]?.[dateStr]?.hours) || 0), 0);
-                const hasHours = dayTotal > 0;
+                  const dayTotal = assignedTasks.reduce((sum, t) => sum + (parseFloat(dailyHours[t.id]?.[dateStr]?.hours) || 0), 0);
+                  const hasHours = dayTotal > 0;
 
-                return (
-                  <div key={dateStr} style={{
-                    background: isWeekend ? "#F9FAFB" : hasHours ? "#F0FDF4" : "#fff",
-                    borderRadius:8, padding:"8px 8px 10px",
-                    border:`1.5px solid ${isToday ? "#2563EB" : hasHours ? "#86EFAC" : isWeekend ? "#F3F4F6" : "#E5E7EB"}`,
-                    opacity: isPast ? 1 : 0.35,
-                    display: "flex", flexDirection: "column", minHeight: 120
-                  }}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8, paddingBottom: 6, borderBottom: "1px dashed #E5E7EB"}}>
-                      <span style={{fontSize:9,fontWeight:700,color:isWeekend?"#D1D5DB":isToday?"#2563EB":"#9CA3AF"}}>{dayLabel}</span>
-                      <div style={{display: "flex", gap: 6, alignItems: "center"}}>
-                          {hasHours && <span style={{fontSize:10, fontWeight:700, color:"#059669"}}>{dayTotal}h</span>}
-                          <span style={{fontSize:13,fontWeight:700,color:isWeekend?"#D1D5DB":isToday?"#2563EB":"#111827"}}>{day.getDate()}</span>
+                  return (
+                    <div key={dateStr} style={{
+                      background: isWeekend ? "#F9FAFB" : hasHours ? "#F0FDF4" : "#fff",
+                      borderRadius:10, padding:"6px 8px 8px",
+                      border:`1.5px solid ${isToday ? "#2563EB" : hasHours ? "#86EFAC" : isWeekend ? "#F3F4F6" : "#E5E7EB"}`,
+                      opacity: isPast ? 1 : 0.35,
+                      display: "flex", flexDirection: "column", minHeight: 100
+                    }}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6, paddingBottom: 4, borderBottom: "1px dashed #E5E7EB"}}>
+                        <span style={{fontSize:9,fontWeight:700,color:isWeekend?"#D1D5DB":isToday?"#2563EB":"#9CA3AF"}}>{dayLabel}</span>
+                        <div style={{display: "flex", gap: 4, alignItems: "center"}}>
+                            {hasHours && <span style={{fontSize:10, fontWeight:700, color:"#059669"}}>{dayTotal}h</span>}
+                            <span style={{fontSize:12,fontWeight:700,color:isWeekend?"#D1D5DB":isToday?"#2563EB":"#111827"}}>{day.getDate()}</span>
+                        </div>
+                      </div>
+
+                      <div style={{maxHeight: 160, overflowY: "auto", paddingRight: 2}}>
+                        {activeTasksOnThisDay.length === 0 ? (
+                          <div style={{fontSize:8, color:"#D1D5DB", textAlign:"center", marginTop:8}}>No active tasks</div>
+                        ) : (
+                          activeTasksOnThisDay.map(task => {
+                            const entry = dailyHours[task.id]?.[dateStr] || { hours: "", note: "" };
+                            return (
+                              <div key={task.id} style={{marginBottom: 6}}>
+                                <div style={{fontSize:8.5, fontWeight:600, color:"#4B5563", marginBottom: 2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}} title={task.title}>
+                                  {task.title}
+                                </div>
+                                <input
+                                  type="number" min="0" max="24" step="0.5" disabled={!isPast}
+                                  value={entry.hours || ""}
+                                  onChange={e => setDailyHours(p => ({...p, [task.id]: {...(p[task.id]||{}), [dateStr]: {...(p[task.id]?.[dateStr]||{}), hours: e.target.value}}}))}
+                                  onBlur={e => isPast && handleDaySave(task.id, dateStr, e.target.value, entry.note)}
+                                  placeholder="h"
+                                  style={{
+                                    width:"100%", border:`1px solid ${entry.hours ? (isWeekend ? "#FDBA74" : "#86EFAC") : "#E5E7EB"}`,
+                                    borderRadius:4, padding:"3px 5px", fontSize:10.5, textAlign:"right",
+                                    background: isWeekend ? "#FFF7ED" : "#fff", color:"#111827", outline:"none"
+                                  }}
+                                />
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
                     </div>
-
-                    <div style={{maxHeight: 180, overflowY: "auto", paddingRight: 2}}>
-                      {activeTasksOnThisDay.length === 0 ? (
-                        <div style={{fontSize:9, color:"#D1D5DB", textAlign:"center", marginTop:10}}>No active tasks</div>
-                      ) : (
-                        activeTasksOnThisDay.map(task => {
-                          const entry = dailyHours[task.id]?.[dateStr] || { hours: "", note: "" };
-                          return (
-                            <div key={task.id} style={{marginBottom: 8}}>
-                              <div style={{fontSize:9, fontWeight:600, color:"#4B5563", marginBottom: 3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}} title={task.title}>
-                                {task.title}
-                              </div>
-                              <input
-                                type="number" min="0" max="24" step="0.5" disabled={!isPast}
-                                value={entry.hours || ""}
-                                onChange={e => setDailyHours(p => ({...p, [task.id]: {...(p[task.id]||{}), [dateStr]: {...(p[task.id]?.[dateStr]||{}), hours: e.target.value}}}))}
-                                onBlur={e => isPast && handleDaySave(task.id, dateStr, e.target.value, entry.note)}
-                                placeholder="h"
-                                style={{
-                                  width:"100%", border:`1px solid ${entry.hours ? (isWeekend ? "#FDBA74" : "#86EFAC") : "#E5E7EB"}`,
-                                  borderRadius:4, padding:"4px 6px", fontSize:11, textAlign:"right",
-                                  background: isWeekend ? "#FFF7ED" : "#fff", color:"#111827", outline:"none"
-                                }}
-                              />
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
             {saving && <div style={{marginTop:12,textAlign:"right",fontSize:11,color:"#9CA3AF"}}>Saving...</div>}
           </>

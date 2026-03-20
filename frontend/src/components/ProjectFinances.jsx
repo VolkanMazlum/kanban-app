@@ -118,15 +118,25 @@ export default function ProjectFinances({ isHR }) {
   });
 
   // Calculate Fixed Consultant costs for the period
-  const yearsInData = Object.keys(yearlyTotalWeights).length || 1;
-  const numYears = selectedYear === 'all' ? yearsInData : 1;
-  const totalConsultantFixed = costs
-    .filter(e => e.category === 'consultant')
-    .reduce((sum, e) => {
-      // If we are in 'all' view, we use the number of years they were actually present/active
-      // For now, using the numYears multiplier as a consistent baseline
-      return sum + (parseFloat(e.current_annual_gross) || 0) * numYears;
-    }, 0);
+  const weightYears = Object.keys(yearlyTotalWeights).map(y => parseInt("20" + y));
+  const gcYears = Object.keys(yearlyGeneralCosts).map(y => parseInt("20" + y));
+  const dataYears = Array.from(new Set([...weightYears, ...gcYears]));
+  if (dataYears.length === 0) dataYears.push(currentYear);
+
+  const targetYearsForConsultants = selectedYear === "all" ? dataYears : [parseInt(selectedYear)];
+  
+  let totalConsultantFixed = 0;
+  targetYearsForConsultants.forEach(y => {
+    costs.filter(e => e.category === 'consultant').forEach(e => {
+      const hr = e.hr_details || {};
+      const startYear = hr.inizio_lavoro ? new Date(hr.inizio_lavoro).getFullYear() : -Infinity;
+      const endYear = hr.scadenza_contratto ? new Date(hr.scadenza_contratto).getFullYear() : Infinity;
+
+      if (y >= startYear && y <= endYear) {
+        totalConsultantFixed += (parseFloat(e.current_annual_gross) || 0);
+      }
+    });
+  });
 
   // Task-specific summed values for display
   const getTaskFattData = (taskId, commNum) => {

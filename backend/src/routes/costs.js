@@ -61,9 +61,15 @@ module.exports = (app, query, authenticate, authenticateHR) => {
     try {
       const result = await query(`
         SELECT 
-          e.id, e.name, e.category,
-          COALESCE((SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id AND ($1::int IS NULL OR ec.valid_from <= MAKE_DATE($1::int, 12, 31)) ORDER BY ec.valid_from DESC LIMIT 1), 0) AS current_annual_gross,
-          (SELECT ec.valid_from::TEXT FROM employee_costs ec WHERE ec.employee_id = e.id AND ($1::int IS NULL OR ec.valid_from <= MAKE_DATE($1::int, 12, 31)) ORDER BY ec.valid_from DESC LIMIT 1) AS current_valid_from,
+          e.id, e.name, e.category, e.hr_details,
+          COALESCE(
+            (SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id AND ($1::int IS NULL OR ec.valid_from <= MAKE_DATE($1::int, 12, 31)) ORDER BY ec.valid_from DESC LIMIT 1),
+            (SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id ORDER BY ec.valid_from ASC LIMIT 1)
+          ) AS current_annual_gross,
+          COALESCE(
+            (SELECT ec.valid_from::TEXT FROM employee_costs ec WHERE ec.employee_id = e.id AND ($1::int IS NULL OR ec.valid_from <= MAKE_DATE($1::int, 12, 31)) ORDER BY ec.valid_from DESC LIMIT 1),
+            (SELECT ec.valid_from::TEXT FROM employee_costs ec WHERE ec.employee_id = e.id ORDER BY ec.valid_from ASC LIMIT 1)
+          ) AS current_valid_from,
           COALESCE((SELECT SUM(wh.hours) FROM employee_work_hours wh WHERE wh.employee_id = e.id AND ($1::int IS NULL OR EXTRACT(YEAR FROM wh.date) = $1)), 0) AS logged_hours,
           COALESCE((SELECT SUM(hours) FROM employee_overtime_costs WHERE employee_id = e.id AND ($1::int IS NULL OR year = $1)), 0) AS overtime_hours,
           COALESCE((SELECT json_agg(json_build_object('id', ec.id, 'annual_gross', ec.annual_gross, 'valid_from', ec.valid_from::TEXT) ORDER BY ec.valid_from DESC) FROM employee_costs ec WHERE ec.employee_id = e.id), '[]') AS cost_history

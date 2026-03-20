@@ -86,8 +86,11 @@ module.exports = (app, query, authenticate) => {
 
       // 4b. Monthly Labor Costs
       const laborRes = await query(`
-        SELECT e.id, e.name, e.category, COALESCE(wh_sum.hours, 0) as hours,
-               (SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id AND ec.valid_from <= $3 ORDER BY ec.valid_from DESC LIMIT 1) as annual_gross
+        SELECT e.id, e.name, e.category, e.hr_details, COALESCE(wh_sum.hours, 0) as hours,
+               COALESCE(
+                 (SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id AND ec.valid_from <= $3 ORDER BY ec.valid_from DESC LIMIT 1),
+                 (SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id ORDER BY ec.valid_from ASC LIMIT 1)
+               ) as annual_gross
         FROM employees e
         LEFT JOIN (
           SELECT employee_id, SUM(hours) as hours
@@ -98,11 +101,23 @@ module.exports = (app, query, authenticate) => {
         WHERE (e.is_active = TRUE 
            OR EXISTS (SELECT 1 FROM employee_work_hours wh WHERE wh.employee_id = e.id AND EXTRACT(YEAR FROM wh.date) = $1))
       `, [year, month, monthEnd]);
-
+ 
       const internal_labor = [];
       const consultant_labor = [];
-
+ 
       laborRes.rows.forEach(r => {
+        // Consultant year-eligibility check
+        if (r.category === 'consultant') {
+          const hr = r.hr_details || {};
+          const startStr = hr.inizio_lavoro;
+          const endStr = hr.scadenza_contratto;
+          
+          const startYear = startStr ? new Date(startStr).getFullYear() : -Infinity;
+          const endYear = endStr ? new Date(endStr).getFullYear() : Infinity;
+
+          if (year < startYear || year > endYear) return; 
+        }
+ 
         const hours = parseFloat(r.hours || 0);
         const cost = calculateMonthlyLaborCost({
           hours,
@@ -162,8 +177,11 @@ module.exports = (app, query, authenticate) => {
 
         // Labor
         const lRes = await query(`
-          SELECT e.category, COALESCE(wh_sum.hours, 0) as hours,
-                 (SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id AND ec.valid_from <= $3 ORDER BY ec.valid_from DESC LIMIT 1) as annual_gross
+          SELECT e.category, e.hr_details, COALESCE(wh_sum.hours, 0) as hours,
+                 COALESCE(
+                   (SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id AND ec.valid_from <= $3 ORDER BY ec.valid_from DESC LIMIT 1),
+                   (SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id ORDER BY ec.valid_from ASC LIMIT 1)
+                 ) as annual_gross
           FROM employees e
           LEFT JOIN (
             SELECT employee_id, SUM(hours) as hours
@@ -176,6 +194,17 @@ module.exports = (app, query, authenticate) => {
         `, [ty, tm, tmEnd]);
 
         const mLabor = lRes.rows.reduce((sum, r) => {
+          if (r.category === 'consultant') {
+            const hr = r.hr_details || {};
+            const startStr = hr.inizio_lavoro;
+            const endStr = hr.scadenza_contratto;
+            
+            const startYear = startStr ? new Date(startStr).getFullYear() : -Infinity;
+            const endYear = endStr ? new Date(endStr).getFullYear() : Infinity;
+
+            if (ty < startYear || ty > endYear) return sum; 
+          }
+
           return sum + calculateMonthlyLaborCost({
             hours: r.hours,
             annual_gross: r.annual_gross,
