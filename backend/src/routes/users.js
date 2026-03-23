@@ -44,7 +44,7 @@ module.exports = (app, query) => {
       // Check if username already exists
       const exists = await query('SELECT id FROM users WHERE username = $1', [username]);
       if (exists.rows.length > 0) {
-        return res.status(409).json({ error: 'A user with this username already exists' });
+        return res.status(409).json({ error: 'Questo Username è già in uso' });
       }
 
       const trimmedName = name.trim();
@@ -85,6 +85,21 @@ module.exports = (app, query) => {
     const { name, username, role, is_active, password, position, category, hr_details } = req.body;
 
     try {
+      // Uniqueness checks
+      if (username !== undefined) {
+        const usernameExists = await query('SELECT id FROM users WHERE username = $1 AND id != $2', [username, id]);
+        if (usernameExists.rows.length > 0) {
+          return res.status(409).json({ error: 'Questo Username è già in uso da un altro utente' });
+        }
+      }
+
+      if (name !== undefined) {
+        const nameExists = await query('SELECT id FROM employees WHERE name = $1 AND id != (SELECT employee_id FROM users WHERE id = $2)', [name, id]);
+        if (nameExists.rows.length > 0) {
+          return res.status(409).json({ error: 'Questo Nome è già assegnato a un altro dipendente' });
+        }
+      }
+
       const updates = [];
       const values = [];
       let paramIdx = 1;
