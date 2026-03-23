@@ -266,7 +266,7 @@ export default function FatturatoDashboard({ isHR }) {
     //if (field === "percentage") updateFatturatoFromOrdini(newClients, cIdx, lIdx);
     setFattForm({ ...fattForm, clients: newClients });
   };
- 
+
   const addExtraCost = () => setFattForm({ ...fattForm, extra_costs: [...(fattForm.extra_costs || []), { description: "", amount: "", date: new Date().toISOString().split('T')[0] }] });
   const removeExtraCost = (idx) => { const newCosts = [...fattForm.extra_costs]; newCosts.splice(idx, 1); setFattForm({ ...fattForm, extra_costs: newCosts }); };
   const handleExtraCostChange = (idx, field, val) => {
@@ -331,7 +331,7 @@ export default function FatturatoDashboard({ isHR }) {
                 <th style={{ position: "sticky", left: 280, zIndex: 10, background: "#F9FAFB", padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB", borderRight: "2px solid #E5E7EB", width: 100, minWidth: 100, boxSizing: "border-box", boxShadow: "4px 0 4px -2px rgba(0,0,0,0.05)" }}>ACTIONS</th>
 
                 {/* Scrollable columns */}
-                {["N. Cliente", "Cliente", "Preventivo", "Ordine", "Attività", "Fatturato %", "Valore Ordine", "Fatturato", "Rimanente", "Rim. Prob.", "Proforma", "Extra Costs"].map(h =>
+                {["N. Cliente", "Cliente", "Preventivo", "Ordine", "Attività", "Fatturazione", "Valore Ordine", "Fatturato", "Rimanente", "Proforma", "Extra Costs"].map(h =>
                   <th key={h} style={{ padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB" }}>{h.toUpperCase()}</th>
                 )}
               </tr>
@@ -425,7 +425,6 @@ export default function FatturatoDashboard({ isHR }) {
                             </div>
                           </td>
                           <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: rimanente > 0 ? "#F59E0B" : "#6B7280", whiteSpace: "nowrap" }}>{valOrdine ? `€${fmtEu(rimanente)}` : "—"}</td>
-                          <td style={{ padding: "12px 14px", fontSize: 12, color: "#374151", whiteSpace: "nowrap" }}>{line.rimanente_probabile ? `€${fmtEu(line.rimanente_probabile)}` : "—"}</td>
                           <td style={{ padding: "12px 14px", fontSize: 12, color: "#374151", whiteSpace: "nowrap" }}>{line.proforma ? `€${fmtEu(line.proforma)}` : "—"}</td>
                           {isFirstComm && (
                             <td rowSpan={totalLines} style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: "#4B5563", verticalAlign: "top", background: "#FDFCF7" }}>
@@ -652,7 +651,7 @@ export default function FatturatoDashboard({ isHR }) {
                   </div>
                 ))}
               </div>
- 
+
               {/* Extra Costs Section */}
               <div style={{ marginBottom: 24 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>

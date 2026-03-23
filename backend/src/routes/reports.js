@@ -98,7 +98,6 @@ router.get('/finances', authenticateHR, async (req, res) => {
         fl.attivita as line_description,
         fl.valore_ordine,
         fl.fatturato_amount as total_billed,
-        fl.rimanente_probabile as remainder,
         fl.proforma
       FROM fatturato_realized fr
       JOIN fatturato_lines fl ON fr.fatturato_line_id = fl.id
@@ -121,7 +120,6 @@ router.get('/finances', authenticateHR, async (req, res) => {
       { header: 'Pagamento (€)', key: 'amount', width: 15 },
       { header: 'Valore Ordine (€)', key: 'valore_ordine', width: 18 },
       { header: 'Totale Fatturato (€)', key: 'total_billed', width: 18 },
-      { header: 'Rimanente Probabile (€)', key: 'remainder', width: 18 },
       { header: 'Proforma (€)', key: 'proforma', width: 15 },
       { header: '% su Ordine', key: 'percentage', width: 12 },
       { header: 'Note', key: 'notes', width: 40 },
@@ -143,7 +141,6 @@ router.get('/finances', authenticateHR, async (req, res) => {
         amount: Number(amount),
         valore_ordine: Number(r.valore_ordine || 0),
         total_billed: Number(r.total_billed || 0),
-        remainder: Number(r.remainder || 0),
         proforma: Number(r.proforma || 0),
         percentage: pct,
         notes: r.note
@@ -165,7 +162,6 @@ router.get('/finances', authenticateHR, async (req, res) => {
       { header: 'Attività', key: 'attivita', width: 25 },
       { header: 'Valore Ordine (€)', key: 'valore_ordine', width: 18 },
       { header: 'Totale Fatturato (€)', key: 'fatturato_amount', width: 18 },
-      { header: 'Rim. Probabile (€)', key: 'rimanente_probabile', width: 18 },
       { header: 'Proforma (€)', key: 'proforma', width: 15 },
       { header: 'Costi Extra (€)', key: 'extra_costs', width: 15 },
       { header: 'Note', key: 'note', width: 30 },
@@ -180,7 +176,7 @@ router.get('/finances', authenticateHR, async (req, res) => {
         c.comm_number, c.name as comm_name,
         cl.name as client_name,
         cc.n_cliente, cc.n_ordine,
-        fl.attivita, fl.valore_ordine, fl.fatturato_amount, fl.rimanente_probabile, fl.proforma, fl.note,
+        fl.attivita, fl.valore_ordine, fl.fatturato_amount, fl.proforma, fl.note,
         COALESCE((SELECT SUM(amount) FROM commessa_extra_costs WHERE commessa_id = c.id), 0) as extra_costs
       FROM commesse c
       JOIN commessa_clients cc ON c.id = cc.commessa_id
@@ -200,7 +196,6 @@ router.get('/finances', authenticateHR, async (req, res) => {
         ...r,
         valore_ordine: Number(r.valore_ordine || 0),
         fatturato_amount: Number(r.fatturato_amount || 0),
-        rimanente_probabile: Number(r.rimanente_probabile || 0),
         proforma: Number(r.proforma || 0),
         extra_costs: Number(r.extra_costs || 0)
       });

@@ -217,9 +217,9 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           if (c.lines && c.lines.length > 0) {
             for (const l of c.lines) {
               const flRes = await query(`
-                INSERT INTO fatturato_lines (commessa_client_id, attivita, descrizione, valore_ordine, fatturato_amount, rimanente_probabile, proforma)
-                VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
-              `, [ccId, l.attivita || null, l.descrizione || null, parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0, parseFloat(l.rimanente_probabile) || 0, parseFloat(l.proforma) || 0]);
+                INSERT INTO fatturato_lines (commessa_client_id, attivita, descrizione, valore_ordine, fatturato_amount, proforma)
+                VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+              `, [ccId, l.attivita || null, l.descrizione || null, parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0, parseFloat(l.proforma) || 0]);
 
               const lineId = flRes.rows[0].id;
 
@@ -316,9 +316,9 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           if (c.lines && c.lines.length > 0) {
             for (const l of c.lines) {
               const flRes = await query(`
-                INSERT INTO fatturato_lines (commessa_client_id, attivita, descrizione, valore_ordine, fatturato_amount, rimanente_probabile, proforma)
-                VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
-              `, [ccId, l.attivita || null, l.descrizione || null, parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0, parseFloat(l.rimanente_probabile) || 0, parseFloat(l.proforma) || 0]);
+                INSERT INTO fatturato_lines (commessa_client_id, attivita, descrizione, valore_ordine, fatturato_amount, proforma)
+                VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+              `, [ccId, l.attivita || null, l.descrizione || null, parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0, parseFloat(l.proforma) || 0]);
 
               const lineId = flRes.rows[0].id;
               if (l.ordini && l.ordini.length > 0) {

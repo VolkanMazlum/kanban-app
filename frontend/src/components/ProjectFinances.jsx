@@ -274,7 +274,7 @@ export default function ProjectFinances({ isHR }) {
                     { label: "Project / Task", align: "left" },
                     { label: "Logged Hours", align: "center" },
                     { label: "Internal Lab.", align: "center", hint: "Direct Labor (Internal Staff)" },
-                    { label: "Weight", align: "center" },
+                    ...(selectedYear !== "all" ? [{ label: "Weight", align: "center" }] : []),
                     { label: "Overhead", align: "center", hint: "Allocated General Costs" },
                     { label: "Direct Extra", align: "center", hint: "Commessa-specific costs (Tickets, etc.)" },
                     { label: "Total Cost", align: "center" },
@@ -318,9 +318,11 @@ export default function ProjectFinances({ isHR }) {
                       <td style={{ padding: "14px 16px", textAlign: "center" }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>€{fmtEu(internalLabourCost)}</div>
                       </td>
-                      <td style={{ padding: "14px 16px", textAlign: "center" }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: weightPct ? "#4F46E5" : "#D1D5DB" }}>{weightPct ? `${weightPct}%` : "—"}</span>
-                      </td>
+                      {selectedYear !== "all" && (
+                        <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: weightPct ? "#4F46E5" : "#D1D5DB" }}>{weightPct ? `${weightPct}%` : "—"}</span>
+                        </td>
+                      )}
                       <td style={{ padding: "14px 16px", textAlign: "center" }}>
                         <span style={{ fontSize: 13, fontWeight: 700, color: "#cd08f5ff" }}>€{fmtEu(overheadGC)}</span>
                       </td>
@@ -374,7 +376,7 @@ export default function ProjectFinances({ isHR }) {
                         <td style={{ padding: "12px 16px" }}>GROSS TOTALS</td>
                         <td style={{ padding: "12px 16px", textAlign: "center" }}>{tHours.toFixed(1)}h</td>
                         <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tInt)}</td>
-                        <td style={{ padding: "12px 16px", textAlign: "center" }}>100%</td>
+                        {selectedYear !== "all" && <td style={{ padding: "12px 16px", textAlign: "center" }}>100%</td>}
                         <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tOver)}</td>
                         <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tDirExtra)}</td>
                         <td style={{ padding: "12px 16px", textAlign: "center" }}>€{fmtEu(tTotal)}</td>
@@ -385,11 +387,11 @@ export default function ProjectFinances({ isHR }) {
                       </tr>
                       {/* Company Deductions */}
                       <tr key="consultant-deduction" style={{ background: "#FEF2F2", fontWeight: 700 }}>
-                         <td colSpan={10} style={{ padding: "8px 16px", textAlign: "right", color: "#B91C1C", fontSize: 11 }}>TOTAL CONSULTANT WAGES (FIXED)</td>
+                         <td colSpan={selectedYear === "all" ? 9 : 10} style={{ padding: "8px 16px", textAlign: "right", color: "#B91C1C", fontSize: 11 }}>TOTAL CONSULTANT WAGES (FIXED)</td>
                          <td style={{ padding: "8px 16px", textAlign: "center", color: "#B91C1C" }}>-€{fmtEu(totalConsultantFixed)}</td>
                       </tr>
                       <tr key="final-profit" style={{ background: "#ECFDF5", borderTop: "2px solid #059669", fontWeight: 900, fontSize: 14 }}>
-                         <td colSpan={10} style={{ padding: "12px 16px", textAlign: "right", color: "#059669" }}>FINAL COMPANY NET PROFIT</td>
+                         <td colSpan={selectedYear === "all" ? 9 : 10} style={{ padding: "12px 16px", textAlign: "right", color: "#059669" }}>FINAL COMPANY NET PROFIT</td>
                          <td style={{ padding: "12px 16px", textAlign: "center", color: "#059669" }}>€{fmtEu(finalCompanyNetProfit)}</td>
                       </tr>
                     </>

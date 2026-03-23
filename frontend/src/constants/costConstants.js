@@ -10,7 +10,7 @@ export const GENERAL_COST_FIELDS = [
 
 export const getEmptyLine = () => ({
   attivita: "", descrizione: "", valore_ordine: "", fatturato_amount: "",
-  rimanente_probabile: "", proforma: "", note: "",
+  proforma: "", note: "",
   ordini: [],
   realized: [],
   proforma_entries: []

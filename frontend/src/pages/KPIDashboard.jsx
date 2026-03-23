@@ -172,7 +172,7 @@ export default function KPIDashboard({ employees }) {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr 0.8fr 0.8fr 1.5fr", gap: 16, marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1.5fr", gap: 16, marginBottom: 24 }}>
         {/* Status Mix Graph */}
         <div style={{ background: "#fff", borderRadius: 12, padding: 20, border: "1px solid #E5E7EB", display: "flex", flexDirection: "column" }}>
           <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: "0 0 16px" }}>Monthly Status Mix</h3>
@@ -340,7 +340,7 @@ export default function KPIDashboard({ employees }) {
       <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E5E7EB", overflow: "hidden", marginTop: 20 }}>
         <div style={{ padding: "18px 24px", borderBottom: "1px solid #F3F4F6", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: "0 0 2px" }}>Monthly Phase Workload</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: "0 0 2px" }}>Monthly Phase Provision Workload</h3>
             <p style={{ fontSize: 12, color: "#6B7280", margin: 0 }}>Click a member to see their phase timeline</p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
