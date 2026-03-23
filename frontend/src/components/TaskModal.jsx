@@ -21,6 +21,7 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
 
   // Keeping the active phase
   const [activeTopicTab, setActiveTopicTab] = useState(form.topics[0] || "");
+  const [searchTerms, setSearchTerms] = useState({}); // To store search query per phase index
   useEffect(() => {
     if (form.topics.length > 0 && !form.topics.includes(activeTopicTab)) {
       setActiveTopicTab(form.topics[0]);
@@ -302,45 +303,43 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
 
                           <div style={{background:"#F9FAFB", border:"1px solid #E5E7EB", padding: "8px", borderRadius: 6}}>
                             <label style={{fontSize:10,color:"#374151",fontWeight:700,marginBottom:8,display:"block"}}>ASSIGNEES & HOURS FOR THIS PHASE</label>
+                            
                             {(!ph.start_date || !ph.end_date) && (
                               <div style={{fontSize:11,color:"#F59E0B",marginBottom:8,padding:"6px 8px",background:"#FFFBEB",borderRadius:6,border:"1px solid #FDE68A"}}>
                                 ⚠ Enter start and end dates to set monthly hours
                               </div>
                             )}
-                            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                              {employees.map(emp => {
-                                const assignment = (ph.assignee_hours || []).find(a => a.id === emp.id);
-                                const isSelected = !!assignment;
+
+                            {/* List of currently assigned employees */}
+                            <div style={{display:"flex",flexDirection:"column",gap:8, marginBottom: 10}}>
+                              {(ph.assignee_hours || []).map(assignment => {
+                                const emp = employees.find(e => e.id === assignment.id);
+                                if (!emp) return null;
                                 const phaseMonths = getPhaseMonths(ph.start_date, ph.end_date);
-                                const monthlyHours = assignment?.monthly_hours || [];
+                                const monthlyHours = assignment.monthly_hours || [];
 
                                 return (
-                                  <div key={emp.id}>
+                                  <div key={emp.id} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, padding: 8 }}>
                                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
                                       <button type="button" onClick={() => {
                                         const current = ph.assignee_hours || [];
-                                        const exists = current.find(a => a.id === emp.id);
-                                        const updated = exists
-                                          ? current.filter(a => a.id !== emp.id)
-                                          : [...current, { id: emp.id, name: emp.name, estimated_hours: 0, monthly_hours: [] }];
+                                        const updated = current.filter(a => a.id !== emp.id);
                                         updatePhase(idx, "assignee_hours", updated);
                                       }} style={{
-                                        width:22, height:22, borderRadius:"50%", border:"none",
-                                        background: isSelected ? "#2563EB" : "#E5E7EB",
-                                        color: isSelected ? "#fff" : "#6B7280",
-                                        cursor:"pointer", fontSize:11, fontWeight:700
-                                      }}>{isSelected ? "✓" : "+"}</button>
+                                        width:20, height:20, borderRadius:"50%", border:"none",
+                                        background: "#FEE2E2", color: "#DC2626",
+                                        cursor:"pointer", fontSize:12, fontWeight:700,
+                                        display: "flex", alignItems: "center", justifyContent: "center"
+                                      }}>✕</button>
                                       <Avatar name={emp.name} size={20} idx={employees.indexOf(emp)} />
-                                      <span style={{fontSize:12,color:"#374151",flex:1}}>{emp.name}</span>
-                                      {isSelected && (
-                                        <span style={{fontSize:10,color:"#9CA3AF"}}>
-                                          Total: {monthlyHours.reduce((s,m) => s + (parseFloat(m.hours)||0), 0)}h
-                                        </span>
-                                      )}
+                                      <span style={{fontSize:12,color:"#374151",fontWeight: 600, flex:1}}>{emp.name}</span>
+                                      <span style={{fontSize:10,color:"#6B7280", background: "#F3F4F6", padding: "2px 6px", borderRadius: 4}}>
+                                        Total: {monthlyHours.reduce((s,m) => s + (parseFloat(m.hours)||0), 0)}h
+                                      </span>
                                     </div>
 
-                                    {isSelected && phaseMonths.length > 0 && (
-                                      <div style={{marginLeft:30,display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+                                    {phaseMonths.length > 0 && (
+                                      <div style={{marginLeft:28, display:"flex", gap:6, flexWrap:"wrap", marginTop: 6}}>
                                         {phaseMonths.map(({year, month}) => {
                                           const mh = monthlyHours.find(m => m.year===year && m.month===month);
                                           const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -364,7 +363,7 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
                                                   updatePhase(idx, "assignee_hours", updated);
                                                 }}
                                                 placeholder="h"
-                                                style={{width:44,border:"1.5px solid #E5E7EB",borderRadius:6,padding:"3px 4px",fontSize:11,textAlign:"center"}}
+                                                style={{width:40,border:"1.5px solid #E5E7EB",borderRadius:6,padding:"3px 4px",fontSize:11,textAlign:"center"}}
                                               />
                                             </div>
                                           );
@@ -374,6 +373,49 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
                                   </div>
                                 );
                               })}
+                            </div>
+
+                            {/* Search and Add new assignee */}
+                            <div style={{ position: "relative", marginBottom: (searchTerms[idx] || "").length > 0 ? 120 : 0 }}>
+                              <input 
+                                type="text"
+                                placeholder="+ Add member to this phase..."
+                                value={searchTerms[idx] || ""}
+                                onChange={e => setSearchTerms(prev => ({ ...prev, [idx]: e.target.value }))}
+                                style={{ ...inp, padding: "8px 12px", fontSize: 12, borderRadius: 8, background: "#fff", borderColor: "#D1D5DB" }}
+                              />
+                              {(searchTerms[idx] || "").length > 0 && (
+                                <div style={{ 
+                                  position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50,
+                                  background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, 
+                                  boxShadow: "0 10px 25px rgba(0,0,0,0.1)", marginTop: 4, maxHeight: 200, overflowY: "auto"
+                                }}>
+                                  {employees
+                                    .filter(e => e.name.toLowerCase().includes(searchTerms[idx].toLowerCase()))
+                                    .filter(e => !(ph.assignee_hours || []).some(a => a.id === e.id))
+                                    .map(emp => (
+                                      <div 
+                                        key={emp.id}
+                                        onClick={() => {
+                                          const current = ph.assignee_hours || [];
+                                          const updated = [...current, { id: emp.id, name: emp.name, estimated_hours: 0, monthly_hours: [] }];
+                                          updatePhase(idx, "assignee_hours", updated);
+                                          setSearchTerms(prev => ({ ...prev, [idx]: "" }));
+                                        }}
+                                        style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", transition: "all 0.15s" }}
+                                        onMouseEnter={e => e.target.style.background = "#F3F4F6"}
+                                        onMouseLeave={e => e.target.style.background = "transparent"}
+                                      >
+                                        <Avatar name={emp.name} size={24} idx={employees.indexOf(emp)} />
+                                        <div style={{ fontSize: 12, color: "#374151", fontWeight: 500 }}>{emp.name}</div>
+                                      </div>
+                                    ))
+                                  }
+                                  {employees.filter(e => e.name.toLowerCase().includes(searchTerms[idx].toLowerCase())).filter(e => !(ph.assignee_hours || []).some(a => a.id === e.id)).length === 0 && (
+                                    <div style={{ padding: "12px", fontSize: 11, color: "#9CA3AF", textAlign: "center" }}>No matches found</div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
 
