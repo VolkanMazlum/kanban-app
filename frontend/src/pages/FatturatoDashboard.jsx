@@ -354,8 +354,22 @@ export default function FatturatoDashboard({ isHR }) {
                     const isFirstComm = !commRendered; commRendered = true;
                     const isFirstCli = lIdx === 0;
                     const valOrdine = parseEuNum(line.valore_ordine);
-                    const valFatt = parseEuNum(line.fatturato_amount);
-                    const rimanente = Math.max(0, valOrdine - valFatt);
+                    const valFatt = selectedYear === "all"
+                      ? parseEuNum(line.fatturato_amount)
+                      : (line.realized || []).reduce((sum, r) => {
+                        const rYear = r.registration_date ? parseInt(r.registration_date.split('-')[0]) : null;
+                        return rYear === selectedYear ? sum + (parseFloat(r.amount) || 0) : sum;
+                      }, 0);
+
+                    const valProforma = selectedYear === "all"
+                      ? parseEuNum(line.proforma)
+                      : (line.proforma_entries || []).reduce((sum, p) => {
+                        const pYear = p.date ? parseInt(p.date.split('-')[0]) : null;
+                        return pYear === selectedYear ? sum + (parseFloat(p.amount) || 0) : sum;
+                      }, 0);
+
+                    const globalFatt = parseEuNum(line.fatturato_amount);
+                    const rimanente = Math.max(0, valOrdine - globalFatt);
 
                     const ordini = line.ordini || [];
                     const rowBorder = lIdx === clientLines.length - 1 && cIdx !== comm.clients.length - 1 ? "1px dashed #D1D5DB" : cIdx === comm.clients.length - 1 && lIdx === clientLines.length - 1 ? "2px solid #E5E7EB" : "1px solid #F3F4F6";
@@ -425,7 +439,7 @@ export default function FatturatoDashboard({ isHR }) {
                             </div>
                           </td>
                           <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: rimanente > 0 ? "#F59E0B" : "#6B7280", whiteSpace: "nowrap" }}>{valOrdine ? `€${fmtEu(rimanente)}` : "—"}</td>
-                          <td style={{ padding: "12px 14px", fontSize: 12, color: "#374151", whiteSpace: "nowrap" }}>{line.proforma ? `€${fmtEu(line.proforma)}` : "—"}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 12, color: "#374151", whiteSpace: "nowrap" }}>{valProforma ? `€${fmtEu(valProforma)}` : "—"}</td>
                           {isFirstComm && (
                             <td rowSpan={totalLines} style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: "#4B5563", verticalAlign: "top", background: "#FDFCF7" }}>
                               {(() => {

@@ -13,7 +13,9 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         SELECT c.*, t.title AS task_title 
         FROM commesse c 
         LEFT JOIN tasks t ON c.task_id = t.id
-        WHERE ($1::text IS NULL OR c.comm_number LIKE $1 || '-%' OR c.comm_number IS NULL
+        WHERE ($1::text IS NULL 
+               OR c.comm_number LIKE $1 || '-%' 
+               OR (c.comm_number IS NULL)
                OR EXISTS (
                  SELECT 1 FROM employee_work_hours wh 
                  WHERE wh.task_id = c.task_id AND EXTRACT(YEAR FROM wh.date) = $2
@@ -82,8 +84,8 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       const linesByCc = {};
       linRes.rows.forEach(l => {
         if (!linesByCc[l.commessa_client_id]) linesByCc[l.commessa_client_id] = [];
-        linesByCc[l.commessa_client_id].push({ 
-          ...l, 
+        linesByCc[l.commessa_client_id].push({
+          ...l,
           ordini: ordByLine[l.id] || [],
           realized: realByLine[l.id] || [],
           proforma_entries: profByLine[l.id] || []
@@ -501,19 +503,19 @@ module.exports = (app, query, authenticate, authenticateHR) => {
   });
 
   app.post("/api/clients", authenticateHR, async (req, res) => {
-    const { 
+    const {
       name, ragione_sociale, vat_number, codice_fiscale, codice_univoco, codice_ateco, codice_inarcassa,
       contact_email, phone, fax, address, localita, cap, province, stato,
-      contabilita_prefix, contabilita_name, contabilita_email, contabilita_phone, notes 
+      contabilita_prefix, contabilita_name, contabilita_email, contabilita_phone, notes
     } = req.body;
-    try { 
+    try {
       const { rows } = await query(`
         INSERT INTO clients (
           name, ragione_sociale, vat_number, codice_fiscale, codice_univoco, codice_ateco, codice_inarcassa,
           contact_email, phone, fax, address, localita, cap, province, stato,
           contabilita_prefix, contabilita_name, contabilita_email, contabilita_phone, notes
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) 
-        RETURNING *`, 
+        RETURNING *`,
         [
           name, ragione_sociale || null, vat_number || null, codice_fiscale || null, codice_univoco || null, codice_ateco || null, codice_inarcassa || null,
           contact_email || null, phone || null, fax || null, address || null, localita || null, cap || null, province || null, stato || null,
@@ -523,16 +525,16 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       const client = rows[0];
       const ctx = getAuditContext(req);
       logAudit(query, { ...ctx, action: 'CREATE', entityType: 'client', entityId: client.id, details: { name } });
-      res.status(201).json(client); 
+      res.status(201).json(client);
     }
     catch (err) { res.status(500).json({ error: "Database error" }); }
   });
 
   app.put("/api/clients/:id", authenticateHR, async (req, res) => {
-    const { 
+    const {
       name, ragione_sociale, vat_number, codice_fiscale, codice_univoco, codice_ateco, codice_inarcassa,
       contact_email, phone, fax, address, localita, cap, province, stato,
-      contabilita_prefix, contabilita_name, contabilita_email, contabilita_phone, notes 
+      contabilita_prefix, contabilita_name, contabilita_email, contabilita_phone, notes
     } = req.body;
     try {
       const { rows } = await query(
@@ -549,10 +551,10 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         ]
       );
       if (rows.length === 0) return res.status(404).json({ error: "Client not found" });
-      
+
       const ctx = getAuditContext(req);
       logAudit(query, { ...ctx, action: 'UPDATE', entityType: 'client', entityId: parseInt(req.params.id), details: { name } });
-      
+
       res.json(rows[0]);
     } catch (err) {
       res.status(500).json({ error: "Database error" });
@@ -562,10 +564,10 @@ module.exports = (app, query, authenticate, authenticateHR) => {
   app.delete("/api/clients/:id", authenticateHR, async (req, res) => {
     try {
       await query(`DELETE FROM clients WHERE id = $1`, [req.params.id]);
-      
+
       const ctx = getAuditContext(req);
       logAudit(query, { ...ctx, action: 'DELETE', entityType: 'client', entityId: parseInt(req.params.id) });
-      
+
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: "Database error. Client might be linked to projects." });
