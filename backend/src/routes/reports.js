@@ -154,14 +154,16 @@ router.get('/finances', authenticateHR, async (req, res) => {
     // SHEET 2: CONTRACT DETAILS (Now filtered by year if provided)
     const sheet2 = workbook.addWorksheet('Dettagli Contrattuali');
     sheet2.columns = [
-      { header: 'N. Commessa', key: 'comm_number', width: 12 },
-      { header: 'Nome Progetto', key: 'comm_name', width: 25 },
+      { header: 'N. Commessa', key: 'comm_number', width: 15 },
+      { header: 'Nome Progetto', key: 'comm_name', width: 30 },
+      { header: 'N. Cliente', key: 'n_cliente', width: 10 },
       { header: 'Cliente', key: 'client_name', width: 25 },
-      { header: 'N. Cliente', key: 'n_cliente', width: 15 },
       { header: 'Rif. Ordine', key: 'n_ordine', width: 20 },
-      { header: 'Attività', key: 'attivita', width: 25 },
+      { header: 'Attività', key: 'attivita', width: 30 },
+      { header: 'Fatturazione', key: 'fatturazione', width: 40 },
       { header: 'Valore Ordine (€)', key: 'valore_ordine', width: 18 },
       { header: 'Totale Fatturato (€)', key: 'fatturato_amount', width: 18 },
+      { header: 'Rimanente (€)', key: 'residuo', width: 18 },
       { header: 'Proforma (€)', key: 'proforma', width: 15 },
       { header: 'Costi Extra (€)', key: 'extra_costs', width: 15 },
       { header: 'Note', key: 'note', width: 30 },
@@ -177,6 +179,7 @@ router.get('/finances', authenticateHR, async (req, res) => {
         cl.name as client_name,
         cc.n_cliente, cc.n_ordine,
         fl.attivita, fl.valore_ordine, fl.fatturato_amount, fl.proforma, fl.note,
+        (SELECT STRING_AGG(label || ': ' || (percentage::float)::text || '%', ', ') FROM fatturato_ordini WHERE fatturato_line_id = fl.id) as fatturazione,
         COALESCE((SELECT SUM(amount) FROM commessa_extra_costs WHERE commessa_id = c.id), 0) as extra_costs
       FROM commesse c
       JOIN commessa_clients cc ON c.id = cc.commessa_id
@@ -191,14 +194,93 @@ router.get('/finances', authenticateHR, async (req, res) => {
       ORDER BY c.comm_number ASC, cc.n_cliente ASC, fl.id ASC
     `, [year || 'all', yearSuffix]);
 
-    ordersRes.rows.forEach(r => {
-      sheet2.addRow({
+    let currentSheet = null;
+    let commTotalVal = 0;
+    let commTotalFatt = 0;
+    let commTotalProf = 0;
+    let lastComm = null;
+
+    const setupSheet = (commNum, commName) => {
+      // Sheet names must be <= 31 chars and unique. Use comm_number as suffix.
+      const sheetName = `DET - ${commNum}`.slice(0, 31);
+      const ws = workbook.addWorksheet(sheetName);
+      ws.columns = [
+        { header: 'N. Cliente', key: 'n_cliente', width: 10 },
+        { header: 'Cliente', key: 'client_name', width: 25 },
+        { header: 'Rif. Ordine', key: 'n_ordine', width: 20 },
+        { header: 'Attività', key: 'attivita', width: 30 },
+        { header: 'Fatturazione', key: 'fatturazione', width: 40 },
+        { header: 'Valore Ordine (€)', key: 'valore_ordine', width: 18 },
+        { header: 'Totale Fatturato (€)', key: 'fatturato_amount', width: 18 },
+        { header: 'Rimanente (€)', key: 'residuo', width: 18 },
+        { header: 'Proforma (€)', key: 'proforma', width: 15 },
+        { header: 'Note', key: 'note', width: 30 },
+      ];
+      
+      // Add a header row with project name
+      const titleRow = ws.insertRow(1, { n_cliente: `COMMESSA: ${commNum} - ${commName || ''}` });
+      titleRow.font = { bold: true, size: 14 };
+      titleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+      ws.mergeCells(1, 1, 1, 10);
+      
+      // Original header (now at row 2)
+      ws.getRow(2).font = { bold: true };
+      ws.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+      
+      return ws;
+    };
+
+    ordersRes.rows.forEach((r, idx) => {
+      if (lastComm !== r.comm_number) {
+        // Add total to previous sheet if exists
+        if (currentSheet) {
+          const subRow = currentSheet.addRow({
+            attivita: 'TOTALE COMMESSA',
+            valore_ordine: commTotalVal,
+            fatturato_amount: commTotalFatt,
+            proforma: commTotalProf,
+            residuo: commTotalVal - commTotalFatt
+          });
+          subRow.font = { bold: true };
+          subRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+        }
+
+        // Setup new sheet
+        currentSheet = setupSheet(r.comm_number, r.comm_name);
+        lastComm = r.comm_number;
+        commTotalVal = 0;
+        commTotalFatt = 0;
+        commTotalProf = 0;
+      }
+
+      const valOrd = Number(r.valore_ordine || 0);
+      const valFatt = Number(r.fatturato_amount || 0);
+      const valProf = Number(r.proforma || 0);
+
+      commTotalVal += valOrd;
+      commTotalFatt += valFatt;
+      commTotalProf += valProf;
+
+      currentSheet.addRow({
         ...r,
-        valore_ordine: Number(r.valore_ordine || 0),
-        fatturato_amount: Number(r.fatturato_amount || 0),
-        proforma: Number(r.proforma || 0),
-        extra_costs: Number(r.extra_costs || 0)
+        valore_ordine: valOrd,
+        fatturato_amount: valFatt,
+        residuo: valOrd - valFatt,
+        proforma: valProf
       });
+
+      // Tail subtotal for the very last row/sheet
+      if (idx === ordersRes.rows.length - 1 && currentSheet) {
+        const subRow = currentSheet.addRow({
+          attivita: 'TOTALE COMMESSA',
+          valore_ordine: commTotalVal,
+          fatturato_amount: commTotalFatt,
+          proforma: commTotalProf,
+          residuo: commTotalVal - commTotalFatt
+        });
+        subRow.font = { bold: true };
+        subRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+      }
     });
 
     // --- ADDED: SHEET 3: REDDITIVITÀ PROGETTI (Revenue vs Cost) ---
