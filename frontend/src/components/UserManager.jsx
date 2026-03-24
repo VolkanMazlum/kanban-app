@@ -217,7 +217,16 @@ export default function UserManager({ isHR, onUserAdded }) {
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E5E7EB", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr style={{ background: "#F9FAFB" }}>{["Action", "Entity", "ID", "User (UName)", "Details", "Time"].map(h => <th key={h} style={{ padding: "10px 14px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "left" }}>{h}</th>)}</tr></thead>
-            <tbody>{auditLogs.map(log => <tr key={log.id} style={{ borderTop: "1px solid #F3F4F6" }}><td style={{ padding: "10px 14px", fontSize: 12 }}>{log.action}</td><td style={{ padding: "10px 14px" }}>{log.entity_type}</td><td style={{ padding: "10px 14px" }}>{log.entity_id}</td><td style={{ padding: "10px 14px" }}>{log.user_username || log.user_email}</td><td style={{ padding: "10px 14px", fontSize: 11 }}>{JSON.stringify(log.details)}</td><td style={{ padding: "10px 14px", fontSize: 11 }}>{new Date(log.created_at).toLocaleString()}</td></tr>)}</tbody>
+            <tbody>{auditLogs.map(log => (
+              <tr key={log.id} style={{ borderTop: "1px solid #F3F4F6" }}>
+                <td style={{ padding: "10px 14px", fontSize: 12 }}>{actionMap[log.action] || ""} {log.action}</td>
+                <td style={{ padding: "10px 14px" }}>{log.entity_type}</td>
+                <td style={{ padding: "10px 14px" }}>{log.entity_id}</td>
+                <td style={{ padding: "10px 14px" }}>{log.user_username || log.user_email}</td>
+                <td style={{ padding: "10px 14px", fontSize: 11 }}>{JSON.stringify(log.details)}</td>
+                <td style={{ padding: "10px 14px", fontSize: 11 }}>{new Date(log.created_at).toLocaleString()}</td>
+              </tr>
+            ))}</tbody>
           </table>
         </div>
       )}
