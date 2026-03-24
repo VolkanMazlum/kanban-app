@@ -38,23 +38,42 @@ export default function FatturatoDashboard({ isHR }) {
   const [clientForm, setClientForm] = useState({ name: "", vat_number: "" });
   const [savingClient, setSavingClient] = useState(false);
 
+  const [salMonthlyData, setSalMonthlyData] = useState([]);
+  const [salYear, setSalYear] = useState(new Date().getFullYear());
+  const [savingSal, setSavingSal] = useState(false);
+  const [obiettiviData, setObiettiviData] = useState({}); // { commId: [ {year, period, ordinante_val, acquisizioni_val} ] }
+
   const fetchData = () => {
     Promise.all([
       api.getFatturato(selectedYear),
       api.getClients(),
-      api.getTasks()
+      api.getTasks(),
+      api.getMonthlySAL(selectedYear, null)
     ])
-      .then(([fatt, cls, tasks]) => {
+      .then(([fatt, cls, tasks, sal]) => {
         setFatturatoList(fatt);
         setClients(cls);
         setAllTasks(tasks);
+        setSalMonthlyData(sal);
+
+        // Fetch obiettivi for each commessa and store them by line_id
+        (fatt || []).forEach(comm => {
+          api.getProjectObiettivi(comm.id).then(objs => {
+            const mapped = {};
+            (objs || []).forEach(o => {
+              if (!mapped[o.fatturato_line_id]) mapped[o.fatturato_line_id] = [];
+              mapped[o.fatturato_line_id].push(o);
+            });
+            setObiettiviData(prev => ({ ...prev, ...mapped }));
+          });
+        });
       })
       .catch(console.error);
   };
 
   useEffect(() => {
     if (isHR) fetchData();
-  }, [isHR, selectedYear]);
+  }, [isHR, selectedYear, salYear]);
 
   if (!isHR) {
     return <div style={{ padding: 40, textAlign: "center", color: "#6B7280" }}>Unauthorized access. HR privileges required.</div>;
@@ -275,6 +294,67 @@ export default function FatturatoDashboard({ isHR }) {
     setFattForm({ ...fattForm, extra_costs: newCosts });
   };
 
+  const handleObiettiviChange = (lineId, period, field, val) => {
+    const prevLineObjs = obiettiviData[lineId] || [];
+    const queryYear = (selectedYear && selectedYear !== "all") ? parseInt(selectedYear) : new Date().getFullYear();
+    const idx = prevLineObjs.findIndex(o => o.period === period && o.year === queryYear);
+    const newLineObjs = [...prevLineObjs];
+
+    if (idx >= 0) {
+      newLineObjs[idx] = { ...newLineObjs[idx], [field]: parseFloat(val) || 0 };
+    } else {
+      newLineObjs.push({ fatturato_line_id: lineId, year: queryYear, period, ordinante_val: 0, acquisizioni_val: 0, [field]: parseFloat(val) || 0 });
+    }
+    setObiettiviData(prev => ({ ...prev, [lineId]: newLineObjs }));
+  };
+
+  const handleSaveLineObiettivi = async (lineId) => {
+    const lineObjs = obiettiviData[lineId] || [];
+    if (lineObjs.length === 0) return;
+
+    // Group by year and save each year
+    const years = [...new Set(lineObjs.map(o => o.year))];
+    try {
+      for (const y of years) {
+        const yearEntries = lineObjs.filter(o => o.year === y);
+        await api.updateLineObiettiviBulk(lineId, { year: y, entries: yearEntries });
+      }
+      alert("Obiettivi updated for all years!");
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      alert("Error saving obiettivi: " + err.message);
+    }
+  };
+
+  const handleSalChange = (lineId, field, val, m, y) => {
+    const newData = [...(salMonthlyData || [])];
+    const targetMonth = m || (new Date().getMonth() + 1);
+    const targetYear = y || (new Date().getFullYear());
+    // For new activities that don't have an ID yet, we use a temp ID if possible, but let's encourage saving the line first or use 'attivita' as temp ID
+    const effectiveLineId = lineId || `TEMP_${field}_${val}_${targetMonth}_${targetYear}`; // fallback but not ideal
+
+    const idx = newData.findIndex(s => {
+      const matchId = (s.fatturato_line_id === lineId) || (!lineId && s.temp_id === effectiveLineId);
+      return matchId && Number(s.month) === Number(targetMonth) && Number(s.year) === Number(targetYear);
+    });
+
+    if (idx >= 0) {
+      newData[idx] = { ...newData[idx], [field]: val };
+    } else {
+      newData.push({
+        fatturato_line_id: lineId || null,
+        temp_id: lineId ? null : effectiveLineId,
+        [field]: val,
+        year: targetYear,
+        month: targetMonth,
+        status: 'in_progress'
+      });
+    }
+    setSalMonthlyData(newData);
+  };
+
+
   return (
     <div style={{ padding: "28px 32px", overflowY: "auto", height: "100%", fontFamily: "'Inter',sans-serif", background: "#F9FAFB" }}>
 
@@ -286,7 +366,7 @@ export default function FatturatoDashboard({ isHR }) {
             <select
               value={selectedYear}
               onChange={e => setSelectedYear(e.target.value === "all" ? "all" : parseInt(e.target.value))}
-              style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #D1D5DB", fontSize: 14, fontWeight: 700, color: "#2563EB", background: "#EFF6FF", outline: "none", cursor: "pointer" }}
+              style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #D1D5DB", fontSize: 14, fontWeight: 700, color: "#2563EB", background: "#EFF6FF", outline: "none", cursor: "pointer", marginLeft: 20 }}
             >
               {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y === "all" ? "All Time" : y}</option>)}
             </select>
@@ -298,7 +378,7 @@ export default function FatturatoDashboard({ isHR }) {
               📥 Export
             </button>
           </div>
-          <p style={{ color: "#6B7280", margin: 0, fontSize: 14 }}>Manage invoiced amounts and incoming revenue</p>
+          <p style={{ color: "#6B7280", margin: 0, fontSize: 14 }}>Manage invoiced amounts and work progress tracking (SAL)</p>
         </div>
 
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -331,14 +411,17 @@ export default function FatturatoDashboard({ isHR }) {
                 <th style={{ position: "sticky", left: 280, zIndex: 10, background: "#F9FAFB", padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB", borderRight: "2px solid #E5E7EB", width: 100, minWidth: 100, boxSizing: "border-box", boxShadow: "4px 0 4px -2px rgba(0,0,0,0.05)" }}>ACTIONS</th>
 
                 {/* Scrollable columns */}
-                {["N. Cliente", "Cliente", "Preventivo", "Ordine", "Attività", "Fatturazione", "Valore Ordine", "Fatturato", "Rimanente", "Proforma", "Extra Costs"].map(h =>
+                {["N. Cliente", "Cliente", "Preventivo", "Ordine", "Attività", "Fatturazione", "Valore Ordine", "Fatturato", "Rimanente", "SAL Val.", "Obiettivi", "Proforma", "Extra Costs"].map(h =>
                   <th key={h} style={{ padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280", textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB" }}>{h.toUpperCase()}</th>
                 )}
               </tr>
             </thead>
             <tbody>
               {filteredFatturatoList.map((comm) => {
-                const totalLines = comm.clients.reduce((sum, c) => sum + (c.lines?.length || 1), 0) || 1;
+                const totalLines = comm.clients.reduce((sum, c) => {
+                  const visibleLinesCount = (c.lines || []).filter(l => parseEuNum(l.valore_ordine) > 0).length || 1;
+                  return sum + visibleLinesCount;
+                }, 0) || 1;
                 let commRendered = false;
 
                 return comm.clients.length === 0 ? (
@@ -346,11 +429,15 @@ export default function FatturatoDashboard({ isHR }) {
                     <td style={{ position: "sticky", left: 0, zIndex: 5, background: "#fff", padding: "12px 14px", fontWeight: 700, width: 80, minWidth: 80, boxSizing: "border-box" }}>{comm.comm_number}</td>
                     <td style={{ position: "sticky", left: 80, zIndex: 5, background: "#fff", padding: "12px 14px", width: 200, minWidth: 200, boxSizing: "border-box" }}>{comm.task_title}</td>
                     <td style={{ position: "sticky", left: 280, zIndex: 5, background: "#fff", padding: "12px 14px", borderRight: "2px solid #E5E7EB", width: 100, minWidth: 100, boxSizing: "border-box", boxShadow: "4px 0 4px -2px rgba(0,0,0,0.05)" }}><button onClick={() => openEditFatt(comm)}>Edit</button></td>
-                    <td colSpan={12} style={{ color: "#9CA3AF", padding: "12px" }}>No clients added.</td>
+                    <td colSpan={15} style={{ color: "#9CA3AF", padding: "12px" }}>No clients added.</td>
                   </tr>
                 ) : comm.clients.map((client, cIdx) => {
-                  const clientLines = client.lines?.length > 0 ? client.lines : [{}];
-                  return clientLines.map((line, lIdx) => {
+                  const allClientLines = client.lines?.length > 0 ? client.lines : [{}];
+                  const visibleClientLines = allClientLines.filter(line => !line.attivita || parseEuNum(line.valore_ordine) > 0);
+                  // fallback to empty if none visible but we must show something?
+                  const linesToRender = visibleClientLines.length > 0 ? visibleClientLines : [{}];
+
+                  return linesToRender.map((line, lIdx) => {
                     const isFirstComm = !commRendered; commRendered = true;
                     const isFirstCli = lIdx === 0;
                     const valOrdine = parseEuNum(line.valore_ordine);
@@ -372,7 +459,7 @@ export default function FatturatoDashboard({ isHR }) {
                     const rimanente = Math.max(0, valOrdine - globalFatt);
 
                     const ordini = line.ordini || [];
-                    const rowBorder = lIdx === clientLines.length - 1 && cIdx !== comm.clients.length - 1 ? "1px dashed #D1D5DB" : cIdx === comm.clients.length - 1 && lIdx === clientLines.length - 1 ? "2px solid #E5E7EB" : "1px solid #F3F4F6";
+                    const rowBorder = lIdx === linesToRender.length - 1 && cIdx !== comm.clients.length - 1 ? "1px dashed #D1D5DB" : cIdx === comm.clients.length - 1 && lIdx === linesToRender.length - 1 ? "2px solid #E5E7EB" : "1px solid #F3F4F6";
 
                     return (
                       <React.Fragment key={`${comm.id}-${client.id}-${line.id || lIdx}`}>
@@ -396,10 +483,10 @@ export default function FatturatoDashboard({ isHR }) {
                           )}
                           {isFirstCli && (
                             <>
-                              <td rowSpan={clientLines.length} style={{ padding: "12px 14px", fontWeight: 700, color: "#6B7280", verticalAlign: "top" }}>{client.n_cliente || "—"}</td>
-                              <td rowSpan={clientLines.length} style={{ padding: "12px 14px", fontSize: 12, color: "#374151", verticalAlign: "top", fontWeight: 600, maxWidth: 150 }}>{client.client_name || "—"}</td>
-                              <td rowSpan={clientLines.length} style={{ padding: "12px 14px", fontSize: 12, color: "#374151", verticalAlign: "top", maxWidth: 120 }}>{client.preventivo || "—"}</td>
-                              <td rowSpan={clientLines.length} style={{ padding: "12px 14px", fontSize: 12, color: "#374151", verticalAlign: "top", borderRight: "1px solid #F3F4F6", maxWidth: 150 }}>{client.ordine || "—"}</td>
+                              <td rowSpan={linesToRender.length} style={{ padding: "12px 14px", fontWeight: 700, color: "#6B7280", verticalAlign: "top" }}>{client.n_cliente || "—"}</td>
+                              <td rowSpan={linesToRender.length} style={{ padding: "12px 14px", fontSize: 12, color: "#374151", verticalAlign: "top", fontWeight: 600, maxWidth: 150 }}>{client.client_name || "—"}</td>
+                              <td rowSpan={linesToRender.length} style={{ padding: "12px 14px", fontSize: 12, color: "#374151", verticalAlign: "top", maxWidth: 120 }}>{client.preventivo || "—"}</td>
+                              <td rowSpan={linesToRender.length} style={{ padding: "12px 14px", fontSize: 12, color: "#374151", verticalAlign: "top", borderRight: "1px solid #F3F4F6", maxWidth: 150 }}>{client.ordine || "—"}</td>
                             </>
                           )}
 
@@ -439,6 +526,19 @@ export default function FatturatoDashboard({ isHR }) {
                             </div>
                           </td>
                           <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: rimanente > 0 ? "#F59E0B" : "#6B7280", whiteSpace: "nowrap" }}>{valOrdine ? `€${fmtEu(rimanente)}` : "—"}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: "#2563EB", whiteSpace: "nowrap" }}>
+                            {(() => {
+                              const lineSalVal = (salMonthlyData || []).filter(s => Number(s.fatturato_line_id) === Number(line.id)).reduce((sum, s) => sum + (parseFloat(s.value) || 0), 0);
+                              return lineSalVal > 0 ? `€${fmtEu(lineSalVal)}` : "—";
+                            })()}
+                          </td>
+                          <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: "#7C3AED", whiteSpace: "nowrap" }}>
+                            {(() => {
+                              const lineObjs = obiettiviData[line.id] || [];
+                              const lineTotalObj = (lineObjs || []).reduce((sum, o) => sum + (parseFloat(o.ordinante_val) || 0) + (parseFloat(o.acquisizioni_val) || 0), 0);
+                              return lineTotalObj > 0 ? `€${fmtEu(lineTotalObj)}` : "—";
+                            })()}
+                          </td>
                           <td style={{ padding: "12px 14px", fontSize: 12, color: "#374151", whiteSpace: "nowrap" }}>{valProforma ? `€${fmtEu(valProforma)}` : "—"}</td>
                           {isFirstComm && (
                             <td rowSpan={totalLines} style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: "#4B5563", verticalAlign: "top", background: "#FDFCF7" }}>
@@ -451,7 +551,7 @@ export default function FatturatoDashboard({ isHR }) {
                         </tr>
                       </React.Fragment>
                     );
-                  })
+                  });
                 });
               })}
             </tbody>
@@ -659,6 +759,149 @@ export default function FatturatoDashboard({ isHR }) {
                               </div>
                             ))}
                           </div>
+
+                          {/* Nested SAL & Obiettivi */}
+                          {!line.id ? (
+                            <div style={{ marginLeft: 20, marginTop: 12, padding: "10px 12px", background: "#FEF2F2", color: "#DC2626", borderRadius: 6, fontSize: 11, borderLeft: "4px solid #EF4444" }}>
+                              <strong>NOTE:</strong> You must <strong>Save Commessa Structure</strong> before adding Monthly Progress (SAL) and Targets (Obiettivi) to this newly created activity.
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ marginLeft: 20, borderLeft: "2px solid #2563EB", paddingLeft: 12, marginTop: 12 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <span style={{ fontSize: 9, fontWeight: 700, color: "#2563EB" }}>MONTHLY PROGRESS (SAL) HISTORY</span>
+                                    {(() => {
+                                      const total = (salMonthlyData || []).filter(s => Number(s.fatturato_line_id) === Number(line.id)).reduce((sum, s) => sum + (parseFloat(s.value) || 0), 0);
+                                      if (total > 0) return <span style={{ fontSize: 9, fontWeight: 700, color: "#2563EB" }}>TOTAL: €{fmtEu(total)}</span>;
+                                      return null;
+                                    })()}
+                                  </div>
+                                  <div style={{ display: "flex", gap: 6 }}>
+                                    <button
+                                      disabled={!line.id}
+                                      onClick={() => handleSalChange(line.id, "value", 0)}
+                                      style={{
+                                        background: line.id ? "#EFF6FF" : "#F3F4F6",
+                                        color: line.id ? "#2563EB" : "#9CA3AF",
+                                        border: `1px solid ${line.id ? "#BFDBFE" : "#D1D5DB"}`,
+                                        padding: "2px 6px",
+                                        borderRadius: 4,
+                                        fontSize: 9,
+                                        fontWeight: 700,
+                                        cursor: line.id ? "pointer" : "not-allowed"
+                                      }}
+                                      title={!line.id ? "Save the new activity first to enable progress tracking" : ""}
+                                    >
+                                      + Add Progress
+                                    </button>
+                                    <button onClick={async () => {
+                                      const entries = (salMonthlyData || []).filter(s => Number(s.fatturato_line_id) === Number(line.id));
+                                      const distinctYears = [...new Set(entries.map(e => e.year))];
+                                      try {
+                                        for (const y of distinctYears) {
+                                          const yearEntries = entries.filter(e => e.year === y);
+                                          const distinctMonths = [...new Set(yearEntries.map(e => e.month))];
+                                          for (const m of distinctMonths) {
+                                            const monthEntries = yearEntries.filter(e => e.month === m).map(e => ({
+                                              line_id: e.fatturato_line_id,
+                                              value: parseFloat(e.value) || 0,
+                                              status: e.status
+                                            }));
+                                            await api.updateMonthlySAL({ year: y, month: m, entries: monthEntries });
+                                          }
+                                        }
+                                        alert("All SAL progress for this line saved!");
+                                        fetchData();
+                                      } catch (err) { console.error(err); alert("Error saving bulk SAL: " + err.message); }
+                                    }} style={{ background: "#F0FDF4", color: "#166534", border: "1px solid #BBF7D0", padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>Save All SAL (Beta)</button>
+                                  </div>
+                                </div>
+                                {(salMonthlyData || []).filter(s => {
+                                  if (line.id) return Number(s.fatturato_line_id) === Number(line.id);
+                                  // For new unsaved lines, we can't easily correlate unless we have a consistent temp ID 
+                                  // Actually, the most reliable way for NEW lines is if the user saves first.
+                                  return false;
+                                }).sort((a, b) => b.year - a.year || b.month - a.month).map((s, sIdx) => (
+                                  <div key={sIdx} style={{ display: "flex", gap: 4, marginBottom: 4, alignItems: "center" }}>
+                                    <select value={s.year} onChange={e => {
+                                      const newData = [...salMonthlyData];
+                                      const realIdx = newData.findIndex(x => x === s);
+                                      if (realIdx >= 0) { newData[realIdx].year = parseInt(e.target.value); setSalMonthlyData(newData); }
+                                    }} style={{ ...inpStyle, width: 65, padding: "4px", fontSize: 10 }}>
+                                      {YEAR_OPTIONS.filter(y => y !== "all").map(y => <option key={y} value={y}>{y}</option>)}
+                                    </select>
+                                    <select value={s.month} onChange={e => {
+                                      const newData = [...salMonthlyData];
+                                      const realIdx = newData.findIndex(x => x === s);
+                                      if (realIdx >= 0) { newData[realIdx].month = parseInt(e.target.value); setSalMonthlyData(newData); }
+                                    }} style={{ ...inpStyle, width: 85, padding: "4px", fontSize: 10 }}>
+                                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => <option key={m} value={m}>{m}</option>)}
+                                    </select>
+                                    <input type="number" placeholder="Value €" value={s.value} onChange={e => {
+                                      const newData = [...salMonthlyData];
+                                      const realIdx = newData.findIndex(x => x === s);
+                                      if (realIdx >= 0) { newData[realIdx].value = e.target.value; setSalMonthlyData(newData); }
+                                    }} style={{ ...inpStyle, flex: 1, padding: "4px", fontSize: 11 }} />
+                                    <select value={s.status} onChange={e => {
+                                      const newData = [...salMonthlyData];
+                                      const realIdx = newData.findIndex(x => x === s);
+                                      if (realIdx >= 0) { newData[realIdx].status = e.target.value; setSalMonthlyData(newData); }
+                                    }} style={{ ...inpStyle, flex: 1, padding: "4px", fontSize: 10 }}>
+                                      <option value="in_progress">In Progress</option>
+                                      <option value="sbloccato">Released (Sbloccato)</option>
+                                    </select>
+                                    <button onClick={async () => {
+                                      if (!window.confirm("Delete this monthly progress?")) return;
+                                      if (s.id) {
+                                        // Saved in DB — delete via API
+                                        try {
+                                          await api.deleteMonthlySAL(s.id);
+                                          fetchData();
+                                        } catch (err) {
+                                          console.error(err);
+                                          alert("Error deleting SAL: " + err.message);
+                                        }
+                                      } else {
+                                        // Unsaved local entry — just remove from state
+                                        setSalMonthlyData(salMonthlyData.filter(x => x !== s));
+                                      }
+                                    }} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 12 }}>✕</button>
+                                    <button onClick={async () => {
+                                      try {
+                                        await api.updateMonthlySAL({ year: s.year, month: s.month, entries: [{ line_id: s.fatturato_line_id, value: parseFloat(s.value) || 0, status: s.status }] });
+                                        alert("Monthly progress saved!");
+                                        fetchData();
+                                      } catch (err) { console.error(err); }
+                                    }} style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#166534", borderRadius: 4, padding: "2px 4px", fontSize: 9, fontWeight: 700, cursor: "pointer" }}>Save</button>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Nested Obiettivi (Targets) */}
+                              <div style={{ marginLeft: 20, borderLeft: "2px solid #7C3AED", paddingLeft: 12, marginTop: 12 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                                  <span style={{ fontSize: 9, fontWeight: 700, color: "#7C3AED" }}>OBIETTIVI (TARGETS Q1, Q2, Q3)</span>
+                                  <button onClick={() => handleSaveLineObiettivi(line.id)} style={{ background: "#F5F3FF", color: "#7C3AED", border: "1px solid #DDD6FE", padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>Save Obiettivi</button>
+                                </div>
+                                {(() => {
+                                  const queryYear = (selectedYear && selectedYear !== "all") ? parseInt(selectedYear) : new Date().getFullYear();
+                                  return ['Q1', 'Q2', 'Q3'].map(p => {
+                                    const o = (obiettiviData[line.id] || []).find(obj => obj.period === p && obj.year === queryYear) || { ordinante_val: 0, acquisizioni_val: 0 };
+                                    return (
+                                      <div key={p} style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 4 }}>
+                                        <span style={{ fontSize: 10, fontWeight: 800, width: 25, color: "#7C3AED" }}>{p}</span>
+                                        <div style={{ flex: 1 }}>
+                                          <label style={{ fontSize: 8, display: "block", color: "#6B7280" }}>Ordinante €</label>
+                                          <input type="number" value={o.ordinante_val} onChange={e => handleObiettiviChange(line.id, p, "ordinante_val", e.target.value)} style={{ ...inpStyle, padding: "4px", fontSize: 11 }} />
+                                        </div>
+                                      </div>
+                                    );
+                                  });
+                                })()}
+                              </div>
+                            </>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -682,6 +925,7 @@ export default function FatturatoDashboard({ isHR }) {
                 ))}
                 {(fattForm.extra_costs || []).length === 0 && <div style={{ textAlign: "center", fontSize: 12, color: "#9CA3AF" }}>No extra costs defined.</div>}
               </div>
+
 
               <button onClick={handleSaveFatt} disabled={savingFatt} style={{ width: "100%", padding: 14, background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>{savingFatt ? "Saving..." : "Save Commessa Structure"}</button>
             </div>

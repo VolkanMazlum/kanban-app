@@ -23,6 +23,7 @@ export default function App() {
   const [modal, setModal]         = useState(null);
   const [dragOver, setDragOver]   = useState(null);
   const [toasts, setToasts]       = useState([]);
+  const [boardYear, setBoardYear] = useState(new Date().getFullYear());
   const dragId = useRef(null);
 
   const navigate = useNavigate();
@@ -151,16 +152,38 @@ export default function App() {
     } catch(err) { toast(err.message, "error"); loadAll(); }
   };
 
-  const filtered = filterEmpId === "all"
-    ? tasks
-    : tasks.filter(t => {
-        const matchAssignee = (t.assignees || []).some(a => Number(a.id) === Number(filterEmpId));
-        const matchPhase = (t.phases || []).some(ph => {
-          const ass = ph.assignee_hours || ph.assignees || [];
-          return ass.some(a => Number(a.id) === Number(filterEmpId));
-        });
-        return matchAssignee || matchPhase;
+  const filtered = (filterEmpId === "all" ? tasks : tasks.filter(t => {
+      const matchAssignee = (t.assignees || []).some(a => Number(a.id) === Number(filterEmpId));
+      const matchPhase = (t.phases || []).some(ph => {
+        const ass = ph.assignee_hours || ph.assignees || [];
+        return ass.some(a => Number(a.id) === Number(filterEmpId));
       });
+      return matchAssignee || matchPhase;
+    })).filter(t => {
+      // BOARD DATE FILTER:
+      const created = t.created_at ? new Date(t.created_at) : null;
+      const cYear = created ? created.getFullYear() : null;
+      const isCreatedSame = cYear === boardYear;
+      
+      const hasActivePhase = (t.phases || []).some(ph => {
+        if (!ph.start_date && !ph.end_date) return false;
+        const start = ph.start_date ? new Date(ph.start_date) : null;
+        const end = ph.end_date ? new Date(ph.end_date) : null;
+        const sYear = start ? start.getFullYear() : null;
+        const eYear = end ? end.getFullYear() : null;
+
+        if (sYear && eYear) return boardYear >= sYear && boardYear <= eYear;
+        if (sYear) return sYear === boardYear;
+        if (eYear) return eYear === boardYear;
+        return false;
+      });
+
+      // Special case: If boardYear is the current year, show all non-done tasks
+      const isCurrentYear = boardYear === new Date().getFullYear();
+      const isActiveNow = isCurrentYear && t.status !== 'done';
+      
+      return isCreatedSame || hasActivePhase || isActiveNow;
+    });
 
   if (location.pathname === "/login") {
     return <Login onLoginSuccess={() => loadAll()} />;
@@ -234,11 +257,17 @@ export default function App() {
 
           <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
             {location.pathname === "/" && (
-              <select value={filterEmpId} onChange={e=>setFilter(e.target.value)}
-                style={{background:"#fff",border:"1.px solid #E5E7EB",borderRadius:6,padding:"5px 8px",color:"#374151",fontSize:11,fontFamily:"'Inter',sans-serif",cursor:"pointer",fontWeight:500,maxWidth:110}}>
-                <option value="all">All Members</option>
-                {employees.map(e=><option key={e.id} value={String(e.id)}>{e.name}</option>)}
-              </select>
+              <>
+                <select value={boardYear} onChange={e => setBoardYear(parseInt(e.target.value))}
+                  style={{background:"#fff",border:"1px solid #E5E7EB",borderRadius:6,padding:"5px 8px",color:"#374151",fontSize:11,fontFamily:"'Inter',sans-serif",cursor:"pointer",fontWeight:500}}>
+                  {[2024, 2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+                <select value={filterEmpId} onChange={e=>setFilter(e.target.value)}
+                  style={{background:"#fff",border:"1px solid #E5E7EB",borderRadius:6,padding:"5px 8px",color:"#374151",fontSize:11,fontFamily:"'Inter',sans-serif",cursor:"pointer",fontWeight:500,maxWidth:110}}>
+                  <option value="all">All Members</option>
+                  {employees.map(e=><option key={e.id} value={String(e.id)}>{e.name}</option>)}
+                </select>
+              </>
             )}
             {/* Removed separate Team button as it is now integrated into Users & Audit */}
             {isHR && (

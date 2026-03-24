@@ -321,6 +321,32 @@ CREATE INDEX IF NOT EXISTS idx_fatturato_realized_line ON fatturato_realized(fat
  );
  CREATE INDEX IF NOT EXISTS idx_commessa_extra_costs_comm ON commessa_extra_costs(commessa_id);
  
+  -- 8. FATTURATO SAL & OBIETTIVI
+  CREATE TABLE IF NOT EXISTS fatturato_sal (
+    id SERIAL PRIMARY KEY,
+    fatturato_line_id INTEGER REFERENCES fatturato_lines(id) ON DELETE CASCADE,
+    year INTEGER NOT NULL,
+    month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+    value NUMERIC(12,2) NOT NULL DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'in_progress' CHECK (status IN ('sbloccato', 'in_progress')),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(fatturato_line_id, year, month)
+  );
+
+  CREATE TABLE IF NOT EXISTS fatturato_obiettivi (
+    id SERIAL PRIMARY KEY,
+    fatturato_line_id INTEGER REFERENCES fatturato_lines(id) ON DELETE CASCADE,
+    year INTEGER NOT NULL,
+    period VARCHAR(20) NOT NULL, -- 'T2', 'T3', 'T4'
+    ordinante_val NUMERIC(12,2) DEFAULT 0,
+    acquisizioni_val NUMERIC(12,2) DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(fatturato_line_id, year, period)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_fatturato_sal_line ON fatturato_sal(fatturato_line_id);
+  CREATE INDEX IF NOT EXISTS idx_fatturato_obiettivi_line ON fatturato_obiettivi(fatturato_line_id);
+
  -- ==============================================================================
 -- 7. USERS & AUDIT LOGS
 -- ==============================================================================

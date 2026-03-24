@@ -188,5 +188,13 @@ export const exportWorkload = (year) => `${BASE}/reports/workload${year ? `?year
 export const exportEmployees = () => `${BASE}/reports/employees`;
 export const exportClients = () => `${BASE}/reports/clients`;
 
+// ── SAL & OBIETTIVI ──
+export const getMonthlySAL = (year, month) => req(`/fatturato-sal?year=${year}${month ? `&month=${month}` : ""}`);
+export const updateMonthlySAL = (data) => req("/fatturato-sal/bulk", { method: "POST", body: JSON.stringify(data) });
+export const deleteMonthlySAL = (id) => req(`/fatturato-sal/${id}`, { method: "DELETE" });
+export const getProjectObiettivi = (commId) => req(`/commesse/${commId}/obiettivi`);
+export const updateProjectObiettivi = (commId, data) => req(`/commesse/${commId}/obiettivi`, { method: "POST", body: JSON.stringify(data) });
+export const updateLineObiettiviBulk = (lineId, data) => req(`/fatturato-lines/${lineId}/obiettivi/bulk`, { method: "POST", body: JSON.stringify(data) });
+
 // ── AUDIT LOGS ──
 export const getAuditLogs = (limit = 100) => req(`/audit-logs?limit=${limit}`);

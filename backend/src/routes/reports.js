@@ -151,9 +151,12 @@ router.get('/finances', authenticateHR, async (req, res) => {
     const totalRow = sheet.addRow(['TOTALE', '', '', '', Number(total)]);
     totalRow.font = { bold: true };
 
-    // SHEET 2: CONTRACT DETAILS (Now filtered by year if provided)
+    // SHEET 2: CONTRACT DETAILS (Including SAL and Obiettivi)
     const sheet2 = workbook.addWorksheet('Dettagli Contrattuali');
-    sheet2.columns = [
+    
+    const salMonths = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
+    
+    const baseCols = [
       { header: 'N. Commessa', key: 'comm_number', width: 15 },
       { header: 'Nome Progetto', key: 'comm_name', width: 30 },
       { header: 'N. Cliente', key: 'n_cliente', width: 10 },
@@ -166,19 +169,34 @@ router.get('/finances', authenticateHR, async (req, res) => {
       { header: 'Rimanente (€)', key: 'residuo', width: 18 },
       { header: 'Proforma (€)', key: 'proforma', width: 15 },
       { header: 'Costi Extra (€)', key: 'extra_costs', width: 15 },
-      { header: 'Note', key: 'note', width: 30 },
+      { header: 'SAL Valore Totale (€)', key: 'sal_total', width: 20 },
     ];
+
+    // Add SAL Columns
+    salMonths.forEach((m, i) => {
+      baseCols.push({ header: `${m} SAL (€)`, key: `sal_${i+1}`, width: 15 });
+    });
+
+    // Add Obiettivi Columns
+    ['T2', 'T3', 'T4'].forEach(p => {
+      baseCols.push({ header: `Obiettivi ${p} - Ordinante`, key: `obj_ord_${p}`, width: 20 });
+      baseCols.push({ header: `Obiettivi ${p} - Acquisizioni`, key: `obj_acq_${p}`, width: 20 });
+    });
+
+    baseCols.push({ header: 'Note', key: 'note', width: 30 });
+    sheet2.columns = baseCols;
     sheet2.getRow(1).font = { bold: true };
     sheet2.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
 
     const yearSuffix = (year && year !== 'all') ? year.toString().slice(-2) : null;
+    const yearNum = (year && year !== 'all') ? parseInt(year) : new Date().getFullYear();
 
     const ordersRes = await query(`
       SELECT 
-        c.comm_number, c.name as comm_name,
+        c.id as comm_id, c.comm_number, c.name as comm_name,
         cl.name as client_name,
         cc.n_cliente, cc.n_ordine,
-        fl.attivita, fl.valore_ordine, fl.fatturato_amount, fl.proforma, fl.note,
+        fl.id as line_id, fl.attivita, fl.valore_ordine, fl.fatturato_amount, fl.proforma, fl.note,
         (SELECT STRING_AGG(label || ': ' || (percentage::float)::text || '%', ', ') FROM fatturato_ordini WHERE fatturato_line_id = fl.id) as fatturazione,
         COALESCE((SELECT SUM(amount) FROM commessa_extra_costs WHERE commessa_id = c.id), 0) as extra_costs
       FROM commesse c
@@ -194,90 +212,120 @@ router.get('/finances', authenticateHR, async (req, res) => {
       ORDER BY c.comm_number ASC, cc.n_cliente ASC, fl.id ASC
     `, [year || 'all', yearSuffix]);
 
+    // Fetch SAL (Total across all years for that line if 'all', otherwise filtered)
+    const salRes = await query(
+      (year && year !== 'all') ? `SELECT * FROM fatturato_sal WHERE year = $1` : `SELECT * FROM fatturato_sal`,
+      (year && year !== 'all') ? [yearNum] : []
+    );
+    const salByLine = {};
+    const salTotalByLine = {};
+    salRes.rows.forEach(s => {
+      const lid = s.fatturato_line_id;
+      if (!salByLine[lid]) salByLine[lid] = {};
+      // If we are looking at a specific year, match months. 
+      // If 'all', 'sal_i' columns might be less meaningful than total, but we'll fill current year's months.
+      if (!year || year === 'all' || Number(s.year) === Number(yearNum)) {
+        salByLine[lid][s.month] = s.value;
+      }
+      salTotalByLine[lid] = (salTotalByLine[lid] || 0) + Number(s.value || 0);
+    });
+
+    // Fetch ALL Obiettivi
+    const objRes = await query(
+      (year && year !== 'all') ? `SELECT * FROM fatturato_obiettivi WHERE year = $1` : `SELECT * FROM fatturato_obiettivi`,
+      (year && year !== 'all') ? [yearNum] : []
+    );
+    const objByLine = {};
+    objRes.rows.forEach(o => {
+      const lid = o.fatturato_line_id;
+      if (!objByLine[lid]) objByLine[lid] = {};
+      
+      // For targets in the columns, we prefer the selected year or current year.
+      // But we can aggregate for the row data if needed (the ledger sums them).
+      if (!year || year === 'all' || Number(o.year) === Number(yearNum)) {
+        objByLine[lid][o.period] = o;
+      } else if (!objByLine[lid][o.period]) {
+        // Fallback or aggregate
+        objByLine[lid][o.period] = o;
+      }
+    });
+
+    // Individual Project Sheets
     let currentSheet = null;
     let commTotalVal = 0;
     let commTotalFatt = 0;
     let commTotalProf = 0;
     let lastComm = null;
 
-    const setupSheet = (commNum, commName) => {
-      // Sheet names must be <= 31 chars and unique. Use comm_number as suffix.
+    const setupDetailSheet = (commNum, commName) => {
       const sheetName = `DET - ${commNum}`.slice(0, 31);
       const ws = workbook.addWorksheet(sheetName);
-      ws.columns = [
-        { header: 'N. Cliente', key: 'n_cliente', width: 10 },
-        { header: 'Cliente', key: 'client_name', width: 25 },
-        { header: 'Rif. Ordine', key: 'n_ordine', width: 20 },
-        { header: 'Attività', key: 'attivita', width: 30 },
-        { header: 'Fatturazione', key: 'fatturazione', width: 40 },
-        { header: 'Valore Ordine (€)', key: 'valore_ordine', width: 18 },
-        { header: 'Totale Fatturato (€)', key: 'fatturato_amount', width: 18 },
-        { header: 'Rimanente (€)', key: 'residuo', width: 18 },
-        { header: 'Proforma (€)', key: 'proforma', width: 15 },
-        { header: 'Note', key: 'note', width: 30 },
-      ];
+      ws.columns = baseCols; // Reuse the same columns
       
-      // Add a header row with project name
-      const titleRow = ws.insertRow(1, { n_cliente: `COMMESSA: ${commNum} - ${commName || ''}` });
+      const titleRow = ws.insertRow(1, { comm_number: `COMMESSA: ${commNum} - ${commName || ''}` });
       titleRow.font = { bold: true, size: 14 };
       titleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
-      ws.mergeCells(1, 1, 1, 10);
+      ws.mergeCells(1, 1, 1, baseCols.length);
       
-      // Original header (now at row 2)
       ws.getRow(2).font = { bold: true };
       ws.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
-      
       return ws;
     };
 
     ordersRes.rows.forEach((r, idx) => {
-      if (lastComm !== r.comm_number) {
-        // Add total to previous sheet if exists
-        if (currentSheet) {
-          const subRow = currentSheet.addRow({
-            attivita: 'TOTALE COMMESSA',
-            valore_ordine: commTotalVal,
-            fatturato_amount: commTotalFatt,
-            proforma: commTotalProf,
-            residuo: commTotalVal - commTotalFatt
-          });
-          subRow.font = { bold: true };
-          subRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
-        }
-
-        // Setup new sheet
-        currentSheet = setupSheet(r.comm_number, r.comm_name);
-        lastComm = r.comm_number;
-        commTotalVal = 0;
-        commTotalFatt = 0;
-        commTotalProf = 0;
-      }
-
       const valOrd = Number(r.valore_ordine || 0);
       const valFatt = Number(r.fatturato_amount || 0);
       const valProf = Number(r.proforma || 0);
-
-      commTotalVal += valOrd;
-      commTotalFatt += valFatt;
-      commTotalProf += valProf;
-
-      currentSheet.addRow({
+      
+      const rowData = {
         ...r,
         valore_ordine: valOrd,
         fatturato_amount: valFatt,
         residuo: valOrd - valFatt,
         proforma: valProf
+      };
+
+      const lineSal = salByLine[r.line_id] || {};
+      for (let i = 1; i <= 12; i++) {
+        rowData[`sal_${i}`] = lineSal[i] ? Number(lineSal[i]) : 0;
+      }
+      rowData['sal_total'] = salTotalByLine[r.line_id] || 0;
+
+      const lineObjAt = objByLine[r.line_id] || {};
+      ['T2', 'T3', 'T4'].forEach(p => {
+        // The ledger shows SUM of targets for the line. Let's match if year is 'all'
+        if (year === 'all') {
+           const allTargetsForLine = objRes.rows.filter(o => o.fatturato_line_id === r.line_id && o.period === p);
+           rowData[`obj_ord_${p}`] = allTargetsForLine.reduce((sum, o) => sum + Number(o.ordinante_val || 0), 0);
+           rowData[`obj_acq_${p}`] = allTargetsForLine.reduce((sum, o) => sum + Number(o.acquisizioni_val || 0), 0);
+        } else {
+           rowData[`obj_ord_${p}`] = lineObjAt[p] ? Number(lineObjAt[p].ordinante_val) : 0;
+           rowData[`obj_acq_${p}`] = lineObjAt[p] ? Number(lineObjAt[p].acquisizioni_val) : 0;
+        }
       });
 
-      // Tail subtotal for the very last row/sheet
+      // Add to Master Sheet
+      sheet2.addRow(rowData);
+
+      // Add to Individual Sheet
+      if (lastComm !== r.comm_number) {
+        if (currentSheet) {
+          const subRow = currentSheet.addRow({ attivita: 'TOTALE COMMESSA', valore_ordine: commTotalVal, fatturato_amount: commTotalFatt, proforma: commTotalProf, residuo: commTotalVal - commTotalFatt });
+          subRow.font = { bold: true };
+          subRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+        }
+        currentSheet = setupDetailSheet(r.comm_number, r.comm_name);
+        lastComm = r.comm_number;
+        commTotalVal = 0; commTotalFatt = 0; commTotalProf = 0;
+      }
+
+      commTotalVal += valOrd;
+      commTotalFatt += valFatt;
+      commTotalProf += valProf;
+      currentSheet.addRow(rowData);
+
       if (idx === ordersRes.rows.length - 1 && currentSheet) {
-        const subRow = currentSheet.addRow({
-          attivita: 'TOTALE COMMESSA',
-          valore_ordine: commTotalVal,
-          fatturato_amount: commTotalFatt,
-          proforma: commTotalProf,
-          residuo: commTotalVal - commTotalFatt
-        });
+        const subRow = currentSheet.addRow({ attivita: 'TOTALE COMMESSA', valore_ordine: commTotalVal, fatturato_amount: commTotalFatt, proforma: commTotalProf, residuo: commTotalVal - commTotalFatt });
         subRow.font = { bold: true };
         subRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
       }

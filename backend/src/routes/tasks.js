@@ -7,7 +7,7 @@ module.exports = (app, query, pool, authenticate) => {
   app.get("/api/tasks", authenticate, async (req, res) => {
     try {
       const { assignee_id, status } = req.query;
-      
+
       let sql = `
       SELECT t.id, t.title, t.description, t.deadline, t.planned_start, t.planned_end, t.actual_start, t.actual_end, t.status, t.position, t.created_at, t.updated_at, t.estimated_hours, t.label,
             COALESCE(
@@ -52,6 +52,7 @@ module.exports = (app, query, pool, authenticate) => {
                     'client_name', cl.name,
                     'lines', COALESCE((
                       SELECT json_agg(json_build_object(
+                        'id', fl.id,
                         'attivita', fl.attivita,
                         'valore_ordine', fl.valore_ordine,
                         'fatturato_amount', fl.fatturato_amount
@@ -74,20 +75,20 @@ module.exports = (app, query, pool, authenticate) => {
       WHERE 1=1
     `;
       const params = [];
-      
-      if (assignee_id) { 
-        params.push(assignee_id); 
-        sql += ` AND EXISTS (SELECT 1 FROM task_assignees sub_ta WHERE sub_ta.task_id = t.id AND sub_ta.employee_id = $${params.length})`; 
+
+      if (assignee_id) {
+        params.push(assignee_id);
+        sql += ` AND EXISTS (SELECT 1 FROM task_assignees sub_ta WHERE sub_ta.task_id = t.id AND sub_ta.employee_id = $${params.length})`;
       }
-      
-      if (status) { 
-        params.push(status); 
-        sql += ` AND t.status = $${params.length}`; 
+
+      if (status) {
+        params.push(status);
+        sql += ` AND t.status = $${params.length}`;
       }
-      
+
       sql += " GROUP BY t.id ORDER BY t.status, t.position ASC, t.created_at ASC";
       const result = await query(sql, params);
-      
+
       // Security: Strip sensitive commessa data for non-HR users
       const tasks = result.rows.map(t => {
         if (req.user.role !== 'hr') {
@@ -96,11 +97,11 @@ module.exports = (app, query, pool, authenticate) => {
         }
         return t;
       });
-      
+
       res.json(tasks);
-    } catch (err) { 
+    } catch (err) {
       console.error("GET /tasks Error:", err);
-      res.status(500).json({ error: "Database error" }); 
+      res.status(500).json({ error: "Database error" });
     }
   });
 
@@ -186,54 +187,54 @@ module.exports = (app, query, pool, authenticate) => {
       `;
       const result = await query(sql, [req.params.id]);
       if (!result.rows.length) return res.status(404).json({ error: "Task not found" });
-      
+
       const task = result.rows[0];
-      
+
       // Security: Strip sensitive commessa data for non-HR users
       if (req.user.role !== 'hr') {
         delete task.commessa;
       }
-      
+
       res.json(task);
     } catch (err) { res.status(500).json({ error: "Database error" }); }
   });
 
   app.post("/api/tasks", authenticate, async (req, res) => {
     const { title, description, label, topics, assignee_ids, deadline, status, position,
-            planned_start, planned_end, actual_start, actual_end, estimated_hours, phases } = req.body;
-    
+      planned_start, planned_end, actual_start, actual_end, estimated_hours, phases } = req.body;
+
     try {
       const validatedData = taskSchema.parse({
         title, description, label, topics, deadline, planned_start, planned_end, actual_start, actual_end, status, position, assignee_ids, estimated_hours
       });
-      
+
       const {
         title: validatedTitle, description: validatedDescription, topics: validatedTopics, deadline: validatedDeadline,
         planned_start: validatedPlannedStart, planned_end: validatedPlannedEnd, actual_start: validatedActualStart,
         actual_end: validatedActualEnd, status: validatedStatus, position: validatedPosition,
         assignee_ids: validatedAssigneeIds, estimated_hours: validatedEstimatedHours, label: validatedLabel
       } = validatedData;
-    
+
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
-        
+
         // 1. Create main task 
         const taskResult = await client.query(
           "INSERT INTO tasks (title, description, label, deadline, planned_start, planned_end, actual_start, actual_end, status, position, estimated_hours) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *",
           [validatedTitle, validatedDescription || "", validatedLabel || null, validatedDeadline || null,
-           validatedPlannedStart || null, validatedPlannedEnd || null, validatedActualStart || null, validatedActualEnd || null,
-           validatedStatus, validatedPosition, validatedEstimatedHours || null]
+            validatedPlannedStart || null, validatedPlannedEnd || null, validatedActualStart || null, validatedActualEnd || null,
+            validatedStatus, validatedPosition, validatedEstimatedHours || null]
         );
         const newTask = taskResult.rows[0];
         newTask.assignees = [];
         newTask.topics = [];
         newTask.phases = [];
- 
+
         // Audit log: task created
         const ctx = getAuditContext(req);
         logAudit(client.query.bind(client), { ...ctx, action: 'CREATE', entityType: 'task', entityId: newTask.id, details: { title: newTask.title } });
-        
+
         // 2. Save assignees
         if (validatedAssigneeIds && validatedAssigneeIds.length > 0) {
           await client.query(
@@ -243,7 +244,7 @@ module.exports = (app, query, pool, authenticate) => {
           const emps = await client.query("SELECT id, name FROM employees WHERE id = ANY($1)", [validatedAssigneeIds]);
           newTask.assignees = emps.rows;
         }
- 
+
         // 3. Save topics
         if (validatedTopics && validatedTopics.length > 0) {
           await client.query(
@@ -252,30 +253,30 @@ module.exports = (app, query, pool, authenticate) => {
           );
           newTask.topics = validatedTopics;
         }
- 
+
         // 4. Save Phases AND their Assignees
         if (phases && phases.length > 0) {
           for (let i = 0; i < phases.length; i++) {
             const ph = phases[i];
-            
+
             // Insert Phase and get its ID
             const phaseResult = await client.query(
               "INSERT INTO task_phases (task_id, name, position, start_date, end_date, status, topic_source, note, estimated_hours) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
               [
-                newTask.id, 
-                ph.name, 
-                i, 
-                ph.start_date || null, 
-                ph.end_date || null, 
-                ph.status || 'pending', 
-                ph.topic_source || null, 
+                newTask.id,
+                ph.name,
+                i,
+                ph.start_date || null,
+                ph.end_date || null,
+                ph.status || 'pending',
+                ph.topic_source || null,
                 ph.note || null,
                 ph.estimated_hours || null
               ]
             );
-            
+
             const newPhaseId = phaseResult.rows[0].id;
- 
+
             // Insert Phase Assignees & Hours
             if (ph.assignee_hours && ph.assignee_hours.length > 0) {
               for (const ah of ph.assignee_hours) {
@@ -288,7 +289,7 @@ module.exports = (app, query, pool, authenticate) => {
           }
           newTask.phases = phases;
         }
-        
+
         await client.query("COMMIT");
         res.status(201).json(newTask);
       } catch (err) {
@@ -310,23 +311,23 @@ module.exports = (app, query, pool, authenticate) => {
   app.put("/api/tasks/:id", authenticate, async (req, res) => {
     const { id } = req.params;
     const { title, description, label, topics, assignee_ids, deadline, status, position,
-            planned_start, planned_end, actual_start, actual_end, estimated_hours, phases } = req.body;
-    
+      planned_start, planned_end, actual_start, actual_end, estimated_hours, phases } = req.body;
+
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      
+
       const validatedData = taskUpdateSchema.parse({
         title, description, label, topics, deadline, planned_start, planned_end, actual_start, actual_end, status, position, assignee_ids, estimated_hours
       });
-      
+
       const {
         title: validatedTitle, description: validatedDescription, label: validatedLabel, topics: validatedTopics, deadline: validatedDeadline,
         planned_start: validatedPlannedStart, planned_end: validatedPlannedEnd, actual_start: validatedActualStart,
         actual_end: validatedActualEnd, status: validatedStatus, position: validatedPosition,
         assignee_ids: validatedAssigneeIds, estimated_hours: validatedEstimatedHours
       } = validatedData;
-    
+
       try {
         const existing = await client.query("SELECT * FROM tasks WHERE id = $1", [id]);
         if (!existing.rows.length) {
@@ -334,18 +335,18 @@ module.exports = (app, query, pool, authenticate) => {
           return res.status(404).json({ error: "Task not found" });
         }
         const t = existing.rows[0];
-        
+
         // 1. Update main task
         const taskResult = await client.query(
           "UPDATE tasks SET title=$1, description=$2, label=$3, deadline=$4, planned_start=$5, planned_end=$6, actual_start=$7, actual_end=$8, status=$9, position=$10, estimated_hours=$11 WHERE id=$12 RETURNING *",
           [validatedTitle ?? t.title, validatedDescription ?? t.description,
-           validatedLabel ?? t.label,
-           validatedDeadline !== undefined ? validatedDeadline : t.deadline,
-           validatedPlannedStart !== undefined ? validatedPlannedStart : t.planned_start,
-           validatedPlannedEnd !== undefined ? validatedPlannedEnd : t.planned_end,
-           validatedActualStart !== undefined ? validatedActualStart : t.actual_start,
-           validatedActualEnd !== undefined ? validatedActualEnd : t.actual_end,
-           validatedStatus ?? t.status, validatedPosition !== undefined ? validatedPosition : t.position, validatedEstimatedHours || null, id]
+          validatedLabel ?? t.label,
+          validatedDeadline !== undefined ? validatedDeadline : t.deadline,
+          validatedPlannedStart !== undefined ? validatedPlannedStart : t.planned_start,
+          validatedPlannedEnd !== undefined ? validatedPlannedEnd : t.planned_end,
+          validatedActualStart !== undefined ? validatedActualStart : t.actual_start,
+          validatedActualEnd !== undefined ? validatedActualEnd : t.actual_end,
+          validatedStatus ?? t.status, validatedPosition !== undefined ? validatedPosition : t.position, validatedEstimatedHours || null, id]
         );
         const updatedTask = taskResult.rows[0];
         updatedTask.assignees = [];
@@ -363,8 +364,8 @@ module.exports = (app, query, pool, authenticate) => {
             updatedTask.assignees = emps.rows;
           }
         } else {
-           const existingEmps = await client.query(`SELECT e.id, e.name FROM employees e JOIN task_assignees ta ON e.id = ta.employee_id WHERE ta.task_id = $1`, [id]);
-           updatedTask.assignees = existingEmps.rows;
+          const existingEmps = await client.query(`SELECT e.id, e.name FROM employees e JOIN task_assignees ta ON e.id = ta.employee_id WHERE ta.task_id = $1`, [id]);
+          updatedTask.assignees = existingEmps.rows;
         }
 
         // 3. Update Topics
@@ -377,33 +378,33 @@ module.exports = (app, query, pool, authenticate) => {
             updatedTask.topics = [];
           }
         } else {
-           const existingTopics = await client.query(`SELECT topic FROM task_topics WHERE task_id = $1`, [id]);
-           updatedTask.topics = existingTopics.rows.map(row => row.topic);
+          const existingTopics = await client.query(`SELECT topic FROM task_topics WHERE task_id = $1`, [id]);
+          updatedTask.topics = existingTopics.rows.map(row => row.topic);
         }
 
         // 4. Update Phases (Delete old, insert new)
         if (phases !== undefined) {
-          await client.query("DELETE FROM task_phases WHERE task_id = $1", [id]); 
-          
+          await client.query("DELETE FROM task_phases WHERE task_id = $1", [id]);
+
           if (phases.length > 0) {
             for (let i = 0; i < phases.length; i++) {
               const ph = phases[i];
-              
+
               const phaseResult = await client.query(
                 "INSERT INTO task_phases (task_id, name, position, start_date, end_date, status, topic_source, note, estimated_hours) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
                 [
-                  id, 
-                  ph.name, 
-                  i, 
-                  ph.start_date || null, 
-                  ph.end_date || null, 
-                  ph.status || 'pending', 
-                  ph.topic_source || ph.topic || null, 
+                  id,
+                  ph.name,
+                  i,
+                  ph.start_date || null,
+                  ph.end_date || null,
+                  ph.status || 'pending',
+                  ph.topic_source || ph.topic || null,
                   ph.note || null,
                   ph.estimated_hours || null
                 ]
               );
-              
+
               const newPhaseId = phaseResult.rows[0].id;
 
               if (ph.assignee_hours && ph.assignee_hours.length > 0) {
@@ -444,14 +445,14 @@ module.exports = (app, query, pool, authenticate) => {
         status: z.enum(['new', 'process', 'blocked', 'done'])
       }).parse({ status });
       const validatedStatus = validatedData.status;
-      
+
       try {
         const existing = await query("SELECT status, actual_start FROM tasks WHERE id = $1", [req.params.id]);
         if (!existing.rows.length) return res.status(404).json({ error: "Task not found" });
         const hasActualStart = existing.rows[0].actual_start;
         let sql = "UPDATE tasks SET status=$1";
         const params = [validatedStatus];
-        
+
         if (validatedStatus === 'process') {
           sql += ", actual_end=NULL";
           if (!hasActualStart) {
@@ -460,7 +461,7 @@ module.exports = (app, query, pool, authenticate) => {
               FROM task_phases 
               WHERE task_id = $1 AND start_date IS NOT NULL
             `, [req.params.id]);
-            
+
             const earliest = earliestPhase.rows[0]?.earliest;
             if (earliest) {
               params.push(earliest);
@@ -470,26 +471,19 @@ module.exports = (app, query, pool, authenticate) => {
             }
           }
         }
-         else if (validatedStatus === 'new') {
+        else if (validatedStatus === 'new') {
           sql += ", actual_end=NULL , actual_start=NULL, estimated_hours=NULL";
         } else if (validatedStatus === 'blocked') {
           sql += ", actual_end=NULL";
         }
-        
+
         sql += " WHERE id=$" + (params.length + 1) + " RETURNING *";
         params.push(req.params.id);
-        
+
         const result = await query(sql, params);
         if (!result.rows.length) return res.status(404).json({ error: "Task not found" });
 
-        if (validatedStatus === 'done') {
-          await query(`
-            UPDATE task_phases 
-            SET status = 'done'
-            WHERE task_id = $1 AND status != 'done' 
-          `, [req.params.id]);
-        }
-        else if (validatedStatus === 'process') {
+        if (validatedStatus === 'process') {
           await query(`
             UPDATE task_phases 
             SET status = 'pending'
@@ -500,7 +494,7 @@ module.exports = (app, query, pool, authenticate) => {
         // Audit log: status changed
         const ctx = getAuditContext(req);
         logAudit(query, { ...ctx, action: 'STATUS_CHANGE', entityType: 'task', entityId: parseInt(req.params.id), details: { newStatus: validatedStatus } });
-        
+
         res.json(result.rows[0]);
 
       } catch (err) { res.status(500).json({ error: "Database error" }); }
