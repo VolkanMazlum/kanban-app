@@ -318,7 +318,7 @@ export default function KPIDashboard({ employees }) {
                 <tr style={{ background: "#F9FAFB" }}>
                   <td colSpan={2} style={{ padding: "4px 4px", fontWeight: 800, color: "#111827", fontSize: 9 }}>🟢 INCOME (TAKEN)</td>
                 </tr>
-                {(summary.forecast?.[0]?.details || []).map((d, i) => (
+                {(summary.forecast?.[2]?.details || []).map((d, i) => (
                   <tr key={`inc-${i}`} style={{ borderBottom: "1px solid #F9FAFB" }}>
                     <td style={{ padding: "4px 4px", color: "#374151" }}>{d.name}</td>
                     <td style={{ padding: "4px 4px", textAlign: "right", color: "#111827", fontWeight: 600 }}>+€{Math.round(d.amount).toLocaleString("it-IT")}</td>
