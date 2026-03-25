@@ -98,9 +98,9 @@ export default function TimesheetTab({
 
                   const activeTasksOnThisDay = assignedTasks.filter(t => {
                     const dayTime = day.getTime();
-                    const start = t.actual_start || t.planned_start || t.created_at;
+                    const start = t.planned_start || t.created_at;
                     const startTime = new Date(start).setHours(0,0,0,0);
-                    const end = t.actual_end || t.planned_end;
+                    const end = t.planned_end || t.deadline;
                     const endTime = end ? new Date(end).setHours(23,59,59,999) : Infinity;
                     return dayTime >= startTime && dayTime <= endTime;
                   });

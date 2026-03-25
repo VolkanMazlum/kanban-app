@@ -6,7 +6,8 @@ const STATUS_COLOR = { new: "#2563EB", process: "#059669", blocked: "#DC2626", d
 const ROW_HEIGHT = 56; // Ana görev satırı yüksekliği
 const TOPIC_ROW_HEIGHT = 40; // Her kategori için TEK BİR satır yüksekliği
 
-export default function GanttChart({ tasks, employees }) {
+export default function GanttChart({ tasks, employees, user }) {
+  const isHR = user?.role === "hr";
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -45,7 +46,7 @@ export default function GanttChart({ tasks, employees }) {
 
   // Kişi ana görevde YOKSA bile fazlarında VARSA göster
   const filtered = tasks.filter(t => {
-    if (!t.deadline) return false;
+    if (!t.deadline && !t.planned_start) return false;
     if (statusFilter !== "all" && t.status !== statusFilter) return false;
 
     if (empFilter !== "all") {
@@ -56,8 +57,8 @@ export default function GanttChart({ tasks, employees }) {
       if (!inMainTask && !inPhases) return false;
     }
 
-    const s = t.actual_start ? new Date(t.actual_start) : t.planned_start ? new Date(t.planned_start) : new Date(t.deadline);
-    const e2 = t.actual_end ? new Date(t.actual_end) : t.planned_end ? new Date(t.planned_end) : new Date(t.deadline);
+    const s = t.planned_start ? new Date(t.planned_start) : new Date(t.deadline);
+    const e2 = t.planned_end ? new Date(t.planned_end) : new Date(t.deadline);
     s.setHours(0, 0, 0, 0); e2.setHours(0, 0, 0, 0);
     return s <= windowEnd && e2 >= windowStart;
   }).sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
@@ -207,7 +208,7 @@ export default function GanttChart({ tasks, employees }) {
               )}
 
               {filtered.map(task => {
-                const taskBp = getBarProps(task.actual_start || task.planned_start, task.actual_end || task.planned_end, task.deadline);
+                const taskBp = getBarProps(task.planned_start, task.planned_end, task.deadline);
                 const topics = task.topics || [];
                 const phases = task.phases || [];
                 const bc = STATUS_COLOR[task.status] || "#9CA3AF";
@@ -246,8 +247,9 @@ export default function GanttChart({ tasks, employees }) {
                             const phColor = ph.status === "done" ? "#059669" : ph.status === "active" ? "#F59E0B" : "#6B7280";
 
                             // Tooltip içinde çalışanları ve saatlerini göstermek için
-                            const assigneesInfo = (ph.assignee_hours || []).map(a => `${a.name} (${a.estimated_hours || 0}h)`).join(', ');
-                            const tooltip = `${ph.name}\n📅 ${ph.start_date} / ${ph.end_date}${ph.note ? `\n📝 ${ph.note}` : ""}${assigneesInfo ? `\n👥 ${assigneesInfo}` : ""}`;
+                            const assigneesInfo = (isHR && ph.assignee_hours) ? (ph.assignee_hours || []).map(a => `${a.name} (${a.estimated_hours || 0}h)`).join(', ') : "";
+                            const notePart = (isHR && ph.note) ? `\n📝 ${ph.note}` : "";
+                            const tooltip = `${ph.name}\n📅 ${ph.start_date} / ${ph.end_date}${notePart}${assigneesInfo ? `\n👥 ${assigneesInfo}` : ""}`;
 
                             return (
                               <div key={ph.id} title={tooltip} style={{

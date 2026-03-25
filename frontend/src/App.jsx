@@ -161,9 +161,11 @@ export default function App() {
       return matchAssignee || matchPhase;
     })).filter(t => {
       // BOARD DATE FILTER:
-      const created = t.created_at ? new Date(t.created_at) : null;
-      const cYear = created ? created.getFullYear() : null;
-      const isCreatedSame = cYear === boardYear;
+      if (boardYear === "all") return true;
+
+      const deadline = t.deadline ? new Date(t.deadline) : null;
+      const dYear = deadline ? deadline.getFullYear() : null;
+      const isDeadlineSame = dYear === boardYear;
       
       const hasActivePhase = (t.phases || []).some(ph => {
         if (!ph.start_date && !ph.end_date) return false;
@@ -178,11 +180,16 @@ export default function App() {
         return false;
       });
 
-      // Special case: If boardYear is the current year, show all non-done tasks
-      const isCurrentYear = boardYear === new Date().getFullYear();
-      const isActiveNow = isCurrentYear && t.status !== 'done';
+      // Show if it belongs to the year explicitly via deadline or phases
+      if (isDeadlineSame || hasActivePhase) return true;
+
+      // Fallback: If no deadline and no phases, show if created in this year
+      if (!deadline && (!t.phases || t.phases.length === 0)) {
+        const created = t.created_at ? new Date(t.created_at) : null;
+        return created && created.getFullYear() === boardYear;
+      }
       
-      return isCreatedSame || hasActivePhase || isActiveNow;
+      return false;
     });
 
   if (location.pathname === "/login") {
@@ -190,7 +197,7 @@ export default function App() {
   }
 
     const TABS = [
-      { id: "/", label: "📋 Board" },
+      ...(isHR ? [{ id: "/", label: "📋 Board" }] : []),
       { id: "/gantt", label: "📅 Gantt" },
       { id: "/costs", label: "⏳ Timesheet & Labor" },
       ...(isHR ? [
@@ -238,7 +245,7 @@ export default function App() {
         </div>
 
         <div style={{display:"flex",alignItems:"center",gap:10,flex:1,justifyContent:"flex-end",minWidth:0}}>
-          {location.pathname === "/" && (
+          {(location.pathname === "/" && isHR) && (
             <div style={{display:"flex",gap:12,marginRight:8,flexShrink:0}}>
               {COLUMNS.map(col=>(
                 <div key={col.id} style={{textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center"}}>
@@ -256,10 +263,11 @@ export default function App() {
           </div>
 
           <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
-            {location.pathname === "/" && (
+            {(location.pathname === "/" && isHR) && (
               <>
-                <select value={boardYear} onChange={e => setBoardYear(parseInt(e.target.value))}
+                <select value={boardYear} onChange={e => setBoardYear(e.target.value === "all" ? "all" : parseInt(e.target.value))}
                   style={{background:"#fff",border:"1px solid #E5E7EB",borderRadius:6,padding:"5px 8px",color:"#374151",fontSize:11,fontFamily:"'Inter',sans-serif",cursor:"pointer",fontWeight:500}}>
+                  <option value="all">All Years</option>
                   {[2024, 2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
                 <select value={filterEmpId} onChange={e=>setFilter(e.target.value)}
@@ -297,44 +305,48 @@ export default function App() {
         ) : (
           <Routes>
             <Route path="/" element={
-              <div style={{display:"flex",height:"100%",overflow:"hidden"}}>
-                {COLUMNS.map((col, i) => {
-                  const colTasks = filtered.filter(t => t.status === col.id);
-                  const isDrop = dragOver === col.id;
-                  return (
-                    <div key={col.id}
-                      onDragOver={e=>{e.preventDefault();setDragOver(col.id);}}
-                      onDragLeave={()=>setDragOver(null)}
-                      onDrop={e=>handleDrop(e,col.id)}
-                      style={{borderRight:i<3?"1px solid #E5E7EB":"none",display:"flex",flexDirection:"column",background:isDrop?col.light:"#F9FAFB",transition:"background 0.15s",flex:1}}
-                    >
-                      <div style={{padding:"14px 16px 12px",borderBottom:`2px solid ${col.color}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <div style={{width:8,height:8,borderRadius:"50%",background:col.color}} />
-                          <span style={{fontSize:12,fontWeight:700,color:col.color,letterSpacing:"0.06em"}}>{col.label}</span>
-                        </div>
-                        <span style={{fontSize:12,color:col.color,background:col.light,border:`1px solid ${col.dot}`,padding:"1px 9px",borderRadius:10,fontWeight:700}}>{colTasks.length}</span>
-                      </div>
-                      <div style={{flex:1,overflowY:"auto",padding:14,minHeight:0}}>
-                        {colTasks.length === 0 && (
-                          <div style={{border:`2px dashed ${isDrop?col.color:"#E5E7EB"}`,borderRadius:10,padding:"28px 16px",textAlign:"center",color:isDrop?col.color:"#D1D5DB",fontSize:12,fontWeight:500,transition:"all 0.2s"}}>
-                            {isDrop?"Drop here ↓":"Drag tasks here"}
+              isHR ? (
+                <div style={{display:"flex",height:"100%",overflow:"hidden"}}>
+                  {COLUMNS.map((col, i) => {
+                    const colTasks = filtered.filter(t => t.status === col.id);
+                    const isDrop = dragOver === col.id;
+                    return (
+                      <div key={col.id}
+                        onDragOver={e=>{e.preventDefault();setDragOver(col.id);}}
+                        onDragLeave={()=>setDragOver(null)}
+                        onDrop={e=>handleDrop(e,col.id)}
+                        style={{borderRight:i<3?"1px solid #E5E7EB":"none",display:"flex",flexDirection:"column",background:isDrop?col.light:"#F9FAFB",transition:"background 0.15s",flex:1}}
+                      >
+                        <div style={{padding:"14px 16px 12px",borderBottom:`2px solid ${col.color}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                            <div style={{width:8,height:8,borderRadius:"50%",background:col.color}} />
+                            <span style={{fontSize:12,fontWeight:700,color:col.color,letterSpacing:"0.06em"}}>{col.label}</span>
                           </div>
-                        )}
-                        {colTasks.map(task=>(
-                          <TaskCard key={task.id} task={task}
-                            onDragStart={(e,id)=>{dragId.current=id;}}
-                            onEdit={t=>setModal({type:"task",task:t})}
-                            onDelete={handleDelete}
-                          />
-                        ))}
+                          <span style={{fontSize:12,color:col.color,background:col.light,border:`1px solid ${col.dot}`,padding:"1px 9px",borderRadius:10,fontWeight:700}}>{colTasks.length}</span>
+                        </div>
+                        <div style={{flex:1,overflowY:"auto",padding:14,minHeight:0}}>
+                          {colTasks.length === 0 && (
+                            <div style={{border:`2px dashed ${isDrop?col.color:"#E5E7EB"}`,borderRadius:10,padding:"28px 16px",textAlign:"center",color:isDrop?col.color:"#D1D5DB",fontSize:12,fontWeight:500,transition:"all 0.2s"}}>
+                              {isDrop?"Drop here ↓":"Drag tasks here"}
+                            </div>
+                          )}
+                          {colTasks.map(task=>(
+                            <TaskCard key={task.id} task={task}
+                              onDragStart={(e,id)=>{dragId.current=id;}}
+                              onEdit={t=>setModal({type:"task",task:t})}
+                              onDelete={handleDelete}
+                            />
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <Navigate to="/gantt" replace={true} />
+              )
             } />
-            <Route path="/gantt" element={<GanttChart tasks={tasks} employees={employees} />} />
+            <Route path="/gantt" element={<GanttChart tasks={tasks} employees={employees} user={user} />} />
             <Route path="/costs" element={<CostDashboard employees={employees} user={user} />} />
             
             {/* HR Only Routes */}

@@ -121,7 +121,8 @@ export default function KPIDashboard({ employees }) {
     setEditingCapacity(false);
   };
 
-  const MAX_CAPACITY = maxCapacity;
+  const effectiveCapacity = editingCapacity ? tempCapacity : maxCapacity;
+  const MAX_CAPACITY = effectiveCapacity || 1; // Avoid division by zero
 
   if (loading && !kpiData) return <div style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontFamily: "'Inter',sans-serif", fontSize: 14 }}>Loading KPIs...</div>;
   if (!kpiData) return null;
@@ -133,12 +134,18 @@ export default function KPIDashboard({ employees }) {
 
   const monthlyTotalCost = (summary.total_labor_cost || 0) + (summary.total_consultant_labor || 0) + (summary.monthly_overhead || 0) + (summary.total_extra_costs || 0);
 
+  // Utilization calculation: Use active employees count from monthlyData for better accuracy
+  const totalHours = monthlyData ? monthlyData.employees.reduce((sum, emp) => sum + parseFloat(emp.phase_hours || 0), 0) : 0;
+  const activeEmpCount = monthlyData ? monthlyData.employees.length : 0;
+  const totalCapacity = activeEmpCount * MAX_CAPACITY;
+  const utilizationPct = totalCapacity > 0 ? Math.round((totalHours / totalCapacity) * 100) : 0;
+
   const cards = [
     { icon: "📊", label: "Monthly Tasks", val: summary.total, color: "#2563EB", bg: "#EFF6FF" },
     { icon: "💰", label: "Fatturato (Taken)", val: `€${(summary.monthly_revenue || 0).toLocaleString("it-IT", { minimumFractionDigits: 0 })}`, color: "#7C3AED", bg: "#F5F3FF" },
     { icon: "📉", label: "Monthly Cost", val: `€${Math.round(monthlyTotalCost).toLocaleString("it-IT")}`, color: "#DC2626", bg: "#FEF2F2" },
     { icon: "📋", label: "Proforma (Month)", val: `€${(summary.total_proforma || 0).toLocaleString("it-IT", { minimumFractionDigits: 0 })}`, color: "#059669", bg: "#ECFDF5" },
-    { icon: "👥", label: "Utilization", val: monthlyData ? `${Math.round((monthlyData.employees.reduce((sum, emp) => sum + parseFloat(emp.phase_hours || 0), 0) / (employees.length * MAX_CAPACITY)) * 100)}%` : "0%", color: "#0891B2", bg: "#ECFEFF" },
+    { icon: "👥", label: "Utilization", val: `${utilizationPct}%`, color: "#0891B2", bg: "#ECFEFF" },
   ];
 
   const statusColors = { new: "#6366F1", process: "#F59E0B", blocked: "#DC2626", done: "#059669" };
@@ -150,7 +157,37 @@ export default function KPIDashboard({ employees }) {
           <h2 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>Monthly Workload KPI</h2>
           <p style={{ color: "#6B7280", margin: 0, fontSize: 14 }}>Monthly metrics and team workload — {monthLabel}</p>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Max Workload Edit */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", padding: "6px 12px", borderRadius: 10, border: "1px solid #E5E7EB" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280" }}>MAX WORKLOAD:</span>
+            {editingCapacity ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="number"
+                  value={tempCapacity}
+                  onChange={e => setTempCapacity(parseInt(e.target.value) || 0)}
+                  style={{ width: 60, border: "1px solid #2563EB", borderRadius: 4, padding: "2px 6px", fontSize: 13, fontWeight: 700, textAlign: "center", outline: "none" }}
+                  autoFocus
+                />
+                <button onClick={handleCapacitySave} style={{ background: "#2563EB", color: "#fff", border: "none", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Save</button>
+                <button onClick={() => { setEditingCapacity(false); setTempCapacity(maxCapacity); }} style={{ background: "#F3F4F6", color: "#374151", border: "none", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>✕</button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: "#111827" }}>{maxCapacity}h</span>
+                <button
+                  onClick={() => setEditingCapacity(true)}
+                  style={{ background: "none", border: "none", color: "#2563EB", cursor: "pointer", fontSize: 11, fontWeight: 700, padding: "2px 4px", borderRadius: 4, transition: "background 0.2s" }}
+                  onMouseOver={e => e.currentTarget.style.background = "#EFF6FF"}
+                  onMouseOut={e => e.currentTarget.style.background = "none"}
+                >
+                  Edit
+                </button>
+              </div>
+            )}
+          </div>
+
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", padding: "6px 12px", borderRadius: 10, border: "1px solid #E5E7EB" }}>
             <button onClick={() => setMonthAnchor(a => a - 1)} style={{ background: "#F3F4F6", border: "none", borderRadius: 7, padding: "5px 12px", cursor: "pointer", fontSize: 14, color: "#374151", fontWeight: 700 }}>←</button>
             <span style={{ fontSize: 13, fontWeight: 700, color: "#111827", minWidth: 140, textAlign: "center" }}>{monthLabel}</span>
