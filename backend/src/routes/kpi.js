@@ -253,6 +253,36 @@ module.exports = (app, query, authenticate) => {
         });
       }
 
+      // 8. SAL Trend: 5 months centered
+      const salTrend = [];
+      for (let i = -2; i <= 2; i++) {
+        const d = new Date(year, month - 1 + i, 1);
+        const ty = d.getFullYear();
+        const tm = d.getMonth() + 1;
+        
+        const sRes = await query(`
+          SELECT status, SUM(value) as total
+          FROM fatturato_sal
+          WHERE year = $1 AND month = $2
+          GROUP BY status
+        `, [ty, tm]);
+
+        let inProgress = 0;
+        let sbloccato = 0;
+        sRes.rows.forEach(r => {
+          if (r.status === 'in_progress') inProgress = parseFloat(r.total || 0);
+          else if (r.status === 'sbloccato') sbloccato = parseFloat(r.total || 0);
+        });
+
+        salTrend.push({
+          month: d.toLocaleString('en-US', { month: 'short' }),
+          year: ty,
+          in_progress: inProgress,
+          sbloccato: sbloccato,
+          net: inProgress - sbloccato
+        });
+      }
+
       const summary = {
         total: monthTotalTasks,
         working_employees_res: `${teamRes.rows[0].active_count} / ${totalEmpRes.rows[0].count}`,
@@ -268,7 +298,8 @@ module.exports = (app, query, authenticate) => {
         total_labor_cost: totalInternalLabor,
         total_consultant_labor: totalConsultantLabor,
         monthly_overhead: monthlyOverhead,
-        realized_details: billedRes.rows
+        realized_details: billedRes.rows,
+        sal_trend: salTrend
       };
 
       res.json({

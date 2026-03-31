@@ -83,6 +83,7 @@ export default function KPIDashboard({ employees }) {
   const [loading, setLoading] = useState(true);
 
   const targetDate = new Date();
+  targetDate.setDate(1); // Fix: Set to 1st of month to avoid overflow on months with fewer days (e.g. Feb 31 -> Mar 3)
   targetDate.setMonth(targetDate.getMonth() + monthAnchor);
   const targetYear = targetDate.getFullYear();
   const targetMonth = targetDate.getMonth() + 1;
@@ -377,6 +378,35 @@ export default function KPIDashboard({ employees }) {
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+      
+      {/* SAL Progress KPI Table */}
+      <div style={{ background: "#fff", borderRadius: 12, padding: 20, border: "1px solid #E5E7EB", display: "flex", flexDirection: "column", marginTop: 0, marginBottom: 24 }}>
+        <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: "0 0 16px" }}>SAL Progress Tracking (WIP vs Released)</h3>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #F3F4F6", textAlign: "left" }}>
+                <th style={{ padding: "8px 8px", color: "#6B7280" }}>MONTH</th>
+                <th style={{ padding: "8px 8px", color: "#6B7280", textAlign: "right" }}>IN PROGRESS (WIP)</th>
+                <th style={{ padding: "8px 8px", color: "#6B7280", textAlign: "right" }}>RELEASED (SBLOCCATO)</th>
+                <th style={{ padding: "8px 8px", color: "#6B7280", textAlign: "right" }}>NET RECEIVABLE</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(summary.sal_trend || []).map((s, idx) => (
+                <tr key={idx} style={{ borderBottom: "1px solid #F9FAFB", background: idx === 2 ? "#EFF6FF" : "transparent" }}>
+                  <td style={{ padding: "10px 8px", fontWeight: idx === 2 ? 700 : 500, color: "#111827" }}>{s.month} {s.year}</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", color: "#D97706", fontWeight: 600 }}>€{Math.round(s.in_progress).toLocaleString("it-IT")}</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", color: "#2563EB", fontWeight: 600 }}>€{Math.round(s.sbloccato).toLocaleString("it-IT")}</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right", color: s.net > 0 ? "#10B981" : "#6B7280", fontWeight: 700 }}>
+                    €{Math.round(s.net).toLocaleString("it-IT")}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
