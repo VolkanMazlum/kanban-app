@@ -329,8 +329,7 @@ CREATE INDEX IF NOT EXISTS idx_fatturato_realized_line ON fatturato_realized(fat
     month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
     value NUMERIC(12,2) NOT NULL DEFAULT 0,
     status VARCHAR(20) DEFAULT 'in_progress' CHECK (status IN ('sbloccato', 'in_progress')),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(fatturato_line_id, year, month)
+    created_at TIMESTAMPTZ DEFAULT NOW()
   );
 
   CREATE TABLE IF NOT EXISTS fatturato_obiettivi (

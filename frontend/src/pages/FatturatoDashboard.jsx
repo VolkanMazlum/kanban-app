@@ -327,30 +327,18 @@ export default function FatturatoDashboard({ isHR }) {
     }
   };
 
-  const handleSalChange = (lineId, field, val, m, y) => {
+  const handleSalAddEntry = (lineId) => {
     const newData = [...(salMonthlyData || [])];
-    const targetMonth = m || (new Date().getMonth() + 1);
-    const targetYear = y || (new Date().getFullYear());
-    // For new activities that don't have an ID yet, we use a temp ID if possible, but let's encourage saving the line first or use 'attivita' as temp ID
-    const effectiveLineId = lineId || `TEMP_${field}_${val}_${targetMonth}_${targetYear}`; // fallback but not ideal
-
-    const idx = newData.findIndex(s => {
-      const matchId = (s.fatturato_line_id === lineId) || (!lineId && s.temp_id === effectiveLineId);
-      return matchId && Number(s.month) === Number(targetMonth) && Number(s.year) === Number(targetYear);
+    const targetMonth = new Date().getMonth() + 1;
+    const targetYear = new Date().getFullYear();
+    newData.push({
+      fatturato_line_id: lineId,
+      value: 0,
+      year: targetYear,
+      month: targetMonth,
+      status: 'in_progress',
+      temp_key: Math.random() // help React tracking if needed
     });
-
-    if (idx >= 0) {
-      newData[idx] = { ...newData[idx], [field]: val };
-    } else {
-      newData.push({
-        fatturato_line_id: lineId || null,
-        temp_id: lineId ? null : effectiveLineId,
-        [field]: val,
-        year: targetYear,
-        month: targetMonth,
-        status: 'in_progress'
-      });
-    }
     setSalMonthlyData(newData);
   };
 
@@ -455,8 +443,9 @@ export default function FatturatoDashboard({ isHR }) {
                         return pYear === selectedYear ? sum + (parseFloat(p.amount) || 0) : sum;
                       }, 0);
 
+                    const valProformaTotal = parseEuNum(line.proforma);
                     const globalFatt = parseEuNum(line.fatturato_amount);
-                    const rimanente = Math.max(0, valOrdine - globalFatt);
+                    const rimanente = Math.max(0, valOrdine - globalFatt - valProformaTotal);
 
                     const ordini = line.ordini || [];
                     const rowBorder = lIdx === linesToRender.length - 1 && cIdx !== comm.clients.length - 1 ? "1px dashed #D1D5DB" : cIdx === comm.clients.length - 1 && lIdx === linesToRender.length - 1 ? "2px solid #E5E7EB" : "1px solid #F3F4F6";
@@ -525,11 +514,14 @@ export default function FatturatoDashboard({ isHR }) {
                               )}
                             </div>
                           </td>
-                          <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: rimanente > 0 ? "#F59E0B" : "#6B7280", whiteSpace: "nowrap" }}>{valOrdine ? `€${fmtEu(rimanente)}` : "—"}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: rimanente > 0.01 ? "#F59E0B" : "#6B7280", whiteSpace: "nowrap" }}>{valOrdine ? `€${fmtEu(rimanente)}` : "—"}</td>
                           <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: "#2563EB", whiteSpace: "nowrap" }}>
                             {(() => {
-                              const lineSalVal = (salMonthlyData || []).filter(s => Number(s.fatturato_line_id) === Number(line.id)).reduce((sum, s) => sum + (parseFloat(s.value) || 0), 0);
-                              return lineSalVal > 0 ? `€${fmtEu(lineSalVal)}` : "—";
+                              const lineSalVal = (salMonthlyData || []).filter(s => Number(s.fatturato_line_id) === Number(line.id)).reduce((sum, s) => {
+                                const val = parseFloat(s.value) || 0;
+                                return s.status === 'sbloccato' ? sum - val : sum + val;
+                              }, 0);
+                              return lineSalVal !== 0 ? `€${fmtEu(lineSalVal)}` : "—";
                             })()}
                           </td>
                           <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: "#7C3AED", whiteSpace: "nowrap" }}>
@@ -642,14 +634,16 @@ export default function FatturatoDashboard({ isHR }) {
                     <div style={{ marginTop: 16, borderTop: "1px dashed #D1D5DB", paddingTop: 12 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                         <div style={{ fontSize: 10, fontWeight: 700, color: "#6B7280" }}>ACTIVITIES FOR THIS CLIENT</div>
-                        <button onClick={() => addLineToClient(cIdx)} style={{ background: "#10B981", color: "#fff", border: "none", padding: "4px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>+ Add Line</button>
-                      </div>
-                      <div style={{ display: "flex", gap: 6, marginBottom: 4, padding: "0 10px" }}>
-                        <div style={{ flex: 2, fontSize: 9, fontWeight: 700, color: "#9CA3AF" }}>ATTIVITÀ</div>
-                        <div style={{ flex: 1, fontSize: 9, fontWeight: 700, color: "#9CA3AF" }}>VALORE €</div>
-                        <div style={{ flex: 1, fontSize: 9, fontWeight: 700, color: "#9CA3AF" }}>FATTURATO €</div>
-                        <div style={{ flex: 1, fontSize: 9, fontWeight: 700, color: "#9CA3AF" }}>PROFORMA €</div>
-                        <div style={{ width: 34 }}></div>
+                        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                          {/* Labels for the columns below */}
+                          <div style={{ display: "flex", gap: 6, marginRight: 20 }}>
+                            <div style={{ width: 200, fontSize: 10, fontWeight: 700, color: "#9CA3AF" }}>ATTIVITÀ</div>
+                            <div style={{ width: 100, fontSize: 10, fontWeight: 700, color: "#9CA3AF" }}>VALORE ORDINE</div>
+                            <div style={{ width: 100, fontSize: 10, fontWeight: 700, color: "#9CA3AF" }}>FATTURATO</div>
+                            <div style={{ width: 100, fontSize: 10, fontWeight: 700, color: "#9CA3AF" }}>PROFORMA</div>
+                          </div>
+                          <button onClick={() => addLineToClient(cIdx)} style={{ background: "#10B981", color: "#fff", border: "none", padding: "4px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>+ Add Line</button>
+                        </div>
                       </div>
                       {client.lines.map((line, lIdx) => (
                         <div key={lIdx} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, padding: 10, marginBottom: 8 }}>
@@ -771,16 +765,11 @@ export default function FatturatoDashboard({ isHR }) {
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                     <span style={{ fontSize: 9, fontWeight: 700, color: "#2563EB" }}>MONTHLY PROGRESS (SAL) HISTORY</span>
-                                    {(() => {
-                                      const total = (salMonthlyData || []).filter(s => Number(s.fatturato_line_id) === Number(line.id)).reduce((sum, s) => sum + (parseFloat(s.value) || 0), 0);
-                                      if (total > 0) return <span style={{ fontSize: 9, fontWeight: 700, color: "#2563EB" }}>TOTAL: €{fmtEu(total)}</span>;
-                                      return null;
-                                    })()}
                                   </div>
                                   <div style={{ display: "flex", gap: 6 }}>
                                     <button
                                       disabled={!line.id}
-                                      onClick={() => handleSalChange(line.id, "value", 0)}
+                                      onClick={() => handleSalAddEntry(line.id)}
                                       style={{
                                         background: line.id ? "#EFF6FF" : "#F3F4F6",
                                         color: line.id ? "#2563EB" : "#9CA3AF",
@@ -804,6 +793,7 @@ export default function FatturatoDashboard({ isHR }) {
                                           const distinctMonths = [...new Set(yearEntries.map(e => e.month))];
                                           for (const m of distinctMonths) {
                                             const monthEntries = yearEntries.filter(e => e.month === m).map(e => ({
+                                              id: e.id || null, // Include ID!
                                               line_id: e.fatturato_line_id,
                                               value: parseFloat(e.value) || 0,
                                               status: e.status
@@ -869,13 +859,59 @@ export default function FatturatoDashboard({ isHR }) {
                                     }} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 12 }}>✕</button>
                                     <button onClick={async () => {
                                       try {
-                                        await api.updateMonthlySAL({ year: s.year, month: s.month, entries: [{ line_id: s.fatturato_line_id, value: parseFloat(s.value) || 0, status: s.status }] });
+                                        await api.updateMonthlySAL({
+                                          year: s.year,
+                                          month: s.month,
+                                          entries: [{
+                                            id: s.id || null, // Include ID!
+                                            line_id: s.fatturato_line_id,
+                                            value: parseFloat(s.value) || 0,
+                                            status: s.status
+                                          }]
+                                        });
                                         alert("Monthly progress saved!");
                                         fetchData();
                                       } catch (err) { console.error(err); }
                                     }} style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#166534", borderRadius: 4, padding: "2px 4px", fontSize: 9, fontWeight: 700, cursor: "pointer" }}>Save</button>
                                   </div>
                                 ))}
+
+                                {/* Monthly Receivable Summary */}
+                                {(() => {
+                                  const entries = (salMonthlyData || []).filter(s => Number(s.fatturato_line_id) === Number(line.id));
+                                  if (entries.length === 0) return null;
+
+                                  const summary = {};
+                                  entries.forEach(e => {
+                                    const key = `${e.year}-${e.month}`;
+                                    if (!summary[key]) summary[key] = { year: e.year, month: e.month, diff: 0 };
+                                    const val = parseFloat(e.value) || 0;
+                                    if (e.status === 'sbloccato') summary[key].diff -= val;
+                                    else summary[key].diff += val;
+                                  });
+
+                                  const sortedKeys = Object.keys(summary).sort((a, b) => {
+                                    const [ya, ma] = a.split('-').map(Number);
+                                    const [yb, mb] = b.split('-').map(Number);
+                                    return yb - ya || mb - ma;
+                                  });
+
+                                  const receivables = sortedKeys.filter(k => summary[k].diff > 0.01);
+                                  if (receivables.length === 0) return null;
+
+                                  return (
+                                    <div style={{ marginTop: 12, padding: "8px 12px", background: "#FFFBEB", border: "1px solid #FEF3C7", borderRadius: 8 }}>
+                                      <div style={{ fontSize: 9, fontWeight: 800, color: "#92400E", marginBottom: 4, textTransform: "uppercase" }}>Monthly Receivables (Work in Progress)</div>
+                                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                                        {receivables.map(k => (
+                                          <div key={k} style={{ fontSize: 11, fontWeight: 700, color: "#D97706" }}>
+                                            {summary[k].month}/{summary[k].year}: <span style={{ background: "#FEF3C7", padding: "1px 4px", borderRadius: 4 }}>Receivable: €{fmtEu(summary[k].diff)}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </div>
 
                               {/* Nested Obiettivi (Targets) */}

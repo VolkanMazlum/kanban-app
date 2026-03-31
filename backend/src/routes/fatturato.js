@@ -113,7 +113,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
 
   app.get("/api/fatturato/by-task", authenticateHR, async (req, res) => {
     try {
-      const year = req.query.year;
+      const { year, startDate, endDate } = req.query;
       const yearPrefix = (year && year !== 'all') ? String(year).slice(2) : null;
       const yearNum = (year && year !== 'all') ? parseInt(year) : null;
 
@@ -129,6 +129,10 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           FROM fatturato_realized fr JOIN fatturato_lines fl ON fr.fatturato_line_id = fl.id
           JOIN commessa_clients cc ON fl.commessa_client_id = cc.id JOIN commesse c ON cc.commessa_id = c.id
           UNION
+          SELECT cc.commessa_id, c.task_id, EXTRACT(YEAR FROM fp.date)::int as year
+          FROM fatturato_proforma fp JOIN fatturato_lines fl ON fp.fatturato_line_id = fl.id
+          JOIN commessa_clients cc ON fl.commessa_client_id = cc.id JOIN commesse c ON cc.commessa_id = c.id
+          UNION
           SELECT cec.commessa_id, c.task_id, EXTRACT(YEAR FROM cec.date)::int as year
           FROM commessa_extra_costs cec JOIN commesse c ON cec.commessa_id = c.id
         ),
@@ -138,18 +142,34 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         ),
         yearly_realized AS (
           SELECT fl.commessa_client_id, EXTRACT(YEAR FROM fr.registration_date)::int as year, SUM(fr.amount) as amount_sum
-          FROM fatturato_realized fr JOIN fatturato_lines fl ON fr.fatturato_line_id = fl.id GROUP BY 1, 2
+          FROM fatturato_realized fr JOIN fatturato_lines fl ON fr.fatturato_line_id = fl.id
+          WHERE ($2::date IS NULL OR fr.registration_date >= $2::date)
+            AND ($3::date IS NULL OR fr.registration_date <= $3::date)
+          GROUP BY 1, 2
+        ),
+        yearly_proforma AS (
+          SELECT fl.commessa_client_id, EXTRACT(YEAR FROM fp.date)::int as year, SUM(fp.amount) as amount_sum
+          FROM fatturato_proforma fp JOIN fatturato_lines fl ON fp.fatturato_line_id = fl.id
+          WHERE ($2::date IS NULL OR fp.date >= $2::date)
+            AND ($3::date IS NULL OR fp.date <= $3::date)
+          GROUP BY 1, 2
         ),
         yearly_extras AS (
           SELECT cec.commessa_id, EXTRACT(YEAR FROM cec.date)::int as year, SUM(cec.amount) as amount_sum
-          FROM commessa_extra_costs cec GROUP BY 1, 2
+          FROM commessa_extra_costs cec
+          WHERE ($2::date IS NULL OR cec.date >= $2::date)
+            AND ($3::date IS NULL OR cec.date <= $3::date)
+          GROUP BY 1, 2
         ),
         yearly_scheduled AS (
           SELECT fl.commessa_client_id, EXTRACT(YEAR FROM fo.expected_date)::int as year, SUM(fl.valore_ordine * fo.percentage / 100) as scheduled_sum
-          FROM fatturato_ordini fo JOIN fatturato_lines fl ON fo.fatturato_line_id = fl.id GROUP BY 1, 2
+          FROM fatturato_ordini fo JOIN fatturato_lines fl ON fo.fatturato_line_id = fl.id
+          WHERE ($2::date IS NULL OR fo.expected_date >= $2::date)
+            AND ($3::date IS NULL OR fo.expected_date <= $3::date)
+          GROUP BY 1, 2
         ),
         lifetime_valore AS (
-          SELECT fl.commessa_client_id, SUM(fl.valore_ordine) as life_valore
+          SELECT fl.commessa_client_id, SUM(fl.valore_ordine) as life_valore, SUM(fl.proforma) as life_proforma
           FROM fatturato_lines fl GROUP BY 1
         )
         SELECT 
@@ -157,7 +177,9 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           c.comm_number,
           RIGHT(ty.year::text, 2) as year_code,
           SUM(lv.life_valore)    AS total_valore_ordine,
+          SUM(lv.life_proforma)  AS life_proforma,
           SUM(COALESCE(yr.amount_sum, 0)) AS total_fatturato,
+          SUM(COALESCE(yp.amount_sum, 0)) AS total_proforma_yearly,
           SUM(COALESCE(ys.scheduled_sum, 0)) AS total_scheduled_amount,
           SUM(COALESCE(ye.amount_sum, 0)) as total_extra_costs
         FROM target_years ty
@@ -165,11 +187,12 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         JOIN commessa_clients cc ON c.id = cc.commessa_id
         LEFT JOIN lifetime_valore lv ON cc.id = lv.commessa_client_id
         LEFT JOIN yearly_realized yr ON cc.id = yr.commessa_client_id AND yr.year = ty.year
+        LEFT JOIN yearly_proforma yp ON cc.id = yp.commessa_client_id AND yp.year = ty.year
         LEFT JOIN yearly_scheduled ys ON cc.id = ys.commessa_client_id AND ys.year = ty.year
         LEFT JOIN yearly_extras ye ON c.id = ye.commessa_id AND ye.year = ty.year
         GROUP BY ty.task_id, c.comm_number, ty.year, c.id
         ORDER BY ty.year DESC, c.id DESC
-      `, [yearNum]);
+      `, [yearNum, startDate || null, endDate || null]);
       res.json(result.rows);
     } catch (err) {
       console.error("GET /fatturato/by-task error:", err);
@@ -668,12 +691,18 @@ module.exports = (app, query, authenticate, authenticateHR) => {
     try {
       await query("BEGIN");
       for (const entry of entries) {
-        await query(`
-          INSERT INTO fatturato_sal (fatturato_line_id, year, month, value, status)
-          VALUES ($1, $2, $3, $4, $5)
-          ON CONFLICT (fatturato_line_id, year, month)
-          DO UPDATE SET value = EXCLUDED.value, status = EXCLUDED.status
-        `, [entry.line_id, year, month, entry.value, entry.status || 'in_progress']);
+        if (entry.id) {
+          await query(`
+            UPDATE fatturato_sal 
+            SET value = $1, status = $2, year = $3, month = $4
+            WHERE id = $5
+          `, [entry.value, entry.status || 'in_progress', year, month, entry.id]);
+        } else {
+          await query(`
+            INSERT INTO fatturato_sal (fatturato_line_id, year, month, value, status)
+            VALUES ($1, $2, $3, $4, $5)
+          `, [entry.line_id, year, month, entry.value, entry.status || 'in_progress']);
+        }
       }
       await query("COMMIT");
       res.json({ success: true });

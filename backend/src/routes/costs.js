@@ -150,6 +150,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
   app.get("/api/task-finances", authenticateHR, async (req, res) => {
     const isAllTime = req.query.year === 'all';
     const targetYear = isAllTime ? null : (parseInt(req.query.year) || new Date().getFullYear());
+    const { startDate, endDate } = req.query;
     try {
       // 1. Get all relevant costs for normalization
       const allCosts = await query(`
@@ -174,8 +175,10 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           SUM(wh.hours) as hours
         FROM employee_work_hours wh
         WHERE ($1::int IS NULL OR EXTRACT(YEAR FROM wh.date) = $1)
+          AND ($2::date IS NULL OR wh.date >= $2::date)
+          AND ($3::date IS NULL OR wh.date <= $3::date)
         GROUP BY wh.task_id, wh.employee_id, work_year, work_month
-      `, [targetYear]);
+      `, [targetYear, startDate || null, endDate || null]);
 
       // 4. Calculate costs per task
       const taskCosts = {}; // task_id -> { internal_cost: 0, hours: 0 }
@@ -235,8 +238,10 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         SELECT task_id, employee_id, SUM(hours) as total_hours 
         FROM employee_work_hours 
         WHERE task_id IS NOT NULL AND ($1::int IS NULL OR EXTRACT(YEAR FROM date) = $1)
+          AND ($2::date IS NULL OR date >= $2::date)
+          AND ($3::date IS NULL OR date <= $3::date)
         GROUP BY task_id, employee_id
-      `, [targetYear]);
+      `, [targetYear, startDate || null, endDate || null]);
 
       res.json({ tasks, task_hours: hoursRes.rows });
     } catch (err) { 

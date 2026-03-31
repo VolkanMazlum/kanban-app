@@ -91,9 +91,13 @@ export const saveOvertimeCost = (employeeId, data) => {
   });
 };
 
-export const getTaskFinances = (year) => {
-  const url = year ? `/task-finances?year=${year}` : "/task-finances";
-  return req(url);
+export const getTaskFinances = (year, startDate, endDate) => {
+  const params = new URLSearchParams();
+  if (year) params.append("year", year);
+  if (startDate) params.append("startDate", startDate);
+  if (endDate) params.append("endDate", endDate);
+  const qs = params.toString();
+  return req(`/task-finances${qs ? `?${qs}` : ""}`);
 };
 
 export const saveTaskRevenue = (taskId, data) => {
@@ -114,9 +118,13 @@ export const getFatturato = (year) => {
   return req(url);
 };
 
-export const getFatturatoByTask = (year) => {
-  const url = year ? `/fatturato/by-task?year=${year}` : "/fatturato/by-task";
-  return req(url);
+export const getFatturatoByTask = (year, startDate, endDate) => {
+  const params = new URLSearchParams();
+  if (year) params.append("year", year);
+  if (startDate) params.append("startDate", startDate);
+  if (endDate) params.append("endDate", endDate);
+  const qs = params.toString();
+  return req(`/fatturato/by-task${qs ? `?${qs}` : ""}`);
 };
 
 export const createFatturato = (data) => {

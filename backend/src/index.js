@@ -24,7 +24,7 @@ if (missingEnv.length > 0) {
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 450,
+  max: 1000, //450,
   message: { error: "Too many requests, please try again later." }
 });
 
@@ -51,7 +51,7 @@ const authLimiter = rateLimit({
 app.use('/api', (req, res, next) => {
   const secret = process.env.INTERNAL_SECRET;
   const header = req.headers['x-internal-auth'];
-  
+
   if (!secret || header !== secret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
