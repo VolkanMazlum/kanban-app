@@ -380,17 +380,17 @@ export default function KPIDashboard({ employees }) {
           </div>
         </div>
       </div>
-      
+
       {/* SAL Progress KPI Table */}
       <div style={{ background: "#fff", borderRadius: 12, padding: 20, border: "1px solid #E5E7EB", display: "flex", flexDirection: "column", marginTop: 0, marginBottom: 24 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: "0 0 16px" }}>SAL Progress Tracking (WIP vs Released)</h3>
+        <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: "0 0 16px" }}>SAL Progress Tracking</h3>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #F3F4F6", textAlign: "left" }}>
                 <th style={{ padding: "8px 8px", color: "#6B7280" }}>MONTH</th>
-                <th style={{ padding: "8px 8px", color: "#6B7280", textAlign: "right" }}>IN PROGRESS (WIP)</th>
-                <th style={{ padding: "8px 8px", color: "#6B7280", textAlign: "right" }}>RELEASED (SBLOCCATO)</th>
+                <th style={{ padding: "8px 8px", color: "#6B7280", textAlign: "right" }}>IN PROGRESS</th>
+                <th style={{ padding: "8px 8px", color: "#6B7280", textAlign: "right" }}>SBLOCCATO</th>
                 <th style={{ padding: "8px 8px", color: "#6B7280", textAlign: "right" }}>NET RECEIVABLE</th>
               </tr>
             </thead>

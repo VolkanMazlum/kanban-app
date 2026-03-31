@@ -28,6 +28,7 @@ export default function FatturatoDashboard({ isHR }) {
   const [allTasks, setAllTasks] = useState([]);
   const [clients, setClients] = useState([]);
   const [fattFilterClient, setFattFilterClient] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
   const [showFattModal, setShowFattModal] = useState(false);
   const [editingFatt, setEditingFatt] = useState(null);
@@ -56,17 +57,16 @@ export default function FatturatoDashboard({ isHR }) {
         setAllTasks(tasks);
         setSalMonthlyData(sal);
 
-        // Fetch obiettivi for each commessa and store them by line_id
+        // Pre-populate obiettiviData map from the nested data to avoid N+1 API calls
+        const objMap = {};
         (fatt || []).forEach(comm => {
-          api.getProjectObiettivi(comm.id).then(objs => {
-            const mapped = {};
-            (objs || []).forEach(o => {
-              if (!mapped[o.fatturato_line_id]) mapped[o.fatturato_line_id] = [];
-              mapped[o.fatturato_line_id].push(o);
+          (comm.clients || []).forEach(cl => {
+            (cl.lines || []).forEach(ln => {
+              if (ln.obiettivi) objMap[ln.id] = ln.obiettivi;
             });
-            setObiettiviData(prev => ({ ...prev, ...mapped }));
           });
         });
+        setObiettiviData(objMap);
       })
       .catch(console.error);
   };
@@ -156,12 +156,40 @@ export default function FatturatoDashboard({ isHR }) {
     setSavingClient(false);
   };
 
-  const filteredFatturatoList = fattFilterClient
-    ? fatturatoList.map(comm => ({
-      ...comm,
-      clients: comm.clients.filter(c => String(c.client_id) === String(fattFilterClient))
-    })).filter(comm => comm.clients.length > 0)
-    : fatturatoList;
+  const filteredFatturatoList = fatturatoList.map(comm => {
+    // 1. First, apply client filter if active
+    let clients = comm.clients;
+    if (fattFilterClient) {
+      clients = clients.filter(c => String(c.client_id) === String(fattFilterClient));
+    }
+
+    // 2. Second, apply search term filter if active
+    if (searchTerm) {
+      const s = searchTerm.toLowerCase();
+      const matchesComm =
+        (comm.comm_number || "").toLowerCase().includes(s) ||
+        (comm.name || "").toLowerCase().includes(s) ||
+        (comm.task_title || "").toLowerCase().includes(s);
+
+      // If comm itself doesn't match, check if any client or lines match
+      if (!matchesComm) {
+        clients = clients.filter(cl => {
+          const matchesClient =
+            (cl.client_name || "").toLowerCase().includes(s) ||
+            (cl.n_cliente || "").toLowerCase().includes(s) ||
+            (cl.n_ordine || "").toLowerCase().includes(s);
+
+          const matchesAnyLine = (cl.lines || []).some(ln =>
+            (ln.attivita || "").toLowerCase().includes(s) ||
+            (ln.descrizione || "").toLowerCase().includes(s)
+          );
+          return matchesClient || matchesAnyLine;
+        });
+      }
+    }
+
+    return { ...comm, clients };
+  }).filter(comm => comm.clients.length > 0);
 
   // Form Handlers
   const addClientBlock = () => setFattForm({ ...fattForm, clients: [...fattForm.clients, getEmptyClient()] });
@@ -346,44 +374,95 @@ export default function FatturatoDashboard({ isHR }) {
   return (
     <div style={{ padding: "28px 32px", overflowY: "auto", height: "100%", fontFamily: "'Inter',sans-serif", background: "#F9FAFB" }}>
 
-      {/* HEADER */}
-      <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>Fatturato / Revenue Register</h2>
-            <select
-              value={selectedYear}
-              onChange={e => setSelectedYear(e.target.value === "all" ? "all" : parseInt(e.target.value))}
-              style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #D1D5DB", fontSize: 14, fontWeight: 700, color: "#2563EB", background: "#EFF6FF", outline: "none", cursor: "pointer", marginLeft: 20 }}
-            >
-              {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y === "all" ? "All Time" : y}</option>)}
-            </select>
+      {/* HEADER SECTION */}
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
+          <div style={{ flex: "1 1 auto", minWidth: 250 }}>
+            <h2 style={{ fontSize: 26, fontWeight: 800, color: "#111827", margin: 0, letterSpacing: "-0.025em" }}>Fatturato / Revenue Register</h2>
+            <p style={{ color: "#6B7280", margin: "4px 0 0", fontSize: 14 }}>Manage invoiced amounts and work progress tracking (SAL)</p>
+          </div>
+
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <button
               onClick={() => downloadAuthenticatedFile(`/reports/finances?year=${selectedYear}`, `Financial_Report_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`)}
-              style={{ padding: "10px 20px", background: "#F3F4F6", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all 0.2s" }}
-              onMouseOver={e => e.currentTarget.style.background = "#E5E7EB"}
-              onMouseOut={e => e.currentTarget.style.background = "#F3F4F6"}>
-              📥 Export
+              style={{ padding: "10px 18px", background: "#fff", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all 0.2s", display: "flex", alignItems: "center", gap: 8 }}
+              onMouseOver={e => e.currentTarget.style.background = "#F9FAFB"}
+              onMouseOut={e => e.currentTarget.style.background = "#fff"}>
+              <span style={{ fontSize: 16 }}>📥</span> Export Report
+            </button>
+            <button
+              onClick={openNewFatt}
+              style={{ background: "#2563EB", color: "#fff", border: "none", borderRadius: 10, padding: "11px 20px", fontWeight: 700, fontSize: 13, cursor: "pointer", transition: "all 0.2s", boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)" }}
+              onMouseOver={e => e.currentTarget.style.background = "#1D4ED8"}
+              onMouseOut={e => e.currentTarget.style.background = "#2563EB"}
+            >
+              + New Commessa
             </button>
           </div>
-          <p style={{ color: "#6B7280", margin: 0, fontSize: 14 }}>Manage invoiced amounts and work progress tracking (SAL)</p>
         </div>
 
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <select
-            value={fattFilterClient}
-            onChange={e => setFattFilterClient(e.target.value)}
-            style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #D1D5DB", fontSize: 13, fontWeight: 600, color: "#374151", background: "#fff", cursor: "pointer", outline: "none" }}
-          >
-            <option value="">All Clients (Tümü)</option>
-            {clients.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
+        {/* TOOLS & FILTERS BAR */}
+        <div style={{ marginTop: 20, padding: "16px 20px", background: "#fff", borderRadius: 12, border: "1.5px solid #E5E7EB", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
+          <div style={{ display: "flex", gap: 16, alignItems: "center", flex: "1 1 auto" }}>
+            {/* SEARCH INPUT */}
+            <div style={{ position: "relative", minWidth: 320 }}>
+              <input
+                type="text"
+                placeholder="Search Project ID, Name, Client, Activity..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                style={{
+                  padding: "10px 12px 10px 40px",
+                  borderRadius: 10,
+                  border: "1.5px solid #E5E7EB",
+                  fontSize: 14,
+                  width: "100%",
+                  outline: "none",
+                  transition: "all 0.2s",
+                  background: "#F9FAFB"
+                }}
+                onFocus={e => { e.target.style.borderColor = "#2563EB"; e.target.style.background = "#fff"; }}
+                onBlur={e => { e.target.style.borderColor = "#E5E7EB"; e.target.style.background = "#F9FAFB"; }}
+              />
+              <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", fontSize: 16 }}>🔍</span>
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm("")}
+                  style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: 14 }}>
+                  ✕
+                </button>
+              )}
+            </div>
 
-          <button onClick={openNewFatt} style={{ background: "#2563EB", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-            + New Commessa
-          </button>
+            <div style={{ height: 24, width: 1, background: "#E5E7EB" }}></div>
+
+            {/* FILTERS */}
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Filters:</label>
+              <select
+                value={selectedYear}
+                onChange={e => setSelectedYear(e.target.value === "all" ? "all" : parseInt(e.target.value))}
+                style={{ padding: "9px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 13, fontWeight: 600, color: "#111827", background: "#fff", cursor: "pointer", outline: "none" }}
+              >
+                {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y === "all" ? "All Time" : y}</option>)}
+              </select>
+
+              <select
+                value={fattFilterClient}
+                onChange={e => setFattFilterClient(e.target.value)}
+                style={{ padding: "9px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 13, fontWeight: 600, color: "#111827", background: "#fff", cursor: "pointer", outline: "none" }}
+              >
+                <option value="">All Clients</option>
+                {clients.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#6B7280" }}>
+            Showing <span style={{ color: "#111827" }}>{filteredFatturatoList.length}</span> Projects
+          </div>
         </div>
       </div>
 
@@ -634,13 +713,12 @@ export default function FatturatoDashboard({ isHR }) {
                     <div style={{ marginTop: 16, borderTop: "1px dashed #D1D5DB", paddingTop: 12 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                         <div style={{ fontSize: 10, fontWeight: 700, color: "#6B7280" }}>ACTIVITIES FOR THIS CLIENT</div>
-                        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                           {/* Labels for the columns below */}
                           <div style={{ display: "flex", gap: 6, marginRight: 20 }}>
-                            <div style={{ width: 200, fontSize: 10, fontWeight: 700, color: "#9CA3AF" }}>ATTIVITÀ</div>
-                            <div style={{ width: 100, fontSize: 10, fontWeight: 700, color: "#9CA3AF" }}>VALORE ORDINE</div>
-                            <div style={{ width: 100, fontSize: 10, fontWeight: 700, color: "#9CA3AF" }}>FATTURATO</div>
-                            <div style={{ width: 100, fontSize: 10, fontWeight: 700, color: "#9CA3AF" }}>PROFORMA</div>
+                            <div style={{ width: 150, fontSize: 10, fontWeight: 700, color: "#9CA3AF" }}>VALORE ORDINE</div>
+                            <div style={{ width: 150, fontSize: 10, fontWeight: 700, color: "#9CA3AF" }}>FATTURATO</div>
+                            <div style={{ width: 150, fontSize: 10, fontWeight: 700, color: "#9CA3AF" }}>PROFORMA</div>
                           </div>
                           <button onClick={() => addLineToClient(cIdx)} style={{ background: "#10B981", color: "#fff", border: "none", padding: "4px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>+ Add Line</button>
                         </div>
@@ -702,7 +780,7 @@ export default function FatturatoDashboard({ isHR }) {
                           <div style={{ marginLeft: 20, borderLeft: "2px solid #3B82F6", paddingLeft: 12, marginTop: 12 }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <span style={{ fontSize: 9, fontWeight: 700, color: "#2563EB" }}>PROFORMA ENTRIES (ITEMIZED)</span>
+                                <span style={{ fontSize: 9, fontWeight: 700, color: "#2563EB" }}>PROFORMA</span>
                                 {(() => {
                                   const total = (line.proforma_entries || []).reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
                                   if (total > 0) return <span style={{ fontSize: 9, fontWeight: 700, color: "#2563EB" }}>TOTAL: €{fmtEu(total)}</span>;
@@ -730,7 +808,7 @@ export default function FatturatoDashboard({ isHR }) {
                           <div style={{ marginLeft: 20, borderLeft: "2px solid #10B981", paddingLeft: 12, marginTop: 12 }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <span style={{ fontSize: 9, fontWeight: 700, color: "#059669" }}>REGISTERED BILLING (REALIZED)</span>
+                                <span style={{ fontSize: 9, fontWeight: 700, color: "#059669" }}>REGISTERED BILLING (FATTURATO)</span>
                                 {(() => {
                                   const total = (line.realized || []).reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
                                   if (total > 0) return <span style={{ fontSize: 9, fontWeight: 700, color: "#059669" }}>TOTAL: €{fmtEu(total)}</span>;
@@ -917,7 +995,7 @@ export default function FatturatoDashboard({ isHR }) {
                               {/* Nested Obiettivi (Targets) */}
                               <div style={{ marginLeft: 20, borderLeft: "2px solid #7C3AED", paddingLeft: 12, marginTop: 12 }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                                  <span style={{ fontSize: 9, fontWeight: 700, color: "#7C3AED" }}>OBIETTIVI (TARGETS Q1, Q2, Q3)</span>
+                                  <span style={{ fontSize: 9, fontWeight: 700, color: "#7C3AED" }}>OBIETTIVI</span>
                                   <button onClick={() => handleSaveLineObiettivi(line.id)} style={{ background: "#F5F3FF", color: "#7C3AED", border: "1px solid #DDD6FE", padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>Save Obiettivi</button>
                                 </div>
                                 {(() => {

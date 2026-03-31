@@ -13,8 +13,8 @@ module.exports = (app, query, authenticate) => {
   });
 
   app.get("/api/tasks/:taskId/phases", async (req, res) => {
-  try {
-    const result = await query(`
+    try {
+      const result = await query(`
       SELECT tp.*,
         COALESCE((
           SELECT json_agg(json_build_object(
@@ -45,9 +45,9 @@ module.exports = (app, query, authenticate) => {
       WHERE tp.task_id = $1
       ORDER BY tp.position
     `, [req.params.taskId]);
-    res.json(result.rows);
-  } catch (err) { res.status(500).json({ error: "Database error" }); }
-});
+      res.json(result.rows);
+    } catch (err) { res.status(500).json({ error: "Database error" }); }
+  });
   app.post("/api/tasks/:taskId/phases", authenticate, async (req, res) => {
     const { taskId } = req.params;
     const { phases } = req.body;
@@ -58,7 +58,7 @@ module.exports = (app, query, authenticate) => {
         for (const ph of phases) {
           // Calculate total estimated hours from assignee hours
           const totalEstimatedHours = (ph.assignee_hours || []).reduce((sum, assignee) => sum + (parseFloat(assignee.estimated_hours) || 0), 0);
-          
+
           const result = await query(
             `INSERT INTO task_phases (task_id, name, position, start_date, note, end_date, status, topic_source, estimated_hours)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
@@ -71,7 +71,7 @@ module.exports = (app, query, authenticate) => {
             ]
           );
           const phaseId = result.rows[0].id;
-          
+
           if (ph.assignee_hours && ph.assignee_hours.length > 0) {
             for (const a of ph.assignee_hours) {
               await query(
@@ -95,10 +95,30 @@ module.exports = (app, query, authenticate) => {
           }
         }
       }
-      // await query("COMMIT");
+      // ── AUTO-SYNC WITH FATTURATO ──
+      try {
+        const commRes = await query("SELECT id FROM commesse WHERE task_id = $1", [taskId]);
+        for (const comm of commRes.rows) {
+          const clientRes = await query("SELECT id FROM commessa_clients WHERE commessa_id = $1", [comm.id]);
+          for (const client of clientRes.rows) {
+            const lineRes = await query("SELECT attivita FROM fatturato_lines WHERE commessa_client_id = $1", [client.id]);
+            const existingNames = new Set(lineRes.rows.map(l => l.attivita));
+            for (const ph of phases) {
+              if (ph.status === 'active' && !existingNames.has(ph.name)) {
+                await query(
+                  "INSERT INTO fatturato_lines (commessa_client_id, attivita, valore_ordine, fatturato_amount) VALUES ($1, $2, 0, 0)",
+                  [client.id, ph.name]
+                );
+              }
+            }
+          }
+        }
+      } catch (syncErr) {
+        console.error("Auto-sync Fatturato error:", syncErr);
+      }
+
       res.status(201).json({ success: true });
     } catch (err) {
-      // await query("ROLLBACK");
       console.error("POST /phases error:", err);
       res.status(500).json({ error: "Database error" });
     }
@@ -144,35 +164,35 @@ module.exports = (app, query, authenticate) => {
   });
 
   // Aylık saatleri kaydet
-app.post("/api/phases/:phaseId/monthly-hours", authenticate, async (req, res) => {
-  const { phaseId } = req.params;
-  const { employee_id, year, month, hours } = req.body;
-  try {
-    const result = await query(
-      `INSERT INTO phase_assignee_monthly_hours (phase_id, employee_id, year, month, hours)
+  app.post("/api/phases/:phaseId/monthly-hours", authenticate, async (req, res) => {
+    const { phaseId } = req.params;
+    const { employee_id, year, month, hours } = req.body;
+    try {
+      const result = await query(
+        `INSERT INTO phase_assignee_monthly_hours (phase_id, employee_id, year, month, hours)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (phase_id, employee_id, year, month) DO UPDATE SET hours = $5
        RETURNING *`,
-      [phaseId, employee_id, year, month, hours]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: "Database error" });
-  }
-});
+        [phaseId, employee_id, year, month, hours]
+      );
+      res.json(result.rows[0]);
+    } catch (err) {
+      res.status(500).json({ error: "Database error" });
+    }
+  });
 
-// Aylık saatleri getir
-app.get("/api/phases/:phaseId/monthly-hours", async (req, res) => {
-  const { phaseId } = req.params;
-  try {
-    const result = await query(
-      `SELECT * FROM phase_assignee_monthly_hours WHERE phase_id = $1 ORDER BY year, month`,
-      [phaseId]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: "Database error" });
-  }
-});
+  // Aylık saatleri getir
+  app.get("/api/phases/:phaseId/monthly-hours", async (req, res) => {
+    const { phaseId } = req.params;
+    try {
+      const result = await query(
+        `SELECT * FROM phase_assignee_monthly_hours WHERE phase_id = $1 ORDER BY year, month`,
+        [phaseId]
+      );
+      res.json(result.rows);
+    } catch (err) {
+      res.status(500).json({ error: "Database error" });
+    }
+  });
 
 };

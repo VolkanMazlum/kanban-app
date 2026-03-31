@@ -133,7 +133,7 @@ router.get('/finances', authenticateHR, async (req, res) => {
       const amount = parseFloat(r.amount) || 0;
       const totalVal = parseFloat(r.valore_ordine) || 0;
       const pct = totalVal > 0 ? ((amount / totalVal) * 100).toFixed(1) + '%' : '-';
-      
+
       total += amount;
       sheet.addRow({
         ...r,
@@ -153,9 +153,9 @@ router.get('/finances', authenticateHR, async (req, res) => {
 
     // SHEET 2: CONTRACT DETAILS (Including SAL and Obiettivi)
     const sheet2 = workbook.addWorksheet('Dettagli Contrattuali');
-    
+
     const salMonths = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
-    
+
     const baseCols = [
       { header: 'N. Commessa', key: 'comm_number', width: 15 },
       { header: 'Nome Progetto', key: 'comm_name', width: 30 },
@@ -174,11 +174,11 @@ router.get('/finances', authenticateHR, async (req, res) => {
 
     // Add SAL Columns
     salMonths.forEach((m, i) => {
-      baseCols.push({ header: `${m} SAL (€)`, key: `sal_${i+1}`, width: 15 });
+      baseCols.push({ header: `${m} SAL (€)`, key: `sal_${i + 1}`, width: 15 });
     });
 
     // Add Obiettivi Columns
-    ['T2', 'T3', 'T4'].forEach(p => {
+    ['Q1', 'Q2', 'Q3'].forEach(p => {
       baseCols.push({ header: `Obiettivi ${p} - Ordinante`, key: `obj_ord_${p}`, width: 20 });
       baseCols.push({ header: `Obiettivi ${p} - Acquisizioni`, key: `obj_acq_${p}`, width: 20 });
     });
@@ -222,12 +222,13 @@ router.get('/finances', authenticateHR, async (req, res) => {
     salRes.rows.forEach(s => {
       const lid = s.fatturato_line_id;
       if (!salByLine[lid]) salByLine[lid] = {};
-      // If we are looking at a specific year, match months. 
-      // If 'all', 'sal_i' columns might be less meaningful than total, but we'll fill current year's months.
+      const val = Number(s.value || 0);
+      const signedVal = s.status === 'sbloccato' ? -val : val;
+
       if (!year || year === 'all' || Number(s.year) === Number(yearNum)) {
-        salByLine[lid][s.month] = s.value;
+        salByLine[lid][s.month] = signedVal;
       }
-      salTotalByLine[lid] = (salTotalByLine[lid] || 0) + Number(s.value || 0);
+      salTotalByLine[lid] = (salTotalByLine[lid] || 0) + signedVal;
     });
 
     // Fetch ALL Obiettivi
@@ -239,7 +240,7 @@ router.get('/finances', authenticateHR, async (req, res) => {
     objRes.rows.forEach(o => {
       const lid = o.fatturato_line_id;
       if (!objByLine[lid]) objByLine[lid] = {};
-      
+
       // For targets in the columns, we prefer the selected year or current year.
       // But we can aggregate for the row data if needed (the ledger sums them).
       if (!year || year === 'all' || Number(o.year) === Number(yearNum)) {
@@ -261,12 +262,12 @@ router.get('/finances', authenticateHR, async (req, res) => {
       const sheetName = `DET - ${commNum}`.slice(0, 31);
       const ws = workbook.addWorksheet(sheetName);
       ws.columns = baseCols; // Reuse the same columns
-      
+
       const titleRow = ws.insertRow(1, { comm_number: `COMMESSA: ${commNum} - ${commName || ''}` });
       titleRow.font = { bold: true, size: 14 };
       titleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
       ws.mergeCells(1, 1, 1, baseCols.length);
-      
+
       ws.getRow(2).font = { bold: true };
       ws.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
       return ws;
@@ -276,12 +277,12 @@ router.get('/finances', authenticateHR, async (req, res) => {
       const valOrd = Number(r.valore_ordine || 0);
       const valFatt = Number(r.fatturato_amount || 0);
       const valProf = Number(r.proforma || 0);
-      
+
       const rowData = {
         ...r,
         valore_ordine: valOrd,
         fatturato_amount: valFatt,
-        residuo: valOrd - valFatt,
+        residuo: valOrd - valFatt - valProf,
         proforma: valProf
       };
 
@@ -292,15 +293,15 @@ router.get('/finances', authenticateHR, async (req, res) => {
       rowData['sal_total'] = salTotalByLine[r.line_id] || 0;
 
       const lineObjAt = objByLine[r.line_id] || {};
-      ['T2', 'T3', 'T4'].forEach(p => {
+      ['Q1', 'Q2', 'Q3'].forEach(p => {
         // The ledger shows SUM of targets for the line. Let's match if year is 'all'
         if (year === 'all') {
-           const allTargetsForLine = objRes.rows.filter(o => o.fatturato_line_id === r.line_id && o.period === p);
-           rowData[`obj_ord_${p}`] = allTargetsForLine.reduce((sum, o) => sum + Number(o.ordinante_val || 0), 0);
-           rowData[`obj_acq_${p}`] = allTargetsForLine.reduce((sum, o) => sum + Number(o.acquisizioni_val || 0), 0);
+          const allTargetsForLine = objRes.rows.filter(o => o.fatturato_line_id === r.line_id && o.period === p);
+          rowData[`obj_ord_${p}`] = allTargetsForLine.reduce((sum, o) => sum + Number(o.ordinante_val || 0), 0);
+          rowData[`obj_acq_${p}`] = allTargetsForLine.reduce((sum, o) => sum + Number(o.acquisizioni_val || 0), 0);
         } else {
-           rowData[`obj_ord_${p}`] = lineObjAt[p] ? Number(lineObjAt[p].ordinante_val) : 0;
-           rowData[`obj_acq_${p}`] = lineObjAt[p] ? Number(lineObjAt[p].acquisizioni_val) : 0;
+          rowData[`obj_ord_${p}`] = lineObjAt[p] ? Number(lineObjAt[p].ordinante_val) : 0;
+          rowData[`obj_acq_${p}`] = lineObjAt[p] ? Number(lineObjAt[p].acquisizioni_val) : 0;
         }
       });
 
@@ -325,7 +326,7 @@ router.get('/finances', authenticateHR, async (req, res) => {
       currentSheet.addRow(rowData);
 
       if (idx === ordersRes.rows.length - 1 && currentSheet) {
-        const subRow = currentSheet.addRow({ attivita: 'TOTALE COMMESSA', valore_ordine: commTotalVal, fatturato_amount: commTotalFatt, proforma: commTotalProf, residuo: commTotalVal - commTotalFatt });
+        const subRow = currentSheet.addRow({ attivita: 'TOTALE COMMESSA', valore_ordine: commTotalVal, fatturato_amount: commTotalFatt, proforma: commTotalProf, residuo: commTotalVal - commTotalFatt - commTotalProf });
         subRow.font = { bold: true };
         subRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
       }
@@ -354,6 +355,18 @@ router.get('/finances', authenticateHR, async (req, res) => {
         SUM(fr.amount) as amount
       FROM fatturato_realized fr
       JOIN fatturato_lines fl ON fr.fatturato_line_id = fl.id
+      JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
+      JOIN commesse c ON cc.commessa_id = c.id
+      GROUP BY full_year, c.id
+    `);
+
+    const proformaDetails = await query(`
+      SELECT 
+        EXTRACT(YEAR FROM fp.date)::int as full_year,
+        c.id as comm_id,
+        SUM(fp.amount) as amount
+      FROM fatturato_proforma fp
+      JOIN fatturato_lines fl ON fp.fatturato_line_id = fl.id
       JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
       JOIN commesse c ON cc.commessa_id = c.id
       GROUP BY full_year, c.id
@@ -398,8 +411,8 @@ router.get('/finances', authenticateHR, async (req, res) => {
     `);
 
     // 3. Structured Data Processing
-    const yearlyMap = {}; 
-    
+    const yearlyMap = {};
+
     // Discover all available years from transactions
     const foundYears = new Set([
       ...revenueDetails.rows.map(r => r.full_year),
@@ -409,14 +422,14 @@ router.get('/finances', authenticateHR, async (req, res) => {
     ]);
     const availableYears = Array.from(foundYears)
       .filter(y => y !== null)
-      .sort((a,b) => b-a);
+      .sort((a, b) => b - a);
 
     const targetYears = (year && year !== 'all') ? [parseInt(year)] : availableYears;
-    
+
     const commsResult = await query(`SELECT id, comm_number, name FROM commesse`);
     const commInfo = {};
     commsResult.rows.forEach(c => commInfo[c.id] = c);
-    
+
     targetYears.forEach(y => {
       yearlyMap[y] = { projects: {}, totalCompanyLabor: 0, revenue: 0, directLaborAttr: 0, totalConsultantCost: 0, totalExtraCosts: 0 };
     });
@@ -430,13 +443,22 @@ router.get('/finances', authenticateHR, async (req, res) => {
       }
     });
 
+    proformaDetails.rows.forEach(p => {
+      const fullYear = p.full_year;
+      if (yearlyMap[fullYear]) {
+        yearlyMap[fullYear].revenue += parseFloat(p.amount);
+        if (!yearlyMap[fullYear].projects[p.comm_id]) yearlyMap[fullYear].projects[p.comm_id] = { rev: 0, cost: 0, consultant_cost: 0, extra: 0 };
+        yearlyMap[fullYear].projects[p.comm_id].rev += parseFloat(p.amount);
+      }
+    });
+
     extraCostsPerYear.rows.forEach(e => {
-        const fullYear = e.full_year;
-        if (yearlyMap[fullYear]) {
-          yearlyMap[fullYear].totalExtraCosts += parseFloat(e.extra_costs);
-          if (!yearlyMap[fullYear].projects[e.comm_id]) yearlyMap[fullYear].projects[e.comm_id] = { rev: 0, cost: 0, consultant_cost: 0, extra: 0 };
-          yearlyMap[fullYear].projects[e.comm_id].extra += parseFloat(e.extra_costs);
-        }
+      const fullYear = e.full_year;
+      if (yearlyMap[fullYear]) {
+        yearlyMap[fullYear].totalExtraCosts += parseFloat(e.extra_costs);
+        if (!yearlyMap[fullYear].projects[e.comm_id]) yearlyMap[fullYear].projects[e.comm_id] = { rev: 0, cost: 0, consultant_cost: 0, extra: 0 };
+        yearlyMap[fullYear].projects[e.comm_id].extra += parseFloat(e.extra_costs);
+      }
     });
 
     // B. Calculate Total Potential Company Cost for each year
@@ -448,44 +470,44 @@ router.get('/finances', authenticateHR, async (req, res) => {
           const allForEmp = allEmployeesCost.rows.filter(c => c.id === emp.id);
           const validCosts = allForEmp
             .filter(c => (c.start_year < y) || (c.start_year === y && c.start_month <= m))
-            .sort((a,b) => (b.start_year - a.start_year) || (b.start_month - a.start_month));
-          
+            .sort((a, b) => (b.start_year - a.start_year) || (b.start_month - a.start_month));
+
           let currentGross = 0;
           if (validCosts.length > 0) {
             currentGross = parseFloat(validCosts[0].annual_gross);
           } else if (allForEmp.length > 0) {
             // Fallback: Use the earliest available cost record if none exist for the period
-            const earliest = [...allForEmp].sort((a,b) => (a.start_year - b.start_year) || (a.start_month - b.start_month))[0];
+            const earliest = [...allForEmp].sort((a, b) => (a.start_year - b.start_year) || (a.start_month - b.start_month))[0];
             currentGross = parseFloat(earliest.annual_gross);
           }
 
           if (currentGross > 0) {
-              const workedInYear = employeeMonthlyTotals.rows.some(et => et.employee_id === emp.id && et.year === y);
-              const monthLog = employeeMonthlyTotals.rows.find(et => et.employee_id === emp.id && et.year === y && et.month === m);
-              if (emp.category === 'consultant') {
-                // If we haven't processed this consultant for year 'y' yet, check eligibility for the WHOLE year
-                if (m === 1) { // We only need to do this once per consultant per year
-                  const hr = emp.hr_details || {};
-                  const startStr = hr.inizio_lavoro;
-                  const endStr = hr.scadenza_contratto;
-                  let isEligibleForYear = true;
+            const workedInYear = employeeMonthlyTotals.rows.some(et => et.employee_id === emp.id && et.year === y);
+            const monthLog = employeeMonthlyTotals.rows.find(et => et.employee_id === emp.id && et.year === y && et.month === m);
+            if (emp.category === 'consultant') {
+              // If we haven't processed this consultant for year 'y' yet, check eligibility for the WHOLE year
+              if (m === 1) { // We only need to do this once per consultant per year
+                const hr = emp.hr_details || {};
+                const startStr = hr.inizio_lavoro;
+                const endStr = hr.scadenza_contratto;
+                let isEligibleForYear = true;
 
-                  const startYear = startStr ? new Date(startStr).getFullYear() : -Infinity;
-                  const endYear = endStr ? new Date(endStr).getFullYear() : Infinity;
+                const startYear = startStr ? new Date(startStr).getFullYear() : -Infinity;
+                const endYear = endStr ? new Date(endStr).getFullYear() : Infinity;
 
-                  if (y < startYear || y > endYear) {
-                    isEligibleForYear = false;
-                  }
-
-                  if (isEligibleForYear) {
-                    // For consultants, we add the full annual gross once per year 
-                    // (since the user said "it is given once, just add it to that year if they worked in it")
-                    yearlyMap[y].totalConsultantCost += currentGross;
-                  }
+                if (y < startYear || y > endYear) {
+                  isEligibleForYear = false;
                 }
-              } else if (monthLog) {
-                yearlyMap[y].totalCompanyLabor += (parseFloat(monthLog.total_hours) * currentGross / 2000);
+
+                if (isEligibleForYear) {
+                  // For consultants, we add the full annual gross once per year 
+                  // (since the user said "it is given once, just add it to that year if they worked in it")
+                  yearlyMap[y].totalConsultantCost += currentGross;
+                }
               }
+            } else if (monthLog) {
+              yearlyMap[y].totalCompanyLabor += (parseFloat(monthLog.total_hours) * currentGross / 2000);
+            }
           }
         });
       }
@@ -495,18 +517,18 @@ router.get('/finances', authenticateHR, async (req, res) => {
       const fullYear = l.full_year;
       if (yearlyMap[fullYear]) {
         if (!yearlyMap[fullYear].projects[l.comm_id]) yearlyMap[fullYear].projects[l.comm_id] = { rev: 0, cost: 0, consultant_cost: 0, extra: 0 };
-        
+
         // Find employee cost (Theoretical for this bucket year)
         const emp = allEmployeesCost.rows.find(e => e.id === l.employee_id);
         const validCosts = allEmployeesCost.rows
           .filter(c => c.id === l.employee_id)
           .filter(c => (c.start_year < fullYear) || (c.start_year === fullYear && c.start_month <= l.month))
-          .sort((a,b) => (b.start_year - a.start_year) || (b.start_month - a.start_month));
-        
+          .sort((a, b) => (b.start_year - a.start_year) || (b.start_month - a.start_month));
+
         if (validCosts.length > 0 && emp) {
           const gross = parseFloat(validCosts[0].annual_gross);
           const projectHours = parseFloat(l.project_hours);
-          
+
           if (emp.category === 'internal') {
             const cost = projectHours * (gross / 2000);
             yearlyMap[fullYear].projects[l.comm_id].cost += cost;
@@ -520,14 +542,14 @@ router.get('/finances', authenticateHR, async (req, res) => {
     for (const y of targetYears) {
       const ySuffix = y.toString().slice(-2);
       sheet3.addRow([`--- ANNO ${y} ---`]).font = { bold: true };
-      
+
       const projects = yearlyMap[y].projects;
-      const sortedIds = Object.keys(projects).sort((a,b) => (commInfo[a]?.comm_number || '').localeCompare(commInfo[b]?.comm_number || ''));
+      const sortedIds = Object.keys(projects).sort((a, b) => (commInfo[a]?.comm_number || '').localeCompare(commInfo[b]?.comm_number || ''));
 
       sortedIds.forEach(cid => {
         const info = commInfo[cid];
         if (!info) return;
-        
+
         const p = projects[cid];
         const profit = p.rev - p.cost - (p.extra || 0);
         const margin = p.rev > 0 ? (profit / p.rev * 100).toFixed(1) + '%' : '-';
@@ -547,15 +569,15 @@ router.get('/finances', authenticateHR, async (req, res) => {
       // Overall calculations for the year
       const settingsRes = await query(`SELECT key, value FROM settings WHERE key LIKE 'gc_%_' || $1`, [y]);
       const overheadGC = settingsRes.rows.reduce((sum, r) => sum + (parseFloat(r.value) || 0), 0);
-      
+
       const grossProfit = yearlyMap[y].revenue - yearlyMap[y].directLaborAttr;
       const netProfit = grossProfit - yearlyMap[y].totalConsultantCost - overheadGC - yearlyMap[y].totalExtraCosts; // Include consultant cost and extra costs here
 
       sheet3.addRow([]);
-      
+
       const sub1 = sheet3.addRow({ name: `TOTALE RICAVI ${y}`, total_rev: Number(yearlyMap[y].revenue.toFixed(2)) });
       sub1.font = { bold: true };
-      
+
       const sub2 = sheet3.addRow({ name: `TOTALE COSTO LAVORO DIRETTO ${y}`, total_rev: Number(yearlyMap[y].directLaborAttr.toFixed(2)) });
       sub2.font = { bold: true };
 
@@ -573,7 +595,7 @@ router.get('/finances', authenticateHR, async (req, res) => {
 
       const sub7 = sheet3.addRow({ name: `UTILE NETTO TOTALE ${y}`, total_rev: Number(netProfit.toFixed(2)) });
       sub7.font = { bold: true, size: 12, color: { argb: 'FF2563EB' } };
-      
+
       sheet3.addRow([]);
     }
 
@@ -592,7 +614,7 @@ router.get('/workload', authenticateHR, async (req, res) => {
   const { year } = req.query;
   const targetYear = parseInt(year) || new Date().getFullYear();
   const { calculateMonthlyLaborCost } = require('../utils/finance');
-  
+
   try {
     // 1. Get Workload Data
     const workloadRes = await query(`
@@ -636,7 +658,7 @@ router.get('/workload', authenticateHR, async (req, res) => {
     // --- SHEET 1: WORKLOAD MATRIX ---
     const sheet1 = workbook.addWorksheet(`Carico Lavoro ${targetYear}`);
     const columns1 = [{ header: 'Collaboratore', key: 'name', width: 25 }, { header: 'Posizione', key: 'position', width: 20 }];
-    MONTH_NAMES.forEach((m, i) => columns1.push({ header: m, key: `m${i+1}`, width: 10 }));
+    MONTH_NAMES.forEach((m, i) => columns1.push({ header: m, key: `m${i + 1}`, width: 10 }));
     columns1.push({ header: 'TOTALE', key: 'total', width: 12 });
     sheet1.columns = columns1;
     sheet1.getRow(1).font = { bold: true };
@@ -646,7 +668,7 @@ router.get('/workload', authenticateHR, async (req, res) => {
     workloadRes.rows.forEach(r => {
       if (!empMap[r.employee_id]) {
         empMap[r.employee_id] = { name: r.name, position: r.position, total: 0 };
-        for(let i=1; i<=12; i++) empMap[r.employee_id][`m${i}`] = 0;
+        for (let i = 1; i <= 12; i++) empMap[r.employee_id][`m${i}`] = 0;
       }
       if (r.month) {
         const val = parseFloat(r.monthly_total) || 0;
@@ -660,7 +682,7 @@ router.get('/workload', authenticateHR, async (req, res) => {
     // --- SHEET 2: KPI TRENDS ---
     const sheet2 = workbook.addWorksheet(`Andamento Finanziario ${targetYear}`);
     const columns2 = [{ header: 'Metrica', key: 'metric', width: 30 }];
-    MONTH_NAMES.forEach((m, i) => columns2.push({ header: m, key: `m${i+1}`, width: 12 }));
+    MONTH_NAMES.forEach((m, i) => columns2.push({ header: m, key: `m${i + 1}`, width: 12 }));
     columns2.push({ header: 'TOTALE ANNUO', key: 'total', width: 15 });
     sheet2.columns = columns2;
     sheet2.getRow(1).font = { bold: true };
@@ -673,7 +695,7 @@ router.get('/workload', authenticateHR, async (req, res) => {
       overhead: { metric: '🔘 Spese Generali', total: 0 },
       profit: { metric: '💰 UTILE NETTO', total: 0 }
     };
-    for(let i=1; i<=12; i++) {
+    for (let i = 1; i <= 12; i++) {
       trends.revenue[`m${i}`] = 0; trends.internal_labor[`m${i}`] = 0; trends.consultant_labor[`m${i}`] = 0;
       trends.overhead[`m${i}`] = monthlyOverheadValue; trends.overhead.total += monthlyOverheadValue;
     }
@@ -691,7 +713,7 @@ router.get('/workload', authenticateHR, async (req, res) => {
         trends.internal_labor.total += cost;
       }
     });
-    for(let i=1; i<=12; i++) {
+    for (let i = 1; i <= 12; i++) {
       const m = `m${i}`;
       trends.profit[m] = trends.revenue[m] - trends.internal_labor[m] - trends.consultant_labor[m] - trends.overhead[m];
       trends.profit.total += trends.profit[m];
@@ -743,15 +765,15 @@ router.get('/workload', authenticateHR, async (req, res) => {
     sheet4.getRow(1).font = { bold: true };
     sheet4.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
 
-    laborRes.rows.sort((a,b) => a.month - b.month || a.name.localeCompare(b.name)).forEach(r => {
+    laborRes.rows.sort((a, b) => a.month - b.month || a.name.localeCompare(b.name)).forEach(r => {
       const hours = Number(r.hours || 0);
       const cost = calculateMonthlyLaborCost({ hours, annual_gross: Number(r.annual_gross || 0), category: r.category });
-      sheet4.addRow({ 
-        month_name: MONTH_NAMES[parseInt(r.month)-1], 
-        name: r.name, 
-        category: r.category, 
-        hours: hours, 
-        cost: Math.round(cost) 
+      sheet4.addRow({
+        month_name: MONTH_NAMES[parseInt(r.month) - 1],
+        name: r.name,
+        category: r.category,
+        hours: hours,
+        cost: Math.round(cost)
       });
     });
 
@@ -827,7 +849,7 @@ router.get('/employees', authenticateHR, async (req, res) => {
     // 2. Discover Training Years only (Languages are now fixed list too)
     const trainingYears = new Set();
     const fixedLangs = ["Italiano", "Inglese", "Francese", "Spagnolo", "Tedesco", "Portoghese", "Arabo", "Russo", "Turco", "Persiano"];
-    
+
     result.rows.forEach(r => {
       const hr = r.hr_details || {};
       Object.keys(hr).forEach(k => {
@@ -866,7 +888,7 @@ router.get('/employees', authenticateHR, async (req, res) => {
         totale_annuo: hr.totale_annuo ? Number(hr.totale_annuo) : 0,
         presenza: hr.presenza ? Number(hr.presenza) : 0,
       };
-      
+
       sheet.addRow(rowData);
     });
 
@@ -883,19 +905,40 @@ router.get('/employees', authenticateHR, async (req, res) => {
  */
 router.get('/clients', authenticateHR, async (req, res) => {
   try {
-    const result = await query(`SELECT * FROM clients ORDER BY name ASC`);
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Lista Clienti');
+    const clientsResult = await query(`SELECT * FROM clients ORDER BY name ASC`);
+    const allLinesRes = await query(`
+      SELECT 
+        cc.client_id,
+        c.comm_number, c.name as comm_name,
+        fl.attivita, fl.valore_ordine, fl.fatturato_amount, fl.proforma
+      FROM commessa_clients cc
+      JOIN commesse c ON cc.commessa_id = c.id
+      JOIN fatturato_lines fl ON cc.id = fl.commessa_client_id
+      ORDER BY cc.client_id, c.comm_number ASC
+    `);
 
-    sheet.columns = [
+    const linesByClient = {};
+    allLinesRes.rows.forEach(l => {
+      if (!linesByClient[l.client_id]) linesByClient[l.client_id] = [];
+      linesByClient[l.client_id].push(l);
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const mainSheet = workbook.addWorksheet('Lista Clienti');
+
+    const clientCols = [
       { header: 'ID', key: 'id', width: 10 },
       { header: 'Nome Cliente', key: 'name', width: 25 },
       { header: 'Ragione Sociale', key: 'ragione_sociale', width: 30 },
+      { header: 'Valore Totale (€)', key: 'total_val', width: 18 },
+      { header: 'Totale Fatturato (€)', key: 'total_fatt', width: 18 },
+      { header: 'Totale Proforma (€)', key: 'total_prof', width: 18 },
+      { header: 'Residuo (€)', key: 'total_res', width: 18 },
       { header: 'P. IVA', key: 'vat_number', width: 20 },
       { header: 'Codice Fiscale', key: 'codice_fiscale', width: 20 },
       { header: 'Codice SDI', key: 'codice_univoco', width: 15 },
-      { header: 'ATECO', key: 'codice_ateco', width: 15 },
-      { header: 'Inarcassa', key: 'codice_inarcassa', width: 15 },
+      { header: 'Codice ATECO', key: 'codice_ateco', width: 15 },
+      { header: 'Codice Inarcassa', key: 'codice_inarcassa', width: 15 },
       { header: 'Email Contatto', key: 'contact_email', width: 25 },
       { header: 'Telefono', key: 'phone', width: 15 },
       { header: 'Fax', key: 'fax', width: 15 },
@@ -907,31 +950,86 @@ router.get('/clients', authenticateHR, async (req, res) => {
       { header: 'Contabilità (Rif)', key: 'contabilita_name', width: 25 },
       { header: 'Contabilità (Email)', key: 'contabilita_email', width: 25 },
       { header: 'Contabilità (Tel)', key: 'contabilita_phone', width: 15 },
-      { header: 'Note', key: 'notes', width: 30 },
-      { header: 'Creato il', key: 'created_at', width: 20 }
+      { header: 'Note', key: 'notes', width: 30 }
     ];
 
-    sheet.getRow(1).font = { bold: true };
-    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } };
+    mainSheet.columns = clientCols;
+    mainSheet.getRow(1).font = { bold: true };
+    mainSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } };
 
-    const rows = result.rows.map(r => ({
-      ...r,
-      valore_ordine: Number(r.valore_ordine || 0),
-      fatturato_amount: Number(r.fatturato_amount || 0),
-      rimanente: Number(r.rimanente || 0),
-      labor_cost: Number(r.labor_cost || 0),
-      margin: Number(r.margin || 0)
-    }));
+    const detailCols = [
+      { header: 'N. Commessa', key: 'comm_number', width: 15 },
+      { header: 'Nome Progetto', key: 'comm_name', width: 30 },
+      { header: 'Attività', key: 'attivita', width: 30 },
+      { header: 'Valore Ordine (€)', key: 'valore_ordine', width: 18 },
+      { header: 'Totale Fatturato (€)', key: 'fatturato_amount', width: 18 },
+      { header: 'Proforma (€)', key: 'proforma', width: 15 },
+      { header: 'Rimanente (€)', key: 'residuo', width: 18 },
+    ];
 
-    rows.forEach(r => sheet.addRow({
-        ...r,
-        created_at: r.created_at ? r.created_at.toISOString() : ''
-      }));
+    clientsResult.rows.forEach(client => {
+      const cLines = linesByClient[client.id] || [];
+      const tVal = cLines.reduce((sum, l) => sum + Number(l.valore_ordine || 0), 0);
+      const tFatt = cLines.reduce((sum, l) => sum + Number(l.fatturato_amount || 0), 0);
+      const tProf = cLines.reduce((sum, l) => sum + Number(l.proforma || 0), 0);
 
-    await sendWorkbook(res, workbook, `Clients_List_${new Date().toISOString().split('T')[0]}.xlsx`);
+      // Add to Main Sheet
+      mainSheet.addRow({
+        ...client,
+        total_val: tVal,
+        total_fatt: tFatt,
+        total_prof: tProf,
+        total_res: tVal - tFatt - tProf
+      });
+
+      // Create Individual Sheet
+      const sheetName = client.name.replace(/[\[\]\*\?\/\\]/g, '').slice(0, 31);
+      const ws = workbook.addWorksheet(sheetName);
+      
+      // Header Client UI - Detailed Profile
+      ws.addRow([`DATI CLIENTE: ${client.name} (ID: ${client.id})`]).font = { bold: true, size: 14 };
+      ws.addRow([`Ragione Sociale: ${client.ragione_sociale || '-'} | P.IVA: ${client.vat_number || '-'} | CF: ${client.codice_fiscale || '-'} | SDI: ${client.codice_univoco || '-'}`]);
+      ws.addRow([`ATECO: ${client.codice_ateco || '-'} | Inarcassa: ${client.codice_inarcassa || '-'}`]);
+      ws.addRow([`Email: ${client.contact_email || '-'} | Tel: ${client.phone || '-'} | Fax: ${client.fax || '-'}`]);
+      ws.addRow([`Indirizzo: ${client.address || '-'}, ${client.localita || '-'} (${client.cap || '-'}) - ${client.province || '-'}, ${client.stato || '-'}`]);
+      ws.addRow([`Rif. Contabilità: ${client.contabilita_name || '-'} | Email: ${client.contabilita_email || '-'} | Tel: ${client.contabilita_phone || '-'}`]);
+      ws.addRow([`Note: ${client.notes || '-'}`]);
+      ws.addRow([]);
+
+      ws.columns = detailCols;
+      ws.getRow(9).font = { bold: true };
+      ws.getRow(9).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+
+      cLines.forEach(l => {
+        const vO = Number(l.valore_ordine || 0);
+        const vF = Number(l.fatturato_amount || 0);
+        const vP = Number(l.proforma || 0);
+        ws.addRow({
+          ...l,
+          valore_ordine: vO,
+          fatturato_amount: vF,
+          proforma: vP,
+          residuo: vO - vF - vP
+        });
+      });
+
+      if (cLines.length > 0) {
+        const subRow = ws.addRow({
+          attivita: 'TOTALE CLIENTE',
+          valore_ordine: tVal,
+          fatturato_amount: tFatt,
+          proforma: tProf,
+          residuo: tVal - tFatt - tProf
+        });
+        subRow.font = { bold: true };
+        subRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+      }
+    });
+
+    await sendWorkbook(res, workbook, `Clients_Detailed_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   } catch (err) {
     console.error('Export clients error:', err);
-    res.status(500).json({ error: 'Failed to export client data' });
+    res.status(500).json({ error: 'Errore durante l\'esportazione dei dati clienti' });
   }
 });
 

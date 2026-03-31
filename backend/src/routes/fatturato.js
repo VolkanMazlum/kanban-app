@@ -56,7 +56,15 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       // 7. Tüm Extra Costs Çek
       const extraRes = await query(`SELECT * FROM commessa_extra_costs ORDER BY date ASC`);
 
+      // 8. Tüm Obiettivi Çek
+      const objRes = await query(`SELECT * FROM fatturato_obiettivi ORDER BY year DESC, period ASC`);
+
       // İç içe yerleştirme (Ordini/Realized -> Lines -> Clients -> Commessa)
+      const objByLine = {};
+      objRes.rows.forEach(o => {
+        if (!objByLine[o.fatturato_line_id]) objByLine[o.fatturato_line_id] = [];
+        objByLine[o.fatturato_line_id].push(o);
+      });
       const ordByLine = {};
       ordRes.rows.forEach(o => {
         if (!ordByLine[o.fatturato_line_id]) ordByLine[o.fatturato_line_id] = [];
@@ -88,7 +96,8 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           ...l,
           ordini: ordByLine[l.id] || [],
           realized: realByLine[l.id] || [],
-          proforma_entries: profByLine[l.id] || []
+          proforma_entries: profByLine[l.id] || [],
+          obiettivi: objByLine[l.id] || []
         });
       });
 
@@ -343,8 +352,8 @@ module.exports = (app, query, authenticate, authenticateHR) => {
                   n_ordine_zucchetti = $6, voce_bilancio = $7
               WHERE id = $8
             `, [c.client_id || null, c.n_cliente || null, c.n_ordine || null,
-                c.preventivo || null, c.ordine || null,
-                c.n_ordine_zucchetti || null, c.voce_bilancio || null, c.id]);
+            c.preventivo || null, c.ordine || null,
+            c.n_ordine_zucchetti || null, c.voce_bilancio || null, c.id]);
             ccId = c.id;
           } else {
             // New client block — insert
@@ -352,8 +361,8 @@ module.exports = (app, query, authenticate, authenticateHR) => {
               INSERT INTO commessa_clients (commessa_id, client_id, n_cliente, n_ordine, preventivo, ordine, n_ordine_zucchetti, voce_bilancio)
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
             `, [commId, c.client_id || null, c.n_cliente || null, c.n_ordine || null,
-                c.preventivo || null, c.ordine || null,
-                c.n_ordine_zucchetti || null, c.voce_bilancio || null]);
+              c.preventivo || null, c.ordine || null,
+              c.n_ordine_zucchetti || null, c.voce_bilancio || null]);
             ccId = ccRes.rows[0].id;
           }
           incomingClientIds.push(ccId);
@@ -372,8 +381,8 @@ module.exports = (app, query, authenticate, authenticateHR) => {
                       valore_ordine = $4, fatturato_amount = $5, proforma = $6
                   WHERE id = $7
                 `, [ccId, l.attivita || null, l.descrizione || null,
-                    parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0,
-                    parseFloat(l.proforma) || 0, l.id]);
+                  parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0,
+                  parseFloat(l.proforma) || 0, l.id]);
                 lineId = l.id;
               } else {
                 // New line — insert
@@ -381,8 +390,8 @@ module.exports = (app, query, authenticate, authenticateHR) => {
                   INSERT INTO fatturato_lines (commessa_client_id, attivita, descrizione, valore_ordine, fatturato_amount, proforma)
                   VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
                 `, [ccId, l.attivita || null, l.descrizione || null,
-                    parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0,
-                    parseFloat(l.proforma) || 0]);
+                  parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0,
+                  parseFloat(l.proforma) || 0]);
                 lineId = flRes.rows[0].id;
               }
               incomingLineIds.push(lineId);
