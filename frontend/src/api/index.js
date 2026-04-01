@@ -91,6 +91,24 @@ export const saveOvertimeCost = (employeeId, data) => {
   });
 };
 
+export const getEmployeeExtraCosts = (employeeId, year) => {
+  const url = year ? `/costs/${employeeId}/extra?year=${year}` : `/costs/${employeeId}/extra`;
+  return req(url);
+};
+
+export const saveEmployeeExtraCost = (employeeId, data) => {
+  return req(`/costs/${employeeId}/extra`, {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+};
+
+export const deleteEmployeeExtraCost = (id) => {
+  return req(`/costs/extra/${id}`, {
+    method: "DELETE"
+  });
+};
+
 export const getTaskFinances = (year, startDate, endDate) => {
   const params = new URLSearchParams();
   if (year) params.append("year", year);

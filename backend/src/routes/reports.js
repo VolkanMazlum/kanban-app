@@ -169,6 +169,7 @@ router.get('/finances', authenticateHR, async (req, res) => {
       { header: 'Rimanente (€)', key: 'residuo', width: 18 },
       { header: 'Proforma (€)', key: 'proforma', width: 15 },
       { header: 'Costi Extra (€)', key: 'extra_costs', width: 15 },
+      { header: 'Voce a Bilancio', key: 'voce_bilancio', width: 20 },
       { header: 'SAL Valore Totale (€)', key: 'sal_total', width: 20 },
     ];
 
@@ -183,7 +184,8 @@ router.get('/finances', authenticateHR, async (req, res) => {
       baseCols.push({ header: `Obiettivi ${p} - Acquisizioni`, key: `obj_acq_${p}`, width: 20 });
     });
 
-    baseCols.push({ header: 'Note', key: 'note', width: 30 });
+    baseCols.push({ header: 'Note Progetto', key: 'comm_notes', width: 30 });
+    baseCols.push({ header: 'Note Linea', key: 'note', width: 30 });
     sheet2.columns = baseCols;
     sheet2.getRow(1).font = { bold: true };
     sheet2.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
@@ -193,12 +195,12 @@ router.get('/finances', authenticateHR, async (req, res) => {
 
     const ordersRes = await query(`
       SELECT 
-        c.id as comm_id, c.comm_number, c.name as comm_name,
+        c.id as comm_id, c.comm_number, c.name as comm_name, c.notes as comm_notes,
         cl.name as client_name,
         cc.n_cliente, cc.n_ordine,
-        fl.id as line_id, fl.attivita, fl.valore_ordine, fl.fatturato_amount, fl.proforma, fl.note,
+        fl.id as line_id, fl.attivita, fl.valore_ordine, fl.fatturato_amount, fl.proforma, fl.note, fl.voce_bilancio,
         (SELECT STRING_AGG(label || ': ' || (percentage::float)::text || '%', ', ') FROM fatturato_ordini WHERE fatturato_line_id = fl.id) as fatturazione,
-        COALESCE((SELECT SUM(amount) FROM commessa_extra_costs WHERE commessa_id = c.id), 0) as extra_costs
+        COALESCE((SELECT SUM(amount) FROM employee_extra_costs WHERE task_id = c.task_id AND ($1 = 'all' OR EXTRACT(YEAR FROM date) = $1::int)), 0) as extra_costs
       FROM commesse c
       JOIN commessa_clients cc ON c.id = cc.commessa_id
       LEFT JOIN clients cl ON cc.client_id = cl.id
@@ -208,7 +210,7 @@ router.get('/finances', authenticateHR, async (req, res) => {
          OR c.comm_number LIKE $2 || '-%'
          OR EXISTS (SELECT 1 FROM fatturato_realized fr WHERE fr.fatturato_line_id = fl.id AND EXTRACT(YEAR FROM fr.registration_date) = $1::int)
          OR EXISTS (SELECT 1 FROM employee_work_hours wh WHERE wh.task_id = t.id AND EXTRACT(YEAR FROM wh.date) = $1::int)
-         OR EXISTS (SELECT 1 FROM commessa_extra_costs cec WHERE cec.commessa_id = c.id AND EXTRACT(YEAR FROM cec.date) = $1::int)
+         OR EXISTS (SELECT 1 FROM employee_extra_costs eec WHERE eec.task_id = c.task_id AND EXTRACT(YEAR FROM eec.date) = $1::int)
       ORDER BY c.comm_number ASC, cc.n_cliente ASC, fl.id ASC
     `, [year || 'all', yearSuffix]);
 
@@ -374,10 +376,11 @@ router.get('/finances', authenticateHR, async (req, res) => {
 
     const extraCostsPerYear = await query(`
       SELECT 
-        EXTRACT(YEAR FROM date)::int as full_year,
-        commessa_id as comm_id,
-        SUM(amount) as extra_costs
-      FROM commessa_extra_costs
+        EXTRACT(YEAR FROM eec.date)::int as full_year,
+        c.id as comm_id,
+        SUM(eec.amount) as extra_costs
+      FROM employee_extra_costs eec
+      JOIN commesse c ON eec.task_id = c.task_id
       GROUP BY full_year, comm_id
     `);
 

@@ -22,6 +22,11 @@ export default function CostDashboard({ employees, user }) {
   const [overtimeData, setOvertimeData] = useState([]);
   const [overtimeInput, setOvertimeInput] = useState({ month: currentMonth, amount: "" });
 
+  const [showExtraCostModal, setShowExtraCostModal] = useState(false);
+  const [extraCostsData, setExtraCostsData] = useState([]);
+  const [extraCostInput, setExtraCostInput] = useState({ task_id: "", description: "", amount: "", date: new Date().toISOString().slice(0, 10) });
+  const [loadingExtra, setLoadingExtra] = useState(false);
+
   // ── TIMESHEET & TASK STATE ──
   const [allTasks, setAllTasks] = useState([]);
   const [selectedEmp, setSelectedEmp] = useState(null);
@@ -106,6 +111,52 @@ export default function CostDashboard({ employees, user }) {
     } catch (err) { console.error(err); }
   };
 
+  const loadExtraCosts = async (emp) => {
+    setSelectedEmpHR(emp);
+    setLoadingExtra(true);
+    try {
+      const data = await api.getEmployeeExtraCosts(emp.id, selectedYear);
+      setExtraCostsData(data);
+      setShowExtraCostModal(true);
+    } catch (err) { console.error(err); }
+    setLoadingExtra(false);
+  };
+
+  const handleAddExtraCost = async () => {
+    if (!selectedEmpHR) return;
+    if (!extraCostInput.task_id || !extraCostInput.amount || !extraCostInput.description) {
+      alert("Please fill in Taks, Description and Amount.");
+      return;
+    }
+    try {
+      await api.saveEmployeeExtraCost(selectedEmpHR.id, extraCostInput);
+      const [updatedCosts, updatedExtra] = await Promise.all([
+        api.getCosts(selectedYear),
+        api.getEmployeeExtraCosts(selectedEmpHR.id, selectedYear)
+      ]);
+      setCosts(updatedCosts);
+      setExtraCostsData(updatedExtra);
+      // Keep task_id selected for next entry, but clear description/amount
+      setExtraCostInput(p => ({ ...p, description: "", amount: "" }));
+    } catch (err) {
+      console.error(err);
+      alert("Error adding extra cost: " + err.message);
+    }
+  };
+
+  const handleDeleteExtraCost = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this extra cost?")) return;
+    try {
+      await api.deleteEmployeeExtraCost(id);
+      const [updatedCosts, updatedExtra] = await Promise.all([
+        api.getCosts(selectedYear),
+        api.getEmployeeExtraCosts(selectedEmpHR.id, selectedYear)
+      ]);
+      setCosts(updatedCosts);
+      setExtraCostsData(updatedExtra);
+    } catch (err) { console.error(err); }
+  };
+
   const inpStyle = {
     border: "1.5px solid #E5E7EB", borderRadius: 8, padding: "9px 12px",
     fontSize: 13, color: "#111827", fontFamily: "'Inter',sans-serif", width: "100%", outline: "none"
@@ -140,6 +191,7 @@ export default function CostDashboard({ employees, user }) {
           setSelectedEmpHR={setSelectedEmpHR}
           setShowCostModal={setShowCostModal}
           loadOvertime={loadOvertime}
+          loadExtraCosts={loadExtraCosts}
         />
       )}
 
@@ -171,6 +223,96 @@ export default function CostDashboard({ employees, user }) {
               ))}
             </div>
             <button onClick={() => setShowOvertimeModal(false)} style={{ width: "100%", padding: 11, background: "#F9FAFB", border: "1.5px solid #E5E7EB", color: "#374151", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── EXTRA COSTS MODAL ── */}
+      {showExtraCostModal && selectedEmpHR && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, backdropFilter: "blur(4px)" }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 600, boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 10, color: "#9CA3AF", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 2 }}>MANAGE EXTRA COSTS ({selectedYear})</div>
+              <h3 style={{ color: "#111827", margin: 0, fontSize: 18, fontWeight: 700 }}>{selectedEmpHR.name}</h3>
+            </div>
+            
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr auto", gap: 10, marginBottom: 20, alignItems: "flex-end" }}>
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 600, marginBottom: 6 }}>TASK/PROJECT</label>
+                <select
+                  value={extraCostInput.task_id}
+                  onChange={e => setExtraCostInput(p => ({ ...p, task_id: e.target.value }))}
+                  style={inpStyle}
+                >
+                  <option value="">Select Task...</option>
+                  {allTasks
+                    .filter(t => 
+                      t.commessa && // Must be linked to a project
+                      (t.assignees || []).some(a => a.id === selectedEmpHR?.id) // Must be assigned to this employee
+                    )
+                    .map(t => (
+                      <option key={t.id} value={t.id}>
+                        [{t.commessa.comm_number || 'No #'}]{t.commessa.name ? ` ${t.commessa.name}` : ''} - {t.title}
+                      </option>
+                    ))
+                  }
+                </select>
+                {allTasks.filter(t => t.commessa && (t.assignees || []).some(a => a.id === selectedEmpHR?.id)).length === 0 && (
+                  <div style={{ fontSize: 9, color: "#DC2626", marginTop: 4, fontWeight: 600 }}>
+                    ⚠ No tasks linked to a Project are currently assigned to this employee.
+                  </div>
+                )}
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 600, marginBottom: 6 }}>DESCRIPTION</label>
+                <input type="text" value={extraCostInput.description} onChange={e => setExtraCostInput(p => ({ ...p, description: e.target.value }))} placeholder="e.g. Travel, Ticket" style={inpStyle} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 600, marginBottom: 6 }}>AMOUNT (€)</label>
+                <input type="number" step="0.01" value={extraCostInput.amount} onChange={e => setExtraCostInput(p => ({ ...p, amount: e.target.value }))} placeholder="0.00" style={inpStyle} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 600, marginBottom: 6 }}>DATE</label>
+                <input type="date" value={extraCostInput.date} onChange={e => setExtraCostInput(p => ({ ...p, date: e.target.value }))} style={inpStyle} />
+              </div>
+              <div>
+                <button onClick={handleAddExtraCost} style={{ padding: "10px 14px", background: "#3B82F6", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 16 }}>+</button>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 20, height: 250, overflowY: "auto", background: "#F9FAFB", padding: 12, borderRadius: 8, border: "1px solid #E5E7EB" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", marginBottom: 12, display: "flex", justifyContent: "space-between" }}>
+                <span>RECORDED HISTORY ({selectedYear})</span>
+                {extraCostsData.length > 0 && <span>Total: €{extraCostsData.reduce((s, x) => s + parseFloat(x.amount), 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}</span>}
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>
+                    <th style={{ padding: 8 }}>Date</th>
+                    <th style={{ padding: 8 }}>Task</th>
+                    <th style={{ padding: 8 }}>Note</th>
+                    <th style={{ padding: 8, textAlign: "right" }}>Amount</th>
+                    <th style={{ padding: 8 }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {extraCostsData.length === 0 ? (
+                    <tr><td colSpan="5" style={{ padding: 40, textAlign: "center", color: "#9CA3AF" }}>No costs found for {selectedYear}. Check other years in the dashboard.</td></tr>
+                  ) : extraCostsData.map(ec => (
+                    <tr key={ec.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                      <td style={{ padding: 8 }}>{new Date(ec.date).toLocaleDateString()}</td>
+                      <td style={{ padding: 8, fontWeight: 600 }}>{ec.task_title}</td>
+                      <td style={{ padding: 8 }}>{ec.description}</td>
+                      <td style={{ padding: 8, textAlign: "right", fontWeight: 700, color: "#111827" }}>€{parseFloat(ec.amount).toLocaleString("it-IT", { minimumFractionDigits: 2 })}</td>
+                      <td style={{ padding: 8, textAlign: "right" }}>
+                        <button onClick={() => handleDeleteExtraCost(ec.id)} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 14 }}>×</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button onClick={() => setShowExtraCostModal(false)} style={{ width: "100%", padding: 11, background: "#F9FAFB", border: "1.5px solid #E5E7EB", color: "#374151", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>Close</button>
           </div>
         </div>
       )}

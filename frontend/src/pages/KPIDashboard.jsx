@@ -261,11 +261,12 @@ export default function KPIDashboard({ employees }) {
             : (
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flex: 1, paddingBottom: 10 }}>
                 {trend.map((t, idx) => (
-                  <div key={t.month} title={`Labor: €${t.labor?.toLocaleString('it-IT')}\nOverhead: €${t.overhead?.toLocaleString('it-IT')}\nTotal: €${t.total?.toLocaleString('it-IT')}`} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, cursor: "help" }}>
+                  <div key={t.month} title={`Labor: €${t.labor?.toLocaleString('it-IT')}\nOverhead: €${t.overhead?.toLocaleString('it-IT')}\nExtra: €${t.extraCosts?.toLocaleString('it-IT')}\nTotal: €${t.total?.toLocaleString('it-IT')}`} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, cursor: "help" }}>
                     <div style={{ fontSize: 8, fontWeight: 700, color: idx === 2 ? "#EF4444" : "#6B7280" }}>€{Math.round((t.total || 0) / 1000)}k</div>
                     <div style={{ width: "100%", display: "flex", flexDirection: "column-reverse", height: `${Math.max(((t.total || 0) / maxTrend) * 70, 4)}px`, borderRadius: "4px 4px 0 0", overflow: "hidden", opacity: idx === 2 ? 1 : 0.7 }}>
                       <div style={{ background: "#EF4444", height: `${((t.labor || 0) / (t.total || 1)) * 100}%`, width: "100%" }} />
                       <div style={{ background: "#FCA5A5", height: `${((t.overhead || 0) / (t.total || 1)) * 100}%`, width: "100%" }} />
+                      <div style={{ background: "#991B1B", height: `${((t.extraCosts || 0) / (t.total || 1)) * 100}%`, width: "100%" }} />
                     </div>
                     <div style={{ fontSize: 8, color: "#9CA3AF", textAlign: "center", fontWeight: idx === 2 ? 700 : 400 }}>{t.month}</div>
                   </div>

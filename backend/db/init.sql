@@ -310,16 +310,19 @@ CREATE INDEX IF NOT EXISTS idx_commessa_clients_comm ON commessa_clients(commess
 CREATE INDEX IF NOT EXISTS idx_fatturato_ordini_line ON fatturato_ordini(fatturato_line_id);
 CREATE INDEX IF NOT EXISTS idx_fatturato_realized_line ON fatturato_realized(fatturato_line_id);
  
- --  KATMAN: Extra Costs (Travel, tickets, etc.)
- CREATE TABLE IF NOT EXISTS commessa_extra_costs (
-   id SERIAL PRIMARY KEY,
-   commessa_id INTEGER NOT NULL REFERENCES commesse(id) ON DELETE CASCADE,
-   description TEXT NOT NULL,
-   amount NUMERIC(12,2) NOT NULL DEFAULT 0,
-   date DATE NOT NULL DEFAULT CURRENT_DATE,
-   created_at TIMESTAMPTZ DEFAULT NOW()
- );
- CREATE INDEX IF NOT EXISTS idx_commessa_extra_costs_comm ON commessa_extra_costs(commessa_id);
+  -- USER EXTRA COSTS (Travel, tickets, etc. linked to employee and task)
+  CREATE TABLE IF NOT EXISTS employee_extra_costs (
+    id SERIAL PRIMARY KEY,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    description TEXT NOT NULL,
+    amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+    date DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS idx_employee_extra_costs_emp ON employee_extra_costs(employee_id);
+  CREATE INDEX IF NOT EXISTS idx_employee_extra_costs_task ON employee_extra_costs(task_id);
+  CREATE INDEX IF NOT EXISTS idx_employee_extra_costs_date ON employee_extra_costs(date);
  
   -- 8. FATTURATO SAL & OBIETTIVI
   CREATE TABLE IF NOT EXISTS fatturato_sal (

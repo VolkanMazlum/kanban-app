@@ -72,6 +72,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           ) AS current_valid_from,
           COALESCE((SELECT SUM(wh.hours) FROM employee_work_hours wh WHERE wh.employee_id = e.id AND ($1::int IS NULL OR EXTRACT(YEAR FROM wh.date) = $1)), 0) AS logged_hours,
           COALESCE((SELECT SUM(hours) FROM employee_overtime_costs WHERE employee_id = e.id AND ($1::int IS NULL OR year = $1)), 0) AS overtime_hours,
+          COALESCE((SELECT SUM(amount) FROM employee_extra_costs WHERE employee_id = e.id AND ($1::int IS NULL OR EXTRACT(YEAR FROM date) = $1)), 0) AS total_extra_costs,
           COALESCE((SELECT json_agg(json_build_object('id', ec.id, 'annual_gross', ec.annual_gross, 'valid_from', ec.valid_from::TEXT) ORDER BY ec.valid_from DESC) FROM employee_costs ec WHERE ec.employee_id = e.id), '[]') AS cost_history
         FROM employees e 
         WHERE e.is_active = TRUE
@@ -131,7 +132,6 @@ module.exports = (app, query, authenticate, authenticateHR) => {
     } catch (err) { res.status(500).json({ error: "Database error" }); }
   });
 
-  // Fazla mesaileri kaydederken doğrudan 'hours' sütununa yazıyoruz
   app.post("/api/costs/:employeeId/overtime", authenticateHR, async (req, res) => {
     const { employeeId } = req.params;
     const { year, month, amount, hours } = req.body;
@@ -143,6 +143,46 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         [employeeId, year, month, valToSave]
       );
       res.json(result.rows[0]);
+    } catch (err) { res.status(500).json({ error: "Database error" }); }
+  });
+
+  // --- EMPLOYEE EXTRA COSTS ---
+  app.get("/api/costs/:employeeId/extra", authenticateHR, async (req, res) => {
+    const { employeeId } = req.params;
+    const { year } = req.query;
+    try {
+      const result = await query(
+        `SELECT ec.*, t.title as task_title 
+         FROM employee_extra_costs ec
+         JOIN tasks t ON ec.task_id = t.id
+         WHERE ec.employee_id = $1 AND ($2::int IS NULL OR EXTRACT(YEAR FROM ec.date) = $2)
+         ORDER BY ec.date DESC`,
+        [employeeId, year ? parseInt(year) : null]
+      );
+      res.json(result.rows);
+    } catch (err) { res.status(500).json({ error: "Database error" }); }
+  });
+
+  app.post("/api/costs/:employeeId/extra", authenticateHR, async (req, res) => {
+    const { employeeId } = req.params;
+    const { task_id, description, amount, date } = req.body;
+    try {
+      const result = await query(
+        `INSERT INTO employee_extra_costs (employee_id, task_id, description, amount, date)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [employeeId, task_id, description, amount, date || new Date().toISOString().slice(0, 10)]
+      );
+      res.status(201).json(result.rows[0]);
+    } catch (err) { 
+      console.error("POST /api/costs/extra error:", err);
+      res.status(500).json({ error: "Database error" }); 
+    }
+  });
+
+  app.delete("/api/costs/extra/:id", authenticateHR, async (req, res) => {
+    try {
+      await query(`DELETE FROM employee_extra_costs WHERE id = $1`, [req.params.id]);
+      res.json({ success: true });
     } catch (err) { res.status(500).json({ error: "Database error" }); }
   });
 
@@ -221,8 +261,8 @@ module.exports = (app, query, authenticate, authenticateHR) => {
             WHERE cc.commessa_id = c.id AND EXTRACT(YEAR FROM fr.registration_date) = $1
           )
           OR EXISTS (
-            SELECT 1 FROM commessa_extra_costs cec
-            WHERE cec.commessa_id = c.id AND EXTRACT(YEAR FROM cec.date) = $1
+            SELECT 1 FROM employee_extra_costs eec
+            WHERE eec.task_id = t.id AND EXTRACT(YEAR FROM eec.date) = $1
           )
         ORDER BY t.created_at DESC
       `, [targetYear]);

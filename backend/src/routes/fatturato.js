@@ -27,8 +27,8 @@ module.exports = (app, query, authenticate, authenticateHR) => {
                  WHERE cc.commessa_id = c.id AND EXTRACT(YEAR FROM fr.registration_date) = $2
                )
                OR EXISTS (
-                 SELECT 1 FROM commessa_extra_costs cec
-                 WHERE cec.commessa_id = c.id AND EXTRACT(YEAR FROM cec.date) = $2
+                 SELECT 1 FROM employee_extra_costs eec
+                 WHERE eec.task_id = c.task_id AND EXTRACT(YEAR FROM eec.date) = $2
                )
               )
         ORDER BY c.comm_number DESC
@@ -53,8 +53,13 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       // 6. Tüm Proforma Çek
       const profRes = await query(`SELECT * FROM fatturato_proforma ORDER BY date ASC, id ASC`);
 
-      // 7. Tüm Extra Costs Çek
-      const extraRes = await query(`SELECT * FROM commessa_extra_costs ORDER BY date ASC`);
+      // 7. Tüm Extra Costs Çek (Employee-based, linked by task_id)
+      const extraRes = await query(`
+        SELECT eec.*, e.name as employee_name 
+        FROM employee_extra_costs eec
+        JOIN employees e ON eec.employee_id = e.id
+        ORDER BY eec.date ASC
+      `);
 
       // 8. Tüm Obiettivi Çek
       const objRes = await query(`SELECT * FROM fatturato_obiettivi ORDER BY year DESC, period ASC`);
@@ -83,10 +88,10 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         profByLine[p.fatturato_line_id].push(p);
       });
 
-      const extraByComm = {};
+      const extraByTask = {};
       extraRes.rows.forEach(e => {
-        if (!extraByComm[e.commessa_id]) extraByComm[e.commessa_id] = [];
-        extraByComm[e.commessa_id].push(e);
+        if (!extraByTask[e.task_id]) extraByTask[e.task_id] = [];
+        extraByTask[e.task_id].push(e);
       });
 
       const linesByCc = {};
@@ -107,11 +112,20 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         clientsByComm[c.commessa_id].push({ ...c, lines: linesByCc[c.id] || [] });
       });
 
-      const nested = commRes.rows.map(comm => ({
-        ...comm,
-        clients: clientsByComm[comm.id] || [],
-        extra_costs: extraByComm[comm.id] || []
-      }));
+      const nested = commRes.rows.map(comm => {
+        const commExtras = extraByTask[comm.task_id] || [];
+        const filteredExtras = yearNum 
+          ? commExtras.filter(e => new Date(e.date).getFullYear() === yearNum)
+          : commExtras;
+        const total_extra_costs = filteredExtras.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+
+        return {
+          ...comm,
+          clients: clientsByComm[comm.id] || [],
+          extra_costs: filteredExtras,
+          total_extra_costs
+        };
+      });
 
       res.json(nested);
     } catch (err) {
@@ -142,8 +156,8 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           FROM fatturato_proforma fp JOIN fatturato_lines fl ON fp.fatturato_line_id = fl.id
           JOIN commessa_clients cc ON fl.commessa_client_id = cc.id JOIN commesse c ON cc.commessa_id = c.id
           UNION
-          SELECT cec.commessa_id, c.task_id, EXTRACT(YEAR FROM cec.date)::int as year
-          FROM commessa_extra_costs cec JOIN commesse c ON cec.commessa_id = c.id
+          SELECT c.id, c.task_id, EXTRACT(YEAR FROM eec.date)::int as year
+          FROM employee_extra_costs eec JOIN commesse c ON eec.task_id = c.task_id
         ),
         target_years AS (
           SELECT commessa_id, task_id, year FROM activity_years
@@ -164,10 +178,10 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           GROUP BY 1, 2
         ),
         yearly_extras AS (
-          SELECT cec.commessa_id, EXTRACT(YEAR FROM cec.date)::int as year, SUM(cec.amount) as amount_sum
-          FROM commessa_extra_costs cec
-          WHERE ($2::date IS NULL OR cec.date >= $2::date)
-            AND ($3::date IS NULL OR cec.date <= $3::date)
+          SELECT eec.task_id, EXTRACT(YEAR FROM eec.date)::int as year, SUM(eec.amount) as amount_sum
+          FROM employee_extra_costs eec
+          WHERE ($2::date IS NULL OR eec.date >= $2::date)
+            AND ($3::date IS NULL OR eec.date <= $3::date)
           GROUP BY 1, 2
         ),
         yearly_scheduled AS (
@@ -190,7 +204,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           SUM(COALESCE(yr.amount_sum, 0)) AS total_fatturato,
           SUM(COALESCE(yp.amount_sum, 0)) AS total_proforma_yearly,
           SUM(COALESCE(ys.scheduled_sum, 0)) AS total_scheduled_amount,
-          SUM(COALESCE(ye.amount_sum, 0)) as total_extra_costs
+          MAX(COALESCE(ye.amount_sum, 0)) as total_extra_costs
         FROM target_years ty
         JOIN commesse c ON ty.commessa_id = c.id
         JOIN commessa_clients cc ON c.id = cc.commessa_id
@@ -198,7 +212,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         LEFT JOIN yearly_realized yr ON cc.id = yr.commessa_client_id AND yr.year = ty.year
         LEFT JOIN yearly_proforma yp ON cc.id = yp.commessa_client_id AND yp.year = ty.year
         LEFT JOIN yearly_scheduled ys ON cc.id = ys.commessa_client_id AND ys.year = ty.year
-        LEFT JOIN yearly_extras ye ON c.id = ye.commessa_id AND ye.year = ty.year
+        LEFT JOIN yearly_extras ye ON c.task_id = ye.task_id AND ye.year = ty.year
         GROUP BY ty.task_id, c.comm_number, ty.year, c.id
         ORDER BY ty.year DESC, c.id DESC
       `, [yearNum, startDate || null, endDate || null]);
@@ -234,9 +248,10 @@ module.exports = (app, query, authenticate, authenticateHR) => {
 
       await query("BEGIN");
 
-      const commRes = await query(`
-        INSERT INTO commesse (task_id, comm_number, name) VALUES ($1, $2, $3) RETURNING id
-      `, [task_id || null, comm_number || null, name || null]);
+      const commRes = await query(
+        `INSERT INTO commesse (task_id, comm_number, name, notes) VALUES ($1, $2, $3, $4) RETURNING id`,
+        [task_id || null, comm_number || null, name || null, req.body.notes || null]
+      );
       const commId = commRes.rows[0].id;
 
       if (clients && clients.length > 0) {
@@ -291,9 +306,9 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       if (extra_costs && extra_costs.length > 0) {
         for (const ec of extra_costs) {
           await query(`
-            INSERT INTO commessa_extra_costs (commessa_id, description, amount, date)
-            VALUES ($1, $2, $3, $4)
-          `, [commId, ec.description || '', parseFloat(ec.amount) || 0, ec.date || null]);
+            INSERT INTO employee_extra_costs (employee_id, task_id, description, amount, date)
+            VALUES ($1, $2, $3, $4, $5)
+          `, [1, task_id, ec.description || '', parseFloat(ec.amount) || 0, ec.date || null]);
         }
       }
 
@@ -335,7 +350,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       }
 
       await query("BEGIN");
-      await query(`UPDATE commesse SET task_id = $1, comm_number = $2, name = $3 WHERE id = $4`, [task_id || null, comm_number || null, name || null, commId]);
+      await query(`UPDATE commesse SET task_id = $1, comm_number = $2, name = $3, notes = $4 WHERE id = $5`, [task_id || null, comm_number || null, name || null, req.body.notes || null, commId]);
 
       // Upsert clients & lines (preserve existing IDs to keep fatturato_sal / fatturato_obiettivi intact)
       const incomingClientIds = [];
@@ -378,20 +393,21 @@ module.exports = (app, query, authenticate, authenticateHR) => {
                 await query(`
                   UPDATE fatturato_lines
                   SET commessa_client_id = $1, attivita = $2, descrizione = $3,
-                      valore_ordine = $4, fatturato_amount = $5, proforma = $6
-                  WHERE id = $7
+                      valore_ordine = $4, fatturato_amount = $5, proforma = $6,
+                      voce_bilancio = $7
+                  WHERE id = $8
                 `, [ccId, l.attivita || null, l.descrizione || null,
                   parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0,
-                  parseFloat(l.proforma) || 0, l.id]);
+                  parseFloat(l.proforma) || 0, l.voce_bilancio || null, l.id]);
                 lineId = l.id;
               } else {
                 // New line — insert
                 const flRes = await query(`
-                  INSERT INTO fatturato_lines (commessa_client_id, attivita, descrizione, valore_ordine, fatturato_amount, proforma)
-                  VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+                  INSERT INTO fatturato_lines (commessa_client_id, attivita, descrizione, valore_ordine, fatturato_amount, proforma, voce_bilancio)
+                  VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
                 `, [ccId, l.attivita || null, l.descrizione || null,
                   parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0,
-                  parseFloat(l.proforma) || 0]);
+                  parseFloat(l.proforma) || 0, l.voce_bilancio || null]);
                 lineId = flRes.rows[0].id;
               }
               incomingLineIds.push(lineId);
@@ -457,14 +473,15 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         await query(`DELETE FROM commessa_clients WHERE commessa_id = $1`, [commId]);
       }
 
-      // Extra costs: always replace wholesale (no SAL/Obiettivi dependency)
-      await query(`DELETE FROM commessa_extra_costs WHERE commessa_id = $1`, [commId]);
+      // employee_extra_costs are managed separately now.
+      // Wholesale replacement for this commessa's task:
+      await query(`DELETE FROM employee_extra_costs WHERE task_id = $1 AND employee_id = 1`, [task_id]);
       if (extra_costs && extra_costs.length > 0) {
         for (const ec of extra_costs) {
           await query(`
-            INSERT INTO commessa_extra_costs (commessa_id, description, amount, date)
-            VALUES ($1, $2, $3, $4)
-          `, [commId, ec.description || '', parseFloat(ec.amount) || 0, ec.date || null]);
+            INSERT INTO employee_extra_costs (employee_id, task_id, description, amount, date)
+            VALUES ($1, $2, $3, $4, $5)
+          `, [1, task_id, ec.description || '', parseFloat(ec.amount) || 0, ec.date || null]);
         }
       }
 

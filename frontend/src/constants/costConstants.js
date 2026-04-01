@@ -10,7 +10,7 @@ export const GENERAL_COST_FIELDS = [
 
 export const getEmptyLine = () => ({
   attivita: "", descrizione: "", valore_ordine: "", fatturato_amount: "",
-  proforma: "", note: "",
+  proforma: "", note: "", voce_bilancio: "",
   ordini: [],
   realized: [],
   proforma_entries: []
@@ -23,9 +23,8 @@ export const getEmptyClient = () => ({
 });
 
 export const getEmptyForm = () => ({
-  task_id: "", comm_number: "", name: "",
-  clients: [getEmptyClient()],
-  extra_costs: []
+  task_id: "", comm_number: "", name: "", notes: "",
+  clients: [getEmptyClient()]
 });
 
 // Ortak input stili

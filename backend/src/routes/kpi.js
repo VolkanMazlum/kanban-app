@@ -150,7 +150,7 @@ module.exports = (app, query, authenticate) => {
       // 5b. Extra Costs for the month
       const extraCostsRes = await query(`
         SELECT SUM(amount) as total_extra
-        FROM commessa_extra_costs
+        FROM employee_extra_costs
         WHERE date >= $1 AND date <= $2
       `, [monthStart, monthEnd]);
       const totalExtraCosts = parseFloat(extraCostsRes.rows[0].total_extra || 0);
@@ -224,11 +224,20 @@ module.exports = (app, query, authenticate) => {
         const yOver = sRes.rows.reduce((sum, r) => sum + (parseFloat(r.value) || 0), 0);
         const mOver = yOver / 12;
 
+        // Extra Costs
+        const eRes = await query(`
+          SELECT SUM(amount) as total
+          FROM employee_extra_costs
+          WHERE date >= $1 AND date <= $2
+        `, [tmStart, tmEnd]);
+        const mExtra = parseFloat(eRes.rows[0].total || 0);
+
         costTrend.push({
           month: d.toLocaleString('en-US', { month: 'short' }),
           labor: Math.round(mLabor),
           overhead: Math.round(mOver),
-          total: Math.round(mLabor + mOver)
+          extraCosts: Math.round(mExtra),
+          total: Math.round(mLabor + mOver + mExtra)
         });
       }
 
