@@ -232,9 +232,9 @@ export default function KPIDashboard({ employees }) {
           </div>
         </div>
 
-        {/* Fatturato Taken Graph */}
+        {/* Revenue (Fatturato) Graph (Reverted to Purple) */}
         <div style={{ background: "#fff", borderRadius: 12, padding: 20, border: "1px solid #E5E7EB", display: "flex", flexDirection: "column" }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: "0 0 20px" }}>Fatturato Taken</h3>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: "#111827", margin: "0 0 20px" }}>Revenue (Fatturato)</h3>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 10, flex: 1, paddingBottom: 10 }}>
             {summary.forecast?.map((f, idx) => {
               const detailTitle = (f.details || [])
@@ -285,8 +285,8 @@ export default function KPIDashboard({ employees }) {
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flex: 1, paddingBottom: 10 }}>
                 {proforma_trend.map((p, idx) => (
                   <div key={p.month} title={`Projected: €${p.total?.toLocaleString('it-IT')}`} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, cursor: "help" }}>
-                    <div style={{ fontSize: 8, fontWeight: 700, color: idx === 2 ? "#2563EB" : "#9CA3AF" }}>€{Math.round((p.total || 0) / 1000)}k</div>
-                    <div style={{ width: "100%", background: idx === 2 ? "#2563EB" : "#3B82F6", height: `${Math.max(((p.total || 0) / maxProformaTrend) * 70, 4)}px`, borderRadius: "4px 4px 0 0", opacity: idx === 2 ? 1 : 0.6 }} />
+                  <div style={{ fontSize: 8, fontWeight: 700, color: idx === 2 ? "#059669" : "#9CA3AF" }}>€{Math.round((p.total || 0) / 1000)}k</div>
+                  <div style={{ width: "100%", background: idx === 2 ? "#059669" : "#6EE7B7", height: `${Math.max(((p.total || 0) / maxProformaTrend) * 70, 4)}px`, borderRadius: "4px 4px 0 0", opacity: idx === 2 ? 1 : 0.6 }} />
                     <div style={{ fontSize: 8, color: "#9CA3AF", textAlign: "center", fontWeight: idx === 2 ? 700 : 400 }}>{p.month}</div>
                   </div>
                 ))}
@@ -322,16 +322,16 @@ export default function KPIDashboard({ employees }) {
                 </tr>
                 {(summary.forecast?.[2]?.details || []).map((d, i) => (
                   <tr key={`inc-${i}`} style={{ borderBottom: "1px solid #F9FAFB" }}>
-                    <td style={{ padding: "4px 4px", color: "#374151" }}>{d.name}</td>
-                    <td style={{ padding: "4px 4px", textAlign: "right", color: "#111827", fontWeight: 600 }}>+€{Math.round(d.amount).toLocaleString("it-IT")}</td>
+                    <td style={{ padding: "4px 4px", color: "#7C3AED", fontSize: 10 }}>{d.name} <span style={{ fontSize: 8, opacity: 0.7 }}>(Fatturato)</span></td>
+                    <td style={{ padding: "4px 4px", textAlign: "right", color: "#7C3AED", fontWeight: 600 }}>+€{Math.round(d.amount).toLocaleString("it-IT")}</td>
                   </tr>
                 ))}
-                {summary.total_proforma > 0 && (
-                  <tr style={{ borderBottom: "1px solid #F9FAFB" }}>
-                    <td style={{ padding: "4px 4px", color: "#6B7280", fontStyle: "italic" }}>Proforma (Projected)</td>
-                    <td style={{ padding: "4px 4px", textAlign: "right", color: "#2563EB", fontWeight: 600 }}>+€{Math.round(summary.total_proforma).toLocaleString("it-IT")}</td>
+                {(summary.proforma_details || []).map((p, i) => (
+                  <tr key={`prof-det-${i}`} style={{ borderBottom: "1px solid #F9FAFB" }}>
+                    <td style={{ padding: "4px 4px", color: "#059669", fontSize: 10, fontStyle: "italic" }}>{p.name} <span style={{ fontSize: 8, opacity: 0.7 }}>(Proforma)</span></td>
+                    <td style={{ padding: "4px 4px", textAlign: "right", color: "#059669", fontWeight: 600 }}>+€{Math.round(p.amount).toLocaleString("it-IT")}</td>
                   </tr>
-                )}
+                ))}
 
                 {/* LABOR */}
                 <tr style={{ background: "#F9FAFB" }}>

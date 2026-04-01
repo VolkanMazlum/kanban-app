@@ -140,12 +140,22 @@ module.exports = (app, query, authenticate) => {
       const monthlyOverhead = yearlyOverhead / 12;
 
       // 5. Monthly Proforma (Pending payments)
+      // 5. Monthly Proforma (Pending payments) - Detailed Breakdown
       const proformaRes = await query(`
-        SELECT SUM(amount) as total_proforma
-        FROM fatturato_proforma
-        WHERE date >= $1 AND date <= $2
+        SELECT fp.amount, c.name as commessa_name, fl.attivita
+        FROM fatturato_proforma fp
+        JOIN fatturato_lines fl ON fp.fatturato_line_id = fl.id
+        JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
+        JOIN commesse c ON cc.commessa_id = c.id
+        WHERE fp.date >= $1 AND fp.date <= $2
       `, [monthStart, monthEnd]);
-      const totalProforma = parseFloat(proformaRes.rows[0].total_proforma || 0);
+
+      const proformaDetails = proformaRes.rows.map(r => ({
+        name: `${r.commessa_name}: ${r.attivita}`,
+        amount: parseFloat(r.amount || 0)
+      })).sort((a, b) => b.amount - a.amount);
+
+      const totalProforma = proformaDetails.reduce((sum, p) => sum + p.amount, 0);
 
       // 5b. Extra Costs for the month
       const extraCostsRes = await query(`
@@ -299,6 +309,7 @@ module.exports = (app, query, authenticate) => {
         overdue,
         monthly_revenue: monthlyRevenue,
         total_proforma: totalProforma,
+        proforma_details: proformaDetails,
         total_extra_costs: totalExtraCosts,
         completed_count: completedMonthCount,
         forecast,

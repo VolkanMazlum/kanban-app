@@ -11,6 +11,7 @@ export default function CostDashboard({ employees, user }) {
 
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [costs, setCosts] = useState([]);
+  const [allTasks, setAllTasks] = useState([]);
   const [loadingCosts, setLoadingCosts] = useState(false);
 
   // ── ÇALIŞAN MALİYETLERİ & MESAİ STATE ──
@@ -29,7 +30,13 @@ export default function CostDashboard({ employees, user }) {
   useEffect(() => {
     if (!isHR) return;
     setLoadingCosts(true);
-    api.getCosts(selectedYear).then(setCosts).catch(console.error).finally(() => setLoadingCosts(false));
+    Promise.all([
+      api.getCosts(selectedYear),
+      api.getTasks()
+    ]).then(([costsData, tasksData]) => {
+      setCosts(costsData);
+      setAllTasks(tasksData);
+    }).catch(console.error).finally(() => setLoadingCosts(false));
   }, [isHR, selectedYear]);
 
   const handleAddCost = async () => {
@@ -77,11 +84,12 @@ export default function CostDashboard({ employees, user }) {
   const handleAddExtraCost = async () => {
     if (!selectedEmpHR) return;
     if (!extraCostInput.task_id || !extraCostInput.amount || !extraCostInput.description) {
-      alert("Please fill in Taks, Description and Amount.");
+      alert("Please fill in Task, Description and Amount.");
       return;
     }
     try {
-      await api.saveEmployeeExtraCost(selectedEmpHR.id, extraCostInput);
+      const payload = { ...extraCostInput, amount: parseFloat(extraCostInput.amount) || 0 };
+      await api.saveEmployeeExtraCost(selectedEmpHR.id, payload);
       const [updatedCosts, updatedExtra] = await Promise.all([
         api.getCosts(selectedYear),
         api.getEmployeeExtraCosts(selectedEmpHR.id, selectedYear)

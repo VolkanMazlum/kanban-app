@@ -154,10 +154,10 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       const result = await query(
         `SELECT ec.*, t.title as task_title 
          FROM employee_extra_costs ec
-         JOIN tasks t ON ec.task_id = t.id
+         LEFT JOIN tasks t ON ec.task_id = t.id
          WHERE ec.employee_id = $1 AND ($2::int IS NULL OR EXTRACT(YEAR FROM ec.date) = $2)
          ORDER BY ec.date DESC`,
-        [employeeId, year ? parseInt(year) : null]
+        [employeeId, (year && year !== 'all') ? parseInt(year) : null]
       );
       res.json(result.rows);
     } catch (err) { res.status(500).json({ error: "Database error" }); }
