@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TOPIC_STYLE } from "../constants/index.js";
 import Avatar from "../components/Avatar.jsx";
+import TimesheetTab from "../components/TimesheetTab.jsx";
+import * as api from "../api";
 
 const STATUS_COLOR = { new: "#2563EB", process: "#059669", blocked: "#DC2626", done: "#7C3AED" };
 const ROW_HEIGHT = 56; // Ana görev satırı yüksekliği
@@ -15,6 +17,58 @@ export default function GanttChart({ tasks, employees, user }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [rangeMonths, setRangeMonths] = useState(3);
   const [anchor, setAnchor] = useState(0);
+
+  // ── TIMESHEET STATE (Moved from CostDashboard) ──
+  const [selectedMonth, setSelectedMonth] = useState(today.getMonth() + 1);
+  const [selectedEmp, setSelectedEmp] = useState(null);
+  const [dailyHours, setDailyHours] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  // Set initial employee for standard users
+  useEffect(() => {
+    if (!isHR && user.employeeId && employees.length > 0) {
+      const self = employees.find(e => e.id === user.employeeId);
+      if (self) setSelectedEmp(self);
+    }
+  }, [isHR, user.employeeId, employees]);
+
+  // Sync Timesheet Employee with Gantt Filter if specific person is selected
+  useEffect(() => {
+    if (empFilter !== "all") {
+      const target = employees.find(e => String(e.id) === empFilter);
+      if (target) setSelectedEmp(target);
+    }
+  }, [empFilter, employees]);
+
+  // Fetch Work Hours
+  useEffect(() => {
+    if (!selectedEmp) return;
+    const year = windowStart.getFullYear();
+    api.getWorkHours(selectedEmp.id, year, selectedMonth).then(data => {
+      const map = {};
+      data.forEach(r => {
+        if (!map[r.task_id]) map[r.task_id] = {};
+        map[r.task_id][r.date.slice(0, 10)] = { hours: r.hours || "", note: r.note || "" };
+      });
+      setDailyHours(map);
+    }).catch(console.error);
+  }, [selectedEmp, selectedMonth, anchor, rangeMonths]); // React to period changes too
+
+  const handleDaySave = async (taskId, date, hours, note) => {
+    if (!selectedEmp) return;
+    setSaving(true);
+    try {
+      await api.saveWorkHours({
+        employee_id: selectedEmp.id,
+        task_id: taskId,
+        date,
+        hours: parseFloat(hours) || 0,
+        note: note || null
+      });
+      setDailyHours(p => ({ ...p, [taskId]: { ...(p[taskId] || {}), [date]: { hours, note } } }));
+    } catch (err) { console.error(err); }
+    setSaving(false);
+  };
 
   const [expandedTasks, setExpandedTasks] = useState({});
 
@@ -275,6 +329,22 @@ export default function GanttChart({ tasks, employees, user }) {
           </div>
         </div>
       )}
+
+      {/* ── TIMESHEET TAB (Positioned BELOW Gantt) ── */}
+      <TimesheetTab
+        employees={employees}
+        user={user}
+        allTasks={tasks}
+        selectedYear={windowStart.getFullYear()}
+        selectedMonth={selectedMonth}
+        setSelectedMonth={setSelectedMonth}
+        selectedEmp={selectedEmp}
+        setSelectedEmp={setSelectedEmp}
+        dailyHours={dailyHours}
+        setDailyHours={setDailyHours}
+        handleDaySave={handleDaySave}
+        saving={saving}
+      />
     </div>
   );
 }

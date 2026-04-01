@@ -15,7 +15,7 @@ export default function EmployeeCostsTab({ costs, loadingCosts, setSelectedEmpHR
             <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "left", letterSpacing: "0.05em" }}>EMPLOYEE</th>
             <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "center", letterSpacing: "0.05em" }}>ANNUAL GROSS</th>
             <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "center", letterSpacing: "0.05em" }}>OVERTIME (H)</th>
-            <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "center", letterSpacing: "0.05em" }}>USER EXTRA COSTS</th>
+            <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "center", letterSpacing: "0.05em" }}>EMPLOYEE EXTRA COSTS</th>
             <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "center", letterSpacing: "0.05em" }} title="Total hours worked (Timesheet records)">TOTAL HOURS (WORKED) ⓘ</th>
             <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "center", letterSpacing: "0.05em" }} title="Based on 2000 hours per year">RATE (THEORY) ⓘ</th>
             <th style={{ padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textAlign: "center", letterSpacing: "0.05em" }} title="Calculation: Annual Gross / Total Worked Hours">RATE (DYNAMIC) ⓘ</th>

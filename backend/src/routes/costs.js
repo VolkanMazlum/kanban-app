@@ -27,9 +27,9 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       await updateMonthlyOvertime(query, employee_id, year, month);
 
       res.json(savedLog);
-    } catch (err) { 
+    } catch (err) {
       console.error("POST /api/work-hours error:", err);
-      res.status(500).json({ error: "Database error" }); 
+      res.status(500).json({ error: "Database error" });
     }
   });
 
@@ -173,9 +173,9 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         [employeeId, task_id, description, amount, date || new Date().toISOString().slice(0, 10)]
       );
       res.status(201).json(result.rows[0]);
-    } catch (err) { 
+    } catch (err) {
       console.error("POST /api/costs/extra error:", err);
-      res.status(500).json({ error: "Database error" }); 
+      res.status(500).json({ error: "Database error" });
     }
   });
 
@@ -192,51 +192,41 @@ module.exports = (app, query, authenticate, authenticateHR) => {
     const targetYear = isAllTime ? null : (parseInt(req.query.year) || new Date().getFullYear());
     const { startDate, endDate } = req.query;
     try {
-      // 1. Get all relevant costs for normalization
-      const allCosts = await query(`
-        SELECT employee_id, annual_gross, 
-               EXTRACT(YEAR FROM valid_from) as start_year,
-               EXTRACT(MONTH FROM valid_from) as start_month
-        FROM employee_costs
-        ORDER BY valid_from DESC
-      `);
-
-      // 2. Get Employee categories
-      const emps = await query("SELECT id, category FROM employees");
-      const empMap = {};
-      emps.rows.forEach(e => empMap[e.id] = e.category);
-
-      // 3. Get Labor breakdown for the year
+      // 1. Calculate labor costs specifically for each task/date/employee
+      // This matches the hours to the salary that was valid on the exact day the work was performed.
       const laborRes = await query(`
         SELECT 
-          wh.task_id, wh.employee_id,
-          EXTRACT(YEAR FROM wh.date) as work_year,
-          EXTRACT(MONTH FROM wh.date) as work_month,
-          SUM(wh.hours) as hours
+          wh.task_id,
+          SUM(wh.hours) as total_hours,
+          SUM(
+            CASE 
+              WHEN e.category = 'internal' THEN
+                wh.hours * COALESCE(
+                  (SELECT ec.annual_gross 
+                   FROM employee_costs ec 
+                   WHERE ec.employee_id = wh.employee_id 
+                     AND ec.valid_from <= wh.date 
+                   ORDER BY ec.valid_from DESC 
+                   LIMIT 1),
+                  0
+                ) / 2000.0
+              ELSE 0
+            END
+          ) as internal_cost
         FROM employee_work_hours wh
+        JOIN employees e ON wh.employee_id = e.id
         WHERE ($1::int IS NULL OR EXTRACT(YEAR FROM wh.date) = $1)
           AND ($2::date IS NULL OR wh.date >= $2::date)
           AND ($3::date IS NULL OR wh.date <= $3::date)
-        GROUP BY wh.task_id, wh.employee_id, work_year, work_month
+        GROUP BY wh.task_id
       `, [targetYear, startDate || null, endDate || null]);
 
-      // 4. Calculate costs per task
-      const taskCosts = {}; // task_id -> { internal_cost: 0, hours: 0 }
-      laborRes.rows.forEach(l => {
-        if (!taskCosts[l.task_id]) taskCosts[l.task_id] = { internal_cost: 0, hours: 0 };
-        taskCosts[l.task_id].hours += parseFloat(l.hours);
-
-        if (empMap[l.employee_id] === 'internal') {
-          // Find the gross that was valid at that time
-          const valid = allCosts.rows
-            .filter(c => c.employee_id === l.employee_id)
-            .filter(c => (c.start_year < l.work_year) || (c.start_year === l.work_year && c.start_month <= l.work_month))[0];
-          
-          if (valid) {
-            const rate = parseFloat(valid.annual_gross) / 2000;
-            taskCosts[l.task_id].internal_cost += parseFloat(l.hours) * rate;
-          }
-        }
+      const taskCosts = {};
+      laborRes.rows.forEach(row => {
+        taskCosts[row.task_id] = {
+          internal_cost: parseFloat(row.internal_cost) || 0,
+          hours: parseFloat(row.total_hours) || 0
+        };
       });
 
       // 5. Get Tasks (filtered by year)
@@ -284,9 +274,9 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       `, [targetYear, startDate || null, endDate || null]);
 
       res.json({ tasks, task_hours: hoursRes.rows });
-    } catch (err) { 
+    } catch (err) {
       console.error("Task finances error:", err);
-      res.status(500).json({ error: "Database error" }); 
+      res.status(500).json({ error: "Database error" });
     }
   });
 

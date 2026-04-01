@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import * as api from "../api";
 import EmployeeCostsTab from "./EmployeeCostsTab.jsx";
-import TimesheetTab from "./TimesheetTab.jsx";
 import { MONTHS } from "../constants/costConstants.js";
 
 export default function CostDashboard({ employees, user }) {
@@ -27,58 +26,11 @@ export default function CostDashboard({ employees, user }) {
   const [extraCostInput, setExtraCostInput] = useState({ task_id: "", description: "", amount: "", date: new Date().toISOString().slice(0, 10) });
   const [loadingExtra, setLoadingExtra] = useState(false);
 
-  // ── TIMESHEET & TASK STATE ──
-  const [allTasks, setAllTasks] = useState([]);
-  const [selectedEmp, setSelectedEmp] = useState(null);
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
-  const [dailyHours, setDailyHours] = useState({});
-  const [saving, setSaving] = useState(false);
-
-  // Set initial employee for standard users
-  useEffect(() => {
-    if (!isHR && user.employeeId && employees.length > 0) {
-      const self = employees.find(e => e.id === user.employeeId);
-      if (self) setSelectedEmp(self);
-    }
-  }, [isHR, user.employeeId, employees]);
-
-  useEffect(() => {
-    api.getTasks().then(setAllTasks).catch(console.error);
-  }, []);
-
   useEffect(() => {
     if (!isHR) return;
     setLoadingCosts(true);
     api.getCosts(selectedYear).then(setCosts).catch(console.error).finally(() => setLoadingCosts(false));
   }, [isHR, selectedYear]);
-
-  useEffect(() => {
-    if (!selectedEmp) return;
-    api.getWorkHours(selectedEmp.id, selectedYear, selectedMonth).then(data => {
-      const map = {};
-      data.forEach(r => {
-        if (!map[r.task_id]) map[r.task_id] = {};
-        map[r.task_id][r.date.slice(0, 10)] = { hours: r.hours || "", note: r.note || "" };
-      });
-      setDailyHours(map);
-    }).catch(console.error);
-  }, [selectedEmp, selectedYear, selectedMonth]);
-
-  const handleDaySave = async (taskId, date, hours, note) => {
-    if (!selectedEmp) return;
-    setSaving(true);
-    try {
-      await api.saveWorkHours({
-        employee_id: selectedEmp.id,
-        task_id: taskId,
-        date,
-        hours: parseFloat(hours) || 0,
-        note: note || null
-      });
-      setDailyHours(p => ({ ...p, [taskId]: { ...(p[taskId] || {}), [date]: { hours, note } } }));
-    } catch (err) { console.error(err); }
-    setSaving(false);
-  };
 
   const handleAddCost = async () => {
     if (!selectedEmpHR || !newCost.annual_gross) return;
@@ -354,21 +306,6 @@ export default function CostDashboard({ employees, user }) {
         </div>
       )}
 
-      {/* ── İŞÇİ: TIMESHEET ── */}
-      <TimesheetTab
-        employees={employees}
-        user={user}
-        allTasks={allTasks}
-        selectedYear={selectedYear}
-        selectedMonth={selectedMonth}
-        setSelectedMonth={setSelectedMonth}
-        selectedEmp={selectedEmp}
-        setSelectedEmp={setSelectedEmp}
-        dailyHours={dailyHours}
-        setDailyHours={setDailyHours}
-        handleDaySave={handleDaySave}
-        saving={saving}
-      />
     </div>
   );
 }
