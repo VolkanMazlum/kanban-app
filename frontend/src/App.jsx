@@ -197,9 +197,11 @@ export default function App() {
   }
 
     const TABS = [
-      ...(isHR ? [{ id: "/", label: "📋 Board" }] : []),
+      ...(isHR ? [
+        { id: "/", label: "📋 Board" },
+        { id: "/costs", label: "⏳ Timesheet & Labor" }
+      ] : []),
       { id: "/gantt", label: "📅 Gantt" },
-      { id: "/costs", label: "⏳ Timesheet & Labor" },
       ...(isHR ? [
         { id: "/finances", label: "📈 Finances & HR" },
         { id: "/kpi", label: "📊 Monthly Workload KPI" }
