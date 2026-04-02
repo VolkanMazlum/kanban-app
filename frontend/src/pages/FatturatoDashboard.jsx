@@ -499,7 +499,7 @@ export default function FatturatoDashboard({ isHR }) {
                         const linesToRender = visibleClientLines.length > 0 ? visibleClientLines : [{}];
 
                         return linesToRender.map((line, lIdx) => {
-                          const isFirstComm = !commRendered; 
+                          const isFirstComm = !commRendered;
                           commRendered = true;
                           const isFirstCli = lIdx === 0;
 
@@ -639,10 +639,10 @@ export default function FatturatoDashboard({ isHR }) {
                 </td>
                 {/* Obiettivi */}
                 <td style={{ padding: "14px", whiteSpace: "nowrap", color: "#7C3AED" }}>
-                   €{fmtEu(filteredFatturatoList.reduce((s, c) => s + c.clients.reduce((ss, cl) => ss + cl.lines.reduce((sss, l) => {
-                     const lObj = (obiettiviData[l.id] || []).reduce((sum, o) => sum + (parseFloat(o.ordinante_val) || 0) + (parseFloat(o.acquisizioni_val) || 0), 0);
-                     return sss + lObj;
-                   }, 0), 0), 0))}
+                  €{fmtEu(filteredFatturatoList.reduce((s, c) => s + c.clients.reduce((ss, cl) => ss + cl.lines.reduce((sss, l) => {
+                    const lObj = (obiettiviData[l.id] || []).reduce((sum, o) => sum + (parseFloat(o.ordinante_val) || 0) + (parseFloat(o.acquisizioni_val) || 0), 0);
+                    return sss + lObj;
+                  }, 0), 0), 0))}
                 </td>
                 {/* Proforma */}
                 <td style={{ padding: "14px", whiteSpace: "nowrap", color: "#374151" }}>
@@ -677,34 +677,34 @@ export default function FatturatoDashboard({ isHR }) {
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 700, color: "#374151" }}>Link to Task</label>
                     <select value={fattForm.task_id} onChange={e => {
-                        const selectedTaskId = e.target.value;
-                        const oldTaskId = fattForm.task_id;
-                        const oldTask = allTasks.find(t => String(t.id) === String(oldTaskId));
-                        const selectedTask = allTasks.find(t => String(t.id) === String(selectedTaskId));
-                        const oldPhaseNames = new Set(oldTask?.phases?.map(p => p.name) || []);
+                      const selectedTaskId = e.target.value;
+                      const oldTaskId = fattForm.task_id;
+                      const oldTask = allTasks.find(t => String(t.id) === String(oldTaskId));
+                      const selectedTask = allTasks.find(t => String(t.id) === String(selectedTaskId));
+                      const oldPhaseNames = new Set(oldTask?.phases?.map(p => p.name) || []);
 
-                        let newClients = fattForm.clients.map(client => {
-                          let cleanedLines = client.lines.filter(l => {
-                            const isFromOldTask = oldPhaseNames.has(l.attivita);
-                            const hasFinancialData = parseEuNum(l.valore_ordine) > 0 || parseEuNum(l.fatturato_amount) > 0;
-                            return !(isFromOldTask && !hasFinancialData);
-                          });
-
-                          if (selectedTask && selectedTask.phases) {
-                            const relevantPhases = selectedTask.phases.filter(ph => ph.status === 'active' || ph.status === 'done');
-                            const existingActivities = new Set(cleanedLines.map(l => l.attivita));
-                            const missingPhases = relevantPhases.filter(ph => !existingActivities.has(ph.name));
-                            if (missingPhases.length > 0) {
-                              const linesToAdd = missingPhases.map(ph => ({ ...getEmptyLine(), attivita: ph.name }));
-                              cleanedLines = cleanedLines.filter(l => l.attivita || l.valore_ordine || l.fatturato_amount);
-                              cleanedLines = [...(cleanedLines.length > 0 ? cleanedLines : []), ...linesToAdd];
-                            }
-                          }
-                          if (cleanedLines.length === 0) cleanedLines = [{ ...getEmptyLine() }];
-                          return { ...client, lines: cleanedLines };
+                      let newClients = fattForm.clients.map(client => {
+                        let cleanedLines = client.lines.filter(l => {
+                          const isFromOldTask = oldPhaseNames.has(l.attivita);
+                          const hasFinancialData = parseEuNum(l.valore_ordine) > 0 || parseEuNum(l.fatturato_amount) > 0;
+                          return !(isFromOldTask && !hasFinancialData);
                         });
-                        setFattForm({ ...fattForm, task_id: selectedTaskId, name: selectedTask ? selectedTask.title : fattForm.name, clients: newClients });
-                      }}
+
+                        if (selectedTask && selectedTask.phases) {
+                          const relevantPhases = selectedTask.phases.filter(ph => ph.status === 'active' || ph.status === 'done');
+                          const existingActivities = new Set(cleanedLines.map(l => l.attivita));
+                          const missingPhases = relevantPhases.filter(ph => !existingActivities.has(ph.name));
+                          if (missingPhases.length > 0) {
+                            const linesToAdd = missingPhases.map(ph => ({ ...getEmptyLine(), attivita: ph.name }));
+                            cleanedLines = cleanedLines.filter(l => l.attivita || l.valore_ordine || l.fatturato_amount);
+                            cleanedLines = [...(cleanedLines.length > 0 ? cleanedLines : []), ...linesToAdd];
+                          }
+                        }
+                        if (cleanedLines.length === 0) cleanedLines = [{ ...getEmptyLine() }];
+                        return { ...client, lines: cleanedLines };
+                      });
+                      setFattForm({ ...fattForm, task_id: selectedTaskId, name: selectedTask ? selectedTask.title : fattForm.name, clients: newClients });
+                    }}
                       style={inpStyle}
                     >
                       <option value="">— Not Linked —</option>
@@ -925,7 +925,16 @@ export default function FatturatoDashboard({ isHR }) {
                                   // Actually, the most reliable way for NEW lines is if the user saves first.
                                   return false;
                                 }).sort((a, b) => b.year - a.year || b.month - a.month).map((s, sIdx) => (
-                                  <div key={sIdx} style={{ display: "flex", gap: 4, marginBottom: 4, alignItems: "center" }}>
+                                  <div key={sIdx} style={{
+                                    display: "flex",
+                                    gap: 4,
+                                    marginBottom: 6,
+                                    alignItems: "center",
+                                    background: s.status === 'sbloccato' ? "#ffa4e8ff" : "transparent",
+                                    border: s.status === 'sbloccato' ? "1.5px solid #ff00bfff" : "1.5px solid transparent",
+                                    borderRadius: 10,
+                                    padding: s.status === 'sbloccato' ? "6px" : "2px"
+                                  }}>
                                     <select value={s.year} onChange={e => {
                                       const newData = [...salMonthlyData];
                                       const realIdx = newData.findIndex(x => x === s);

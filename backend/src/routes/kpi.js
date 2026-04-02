@@ -99,7 +99,8 @@ module.exports = (app, query, authenticate) => {
           GROUP BY employee_id
         ) wh_sum ON e.id = wh_sum.employee_id
         WHERE (e.is_active = TRUE 
-           OR EXISTS (SELECT 1 FROM employee_work_hours wh WHERE wh.employee_id = e.id AND EXTRACT(YEAR FROM wh.date) = $1))
+           OR EXISTS (SELECT 1 FROM employee_work_hours wh WHERE wh.employee_id = e.id AND EXTRACT(YEAR FROM wh.date) = $1)
+           OR (e.category = 'consultant' AND (e.hr_details->>'inizio_lavoro') IS NOT NULL))
       `, [year, month, monthEnd]);
  
       const internal_labor = [];
@@ -112,10 +113,16 @@ module.exports = (app, query, authenticate) => {
           const startStr = hr.inizio_lavoro;
           const endStr = hr.scadenza_contratto;
           
-          const startYear = startStr ? new Date(startStr).getFullYear() : -Infinity;
-          const endYear = endStr ? new Date(endStr).getFullYear() : Infinity;
+          if (!startStr && !endStr) {
+            // If no contract dates, fall back to is_active or having hours
+            if (!r.is_active && hours <= 0) return;
+          } else {
+            const monthStartObj = new Date(year, month - 1, 1);
+            const monthEndObj = new Date(year, month, 0);
 
-          if (year < startYear || year > endYear) return; 
+            if (startStr && new Date(startStr) > monthEndObj) return;
+            if (endStr && new Date(endStr) < monthStartObj) return;
+          }
         }
  
         const hours = parseFloat(r.hours || 0);
@@ -207,20 +214,26 @@ module.exports = (app, query, authenticate) => {
             GROUP BY employee_id
           ) wh_sum ON e.id = wh_sum.employee_id
           WHERE (e.is_active = TRUE 
-             OR EXISTS (SELECT 1 FROM employee_work_hours wh WHERE wh.employee_id = e.id AND EXTRACT(YEAR FROM wh.date) = $1))
+             OR EXISTS (SELECT 1 FROM employee_work_hours wh WHERE wh.employee_id = e.id AND EXTRACT(YEAR FROM wh.date) = $1)
+             OR (e.category = 'consultant' AND (e.hr_details->>'inizio_lavoro') IS NOT NULL))
         `, [ty, tm, tmEnd]);
 
         const mLabor = lRes.rows.reduce((sum, r) => {
-          if (r.category === 'consultant') {
-            const hr = r.hr_details || {};
-            const startStr = hr.inizio_lavoro;
-            const endStr = hr.scadenza_contratto;
-            
-            const startYear = startStr ? new Date(startStr).getFullYear() : -Infinity;
-            const endYear = endStr ? new Date(endStr).getFullYear() : Infinity;
+            if (r.category === 'consultant') {
+              const hr = r.hr_details || {};
+              const startStr = hr.inizio_lavoro;
+              const endStr = hr.scadenza_contratto;
+              
+              if (!startStr && !endStr) {
+                if (!r.is_active && r.hours <= 0) return sum;
+              } else {
+                const monthStartObj = new Date(ty, tm - 1, 1);
+                const monthEndObj = new Date(ty, tm, 0);
 
-            if (ty < startYear || ty > endYear) return sum; 
-          }
+                if (startStr && new Date(startStr) > monthEndObj) return sum;
+                if (endStr && new Date(endStr) < monthStartObj) return sum;
+              }
+            }
 
           return sum + calculateMonthlyLaborCost({
             hours: r.hours,

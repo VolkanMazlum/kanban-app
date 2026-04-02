@@ -488,25 +488,24 @@ router.get('/finances', authenticateHR, async (req, res) => {
             const workedInYear = employeeMonthlyTotals.rows.some(et => et.employee_id === emp.id && et.year === y);
             const monthLog = employeeMonthlyTotals.rows.find(et => et.employee_id === emp.id && et.year === y && et.month === m);
             if (emp.category === 'consultant') {
-              // If we haven't processed this consultant for year 'y' yet, check eligibility for the WHOLE year
-              if (m === 1) { // We only need to do this once per consultant per year
-                const hr = emp.hr_details || {};
-                const startStr = hr.inizio_lavoro;
-                const endStr = hr.scadenza_contratto;
-                let isEligibleForYear = true;
+              const hr = emp.hr_details || {};
+              const startStr = hr.inizio_lavoro;
+              const endStr = hr.scadenza_contratto;
+              
+              let isEligibleForMonth = true;
+              if (startStr || endStr) {
+                const monthStartObj = new Date(y, m - 1, 1);
+                const monthEndObj = new Date(y, m, 0);
+                if (startStr && new Date(startStr) > monthEndObj) isEligibleForMonth = false;
+                if (endStr && new Date(endStr) < monthStartObj) isEligibleForMonth = false;
+              } else {
+                // Fallback: only if worked in year or is currently active
+                if (!workedInYear && !emp.is_active) isEligibleForMonth = false;
+              }
 
-                const startYear = startStr ? new Date(startStr).getFullYear() : -Infinity;
-                const endYear = endStr ? new Date(endStr).getFullYear() : Infinity;
-
-                if (y < startYear || y > endYear) {
-                  isEligibleForYear = false;
-                }
-
-                if (isEligibleForYear) {
-                  // For consultants, we add the full annual gross once per year 
-                  // (since the user said "it is given once, just add it to that year if they worked in it")
-                  yearlyMap[y].totalConsultantCost += currentGross;
-                }
+              if (isEligibleForMonth) {
+                // Distributed monthly cost
+                yearlyMap[y].totalConsultantCost += (currentGross / 12.0);
               }
             } else if (monthLog) {
               yearlyMap[y].totalCompanyLabor += (parseFloat(monthLog.total_hours) * currentGross / 2000);
@@ -637,17 +636,22 @@ router.get('/workload', authenticateHR, async (req, res) => {
       GROUP BY month
     `, [targetYear]);
 
-    // 3. Get Labor Costs
+    // 3. Get Labor Costs (Fetch all potentially relevant employees)
     const laborRes = await query(`
-      SELECT e.id, e.name, e.category, wh.month, wh.hours,
-             (SELECT ec.annual_gross FROM employee_costs ec WHERE ec.employee_id = e.id AND ec.valid_from <= ($1 || '-' || LPAD(wh.month::text,2,'0') || '-28')::date ORDER BY ec.valid_from DESC LIMIT 1) as annual_gross
+      SELECT e.id, e.name, e.category, e.hr_details, e.is_active,
+             (SELECT json_agg(json_build_object('annual_gross', ec.annual_gross, 'valid_from', ec.valid_from)) 
+              FROM employee_costs ec WHERE ec.employee_id = e.id) as cost_history
       FROM employees e
-      JOIN (
-        SELECT employee_id, EXTRACT(MONTH FROM date) as month, SUM(hours) as hours
-        FROM employee_work_hours
-        WHERE EXTRACT(YEAR FROM date) = $1
-        GROUP BY employee_id, month
-      ) wh ON e.id = wh.employee_id
+      WHERE e.is_active = TRUE 
+         OR EXISTS (SELECT 1 FROM employee_work_hours wh WHERE wh.employee_id = e.id AND EXTRACT(YEAR FROM wh.date) = $1)
+         OR (e.category = 'consultant' AND (e.hr_details->>'inizio_lavoro') IS NOT NULL)
+    `, [targetYear]);
+
+    const actualHoursRes = await query(`
+      SELECT employee_id, EXTRACT(MONTH FROM date) as month, SUM(hours) as hours
+      FROM employee_work_hours
+      WHERE EXTRACT(YEAR FROM date) = $1
+      GROUP BY employee_id, month
     `, [targetYear]);
 
     // 4. Get Overhead
@@ -699,27 +703,81 @@ router.get('/workload', authenticateHR, async (req, res) => {
       profit: { metric: '💰 UTILE NETTO', total: 0 }
     };
     for (let i = 1; i <= 12; i++) {
-      trends.revenue[`m${i}`] = 0; trends.internal_labor[`m${i}`] = 0; trends.consultant_labor[`m${i}`] = 0;
-      trends.overhead[`m${i}`] = monthlyOverheadValue; trends.overhead.total += monthlyOverheadValue;
+      trends.revenue[`m${i}`] = 0; 
+      trends.internal_labor[`m${i}`] = 0; 
+      trends.consultant_labor[`m${i}`] = 0;
+      trends.overhead[`m${i}`] = monthlyOverheadValue; 
+      trends.overhead.total += monthlyOverheadValue;
+      trends.profit[`m${i}`] = 0;
+      trends.profit.total = 0;
     }
+
     revenueRes.rows.forEach(r => {
-      trends.revenue[`m${parseInt(r.month)}`] = parseFloat(r.total);
+      const mIdx = parseInt(r.month);
+      trends.revenue[`m${mIdx}`] = parseFloat(r.total);
       trends.revenue.total += parseFloat(r.total);
     });
-    laborRes.rows.forEach(r => {
-      const cost = calculateMonthlyLaborCost({ hours: r.hours, annual_gross: r.annual_gross, category: r.category });
-      if (r.category === 'consultant') {
-        trends.consultant_labor[`m${parseInt(r.month)}`] += cost;
-        trends.consultant_labor.total += cost;
-      } else {
-        trends.internal_labor[`m${parseInt(r.month)}`] += cost;
-        trends.internal_labor.total += cost;
-      }
+
+    // Map of month -> employee_id -> hours
+    const hoursMapByMonth = {}; 
+    actualHoursRes.rows.forEach(h => {
+      const m = parseInt(h.month);
+      if (!hoursMapByMonth[m]) hoursMapByMonth[m] = {};
+      hoursMapByMonth[m][h.employee_id] = parseFloat(h.hours);
     });
-    for (let i = 1; i <= 12; i++) {
-      const m = `m${i}`;
-      trends.profit[m] = trends.revenue[m] - trends.internal_labor[m] - trends.consultant_labor[m] - trends.overhead[m];
-      trends.profit.total += trends.profit[m];
+
+    const getGrossForPeriod = (history, year, month) => {
+      if (!history || history.length === 0) return 0;
+      const target = new Date(year, month - 1, 28);
+      const sorted = history.filter(h => new Date(h.valid_from) <= target)
+                           .sort((a,b) => new Date(b.valid_from) - new Date(a.valid_from));
+      if (sorted.length > 0) return parseFloat(sorted[0].annual_gross);
+      // Fallback: earliest
+      return parseFloat(history.sort((a,b)=>new Date(a.valid_from)-new Date(b.valid_from))[0].annual_gross);
+    };
+
+    const laborRowsForDetails = [];
+    for (let m = 1; m <= 12; m++) {
+      laborRes.rows.forEach(emp => {
+        const hr = emp.hr_details || {};
+        const hours = (hoursMapByMonth[m] && hoursMapByMonth[m][emp.id]) || 0;
+        const annual_gross = getGrossForPeriod(emp.cost_history, targetYear, m);
+        
+        let shouldInclude = false;
+        if (emp.category === 'consultant') {
+          const mStart = new Date(targetYear, m-1, 1);
+          const mEnd = new Date(targetYear, m, 0);
+          if (hr.inizio_lavoro || hr.scadenza_contratto) {
+            if ((!hr.inizio_lavoro || new Date(hr.inizio_lavoro) <= mEnd) && 
+                (!hr.scadenza_contratto || new Date(hr.scadenza_contratto) >= mStart)) {
+              shouldInclude = true;
+            }
+          } else if (emp.is_active || hours > 0) {
+            shouldInclude = true;
+          }
+        } else if (emp.is_active || hours > 0) {
+          shouldInclude = true;
+        }
+
+        if (shouldInclude) {
+          const cost = calculateMonthlyLaborCost({ hours, annual_gross, category: emp.category });
+          if (cost > 0 || hours > 0) {
+            laborRowsForDetails.push({ month: m, name: emp.name, category: emp.category, hours, cost });
+            
+            if (emp.category === 'consultant') {
+              trends.consultant_labor[`m${m}`] += cost;
+              trends.consultant_labor.total += cost;
+            } else {
+              trends.internal_labor[`m${m}`] += cost;
+              trends.internal_labor.total += cost;
+            }
+          }
+        }
+      });
+
+      const mKey = `m${m}`;
+      trends.profit[mKey] = trends.revenue[mKey] - trends.internal_labor[mKey] - trends.consultant_labor[mKey] - trends.overhead[mKey];
+      trends.profit.total += trends.profit[mKey];
     }
     sheet2.addRow(trends.revenue);
     sheet2.addRow(trends.internal_labor);
@@ -768,15 +826,13 @@ router.get('/workload', authenticateHR, async (req, res) => {
     sheet4.getRow(1).font = { bold: true };
     sheet4.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
 
-    laborRes.rows.sort((a, b) => a.month - b.month || a.name.localeCompare(b.name)).forEach(r => {
-      const hours = Number(r.hours || 0);
-      const cost = calculateMonthlyLaborCost({ hours, annual_gross: Number(r.annual_gross || 0), category: r.category });
+    laborRowsForDetails.sort((a, b) => a.month - b.month || a.name.localeCompare(b.name)).forEach(r => {
       sheet4.addRow({
-        month_name: MONTH_NAMES[parseInt(r.month) - 1],
+        month_name: MONTH_NAMES[r.month - 1],
         name: r.name,
         category: r.category,
-        hours: hours,
-        cost: Math.round(cost)
+        hours: r.hours,
+        cost: Math.round(r.cost)
       });
     });
 
@@ -1033,6 +1089,116 @@ router.get('/clients', authenticateHR, async (req, res) => {
   } catch (err) {
     console.error('Export clients error:', err);
     res.status(500).json({ error: 'Errore durante l\'esportazione dei dati clienti' });
+  }
+});
+
+/**
+ * EXPORT LABOR TIMESHEET (Detailed Daily Grid)
+ * HR Only
+ */
+router.get('/timesheet-labor', authenticateHR, async (req, res) => {
+  const { year } = req.query;
+  const targetYear = parseInt(year) || new Date().getFullYear();
+
+  try {
+    // 1. Get Employees
+    const empRes = await query(`
+      SELECT id, name, category 
+      FROM employees 
+      WHERE is_active = TRUE 
+         OR EXISTS (SELECT 1 FROM employee_work_hours wh WHERE wh.employee_id = employees.id AND EXTRACT(YEAR FROM wh.date) = $1)
+      ORDER BY name
+    `, [targetYear]);
+
+    // 2. Get Work Hours for the year
+    const hoursRes = await query(`
+      SELECT employee_id, date, hours
+      FROM employee_work_hours
+      WHERE EXTRACT(YEAR FROM date) = $1
+    `, [targetYear]);
+
+    // 3. Get Employee Costs (to find RAL for the year)
+    // We get the most recent cost record that started before or during the end of the target year
+    const costsRes = await query(`
+      SELECT DISTINCT ON (employee_id) employee_id, annual_gross, valid_from
+      FROM employee_costs
+      WHERE valid_from <= MAKE_DATE($1, 12, 31)
+      ORDER BY employee_id, valid_from DESC
+    `, [targetYear]);
+
+    const workbook = new ExcelJS.Workbook();
+    const MONTH_NAMES = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
+
+    empRes.rows.forEach(emp => {
+      const sheetName = emp.name.replace(/[\[\]\*\?\/\\]/g, '').slice(0, 31);
+      const sheet = workbook.addWorksheet(sheetName);
+
+      // Setup Columns: Month, Day 1...Day 31, Total
+      const columns = [{ header: 'Mese', key: 'month', width: 15 }];
+      for (let d = 1; d <= 31; d++) {
+        columns.push({ header: d.toString(), key: `d${d}`, width: 6 });
+      }
+      columns.push({ header: 'TOTALE', key: 'total', width: 12 });
+      sheet.columns = columns;
+
+      sheet.getRow(1).font = { bold: true };
+      sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E7FF' } };
+
+      // Filter hours for this employee
+      const empHours = hoursRes.rows.filter(h => h.employee_id === emp.id);
+      const hoursByMonth = Array.from({ length: 12 }, () => ({}));
+      let annualTotal = 0;
+
+      empHours.forEach(h => {
+        const d = new Date(h.date);
+        const mIdx = d.getMonth();
+        const day = d.getDate();
+        const val = parseFloat(h.hours) || 0;
+        hoursByMonth[mIdx][`d${day}`] = val;
+        hoursByMonth[mIdx].total = (hoursByMonth[mIdx].total || 0) + val;
+        annualTotal += val;
+      });
+
+      // Add Rows
+      MONTH_NAMES.forEach((mName, mIdx) => {
+        sheet.addRow({
+          month: mName,
+          ...hoursByMonth[mIdx],
+          total: hoursByMonth[mIdx].total || 0
+        });
+      });
+
+      // Footer: Summary
+      sheet.addRow([]);
+      
+      // Get RAL for this employee for this year
+      const empCost = costsRes.rows.find(c => c.employee_id === emp.id);
+      const annualGross = empCost ? parseFloat(empCost.annual_gross) : 0;
+      const rateTheory = annualGross / 2000;
+      const rateDynamic = annualTotal > 0 ? (annualGross / annualTotal) : 0;
+
+      const summaryStartRow = sheet.rowCount + 1;
+      sheet.addRow(['RIEPILOGO ANNUALE']).font = { bold: true, size: 12 };
+      
+      sheet.addRow(['Totale Ore Lavorate:', annualTotal]);
+      sheet.addRow(['RAL (Lordo Annuo):', annualGross]);
+      sheet.addRow(['Rate Theory (Gross/2000):', Number(rateTheory.toFixed(2))]);
+      sheet.addRow(['Rate Dynamic (Gross/Actual):', Number(rateDynamic.toFixed(2))]);
+
+      // Styling footer labels
+      for (let i = 1; i <= 5; i++) {
+        const row = sheet.getRow(summaryStartRow + i - 1);
+        row.getCell(1).font = { bold: true };
+        if (i > 1) {
+          row.getCell(2).alignment = { horizontal: 'left' };
+        }
+      }
+    });
+
+    await sendWorkbook(res, workbook, `Timesheet_Labor_${targetYear}_Detailed.xlsx`);
+  } catch (err) {
+    console.error('Export timesheet labor error:', err);
+    res.status(500).json({ error: 'Failed to export timesheet labor' });
   }
 });
 

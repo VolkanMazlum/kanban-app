@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import * as api from "../api";
 import EmployeeCostsTab from "./EmployeeCostsTab.jsx";
 import { MONTHS } from "../constants/costConstants.js";
+import { downloadAuthenticatedFile } from "../utils/downloadUtils";
 
 export default function CostDashboard({ employees, user }) {
   const isHR = user.role === 'hr';
@@ -142,6 +143,25 @@ export default function CostDashboard({ employees, user }) {
             {isHR ? "Manage employee rates and view timesheets" : "Log your daily worked hours per task"}
           </p>
         </div>
+
+        {isHR && (
+          <div style={{ display: "flex", gap: 12 }}>
+            <button
+              onClick={() => downloadAuthenticatedFile(`/reports/timesheet-labor?year=${selectedYear}`, `Timesheet_Labor_${selectedYear}.xlsx`)}
+              style={{ padding: "10px 18px", background: "#fff", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all 0.2s", display: "flex", alignItems: "center", gap: 8 }}
+              onMouseOver={e => e.currentTarget.style.background = "#F9FAFB"}
+              onMouseOut={e => e.currentTarget.style.background = "#fff"}>
+              <span style={{ fontSize: 16 }}>📊</span> Export Labor Timesheet
+            </button>
+            <button
+              onClick={() => downloadAuthenticatedFile(`/reports/workload?year=${selectedYear}`, `KPI_Report_${selectedYear}.xlsx`)}
+              style={{ padding: "10px 18px", background: "#fff", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all 0.2s", display: "flex", alignItems: "center", gap: 8 }}
+              onMouseOver={e => e.currentTarget.style.background = "#F9FAFB"}
+              onMouseOut={e => e.currentTarget.style.background = "#fff"}>
+              <span style={{ fontSize: 16 }}>📥</span> Export KPIs
+            </button>
+          </div>
+        )}
       </div>
 
       {isHR && (

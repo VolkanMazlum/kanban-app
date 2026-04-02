@@ -114,12 +114,34 @@ export default function TimesheetTab({
 
                   const dayTotal = assignedTasks.reduce((sum, t) => sum + (parseFloat(dailyHours[t.id]?.[dateStr]?.hours) || 0), 0);
                   const hasHours = dayTotal > 0;
+                  const isOvertime = dayTotal > 8;
+
+                  let bgColor = "#fff";
+                  let borderColor = "#E5E7EB";
+
+                  if (hasHours) {
+                    if (isOvertime) {
+                      bgColor = "#FEFCE8"; // Light Yellow
+                      borderColor = "#FDE047"; // Yellow 300
+                    } else {
+                      bgColor = "#F0FDF4"; // Light Green
+                      borderColor = "#86EFAC"; // Green 300
+                    }
+                  } else if (isPast && !isWeekend) {
+                    bgColor = "#FEF2F2"; // Light Red
+                    borderColor = "#FECACA"; // Red 200
+                  } else if (isWeekend) {
+                    bgColor = "#F9FAFB";
+                    borderColor = "#F3F4F6";
+                  }
+
+                  if (isToday) borderColor = "#2563EB";
 
                   return (
                     <div key={dateStr} style={{
-                      background: isWeekend ? "#F9FAFB" : hasHours ? "#F0FDF4" : "#fff",
+                      background: bgColor,
                       borderRadius:14, padding:"12px",
-                      border:`2px solid ${isToday ? "#2563EB" : hasHours ? "#86EFAC" : isWeekend ? "#F3F4F6" : "#E5E7EB"}`,
+                      border:`2px solid ${borderColor}`,
                       opacity: isPast ? 1 : 0.45,
                       display: "flex", flexDirection: "column", minHeight: 125,
                       boxShadow: isToday ? "0 4px 12px rgba(37,99,235,0.1)" : "none",
