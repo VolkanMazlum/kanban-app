@@ -142,7 +142,8 @@ module.exports = (app, query, authenticate, authenticateHR) => {
 
       const result = await query(`
         WITH activity_years AS (
-          SELECT id as commessa_id, task_id, (2000 + LEFT(comm_number, 2)::int) as year 
+          SELECT id as commessa_id, task_id, 
+            (CASE WHEN comm_number ~ '^[0-9]{2}-' THEN (2000 + LEFT(comm_number, 2)::int) ELSE EXTRACT(YEAR FROM created_at)::int END) as year 
           FROM commesse WHERE comm_number IS NOT NULL
           UNION
           SELECT c.id, c.task_id, EXTRACT(YEAR FROM wh.date)::int as year

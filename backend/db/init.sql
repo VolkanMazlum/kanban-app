@@ -227,17 +227,14 @@ FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 -- ==============================================================================
 -- 8. FATTURATO (3-Tier Hiyerarşik Yapı: Commessa -> Client -> Lines)
 -- ==============================================================================
-DROP TABLE IF EXISTS fatturato_lines CASCADE;
-DROP TABLE IF EXISTS commessa_clients CASCADE;
-DROP TABLE IF EXISTS commesse CASCADE;
-DROP TABLE IF EXISTS fatturato CASCADE; 
+
 
 -- 1. KATMAN: Ana İş/Proje (Commessa)
 CREATE TABLE IF NOT EXISTS commesse (
   id SERIAL PRIMARY KEY,
   task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
   name VARCHAR(255),
-  comm_number VARCHAR(50) UNIQUE, -- Örn: 25-003
+  comm_number VARCHAR(255) UNIQUE, -- Örn: 25-003
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -246,12 +243,12 @@ CREATE TABLE IF NOT EXISTS commessa_clients (
   id SERIAL PRIMARY KEY,
   commessa_id INTEGER NOT NULL REFERENCES commesse(id) ON DELETE CASCADE,
   client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
-  n_cliente VARCHAR(10),          -- Örn: 00, 01, 02
-  n_ordine VARCHAR(50),           
-  preventivo VARCHAR(250),        -- PR 002-25
-  ordine TEXT,                    -- "incarico del 5-2-2025"
-  n_ordine_zucchetti VARCHAR(50),
-  voce_bilancio VARCHAR(100)
+  n_cliente VARCHAR(255),          -- Örn: 00, 01, 02
+  n_ordine VARCHAR(1000),           
+  preventivo VARCHAR(255),        
+  ordine TEXT,                    
+  n_ordine_zucchetti VARCHAR(255),
+  voce_bilancio VARCHAR(255)
 );
 
 -- 3. KATMAN: O müşteriye bağlı Aktiviteler (Lines)

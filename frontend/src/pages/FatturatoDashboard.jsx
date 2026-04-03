@@ -20,9 +20,9 @@ const parseEuNum = (val) => {
 const fmtEu = (num) => parseFloat(num || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function FatturatoDashboard({ isHR }) {
-  const currentYear = new Date().getFullYear();
-  const YEAR_OPTIONS = ["all", ...Array.from({ length: currentYear - 2024 + 4 }, (_, i) => 2024 + i)];
+  const [availableYears, setAvailableYears] = useState([]);
   const [selectedYear, setSelectedYear] = useState("all");
+
 
   const [fatturatoList, setFatturatoList] = useState([]);
   const [allTasks, setAllTasks] = useState([]);
@@ -44,7 +44,14 @@ export default function FatturatoDashboard({ isHR }) {
   const [savingSal, setSavingSal] = useState(false);
   const [obiettiviData, setObiettiviData] = useState({}); // { commId: [ {year, period, ordinante_val, acquisizioni_val} ] }
 
+  useEffect(() => {
+    if (isHR) {
+      api.getAvailableYears().then(setAvailableYears).catch(console.error);
+    }
+  }, [isHR]);
+
   const fetchData = () => {
+
     Promise.all([
       api.getFatturato(selectedYear),
       api.getClients(),
@@ -395,9 +402,10 @@ export default function FatturatoDashboard({ isHR }) {
 
         {/* TOOLS & FILTERS BAR */}
         <div style={{ marginTop: 20, padding: "16px 20px", background: "#fff", borderRadius: 12, border: "1.5px solid #E5E7EB", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
-          <div style={{ display: "flex", gap: 16, alignItems: "center", flex: "1 1 auto" }}>
+          <div style={{ display: "flex", gap: 16, alignItems: "center", flex: "1 1 600px", flexWrap: "wrap" }}>
             {/* SEARCH INPUT */}
-            <div style={{ position: "relative", minWidth: 320 }}>
+            <div style={{ position: "relative", flex: "1 1 300px" }}>
+
               <input
                 type="text"
                 placeholder="Search Project ID, Name, Client, Activity..."
@@ -429,20 +437,22 @@ export default function FatturatoDashboard({ isHR }) {
             <div style={{ height: 24, width: 1, background: "#E5E7EB" }}></div>
 
             {/* FILTERS */}
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <label style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Filters:</label>
-              <select
+                <select
                 value={selectedYear}
                 onChange={e => setSelectedYear(e.target.value === "all" ? "all" : parseInt(e.target.value))}
                 style={{ padding: "9px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 13, fontWeight: 600, color: "#111827", background: "#fff", cursor: "pointer", outline: "none" }}
               >
-                {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y === "all" ? "All Time" : y}</option>)}
+                <option value="all">All Time</option>
+                {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
+
 
               <select
                 value={fattFilterClient}
                 onChange={e => setFattFilterClient(e.target.value)}
-                style={{ padding: "9px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 13, fontWeight: 600, color: "#111827", background: "#fff", cursor: "pointer", outline: "none" }}
+                style={{ padding: "9px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 13, fontWeight: 600, color: "#111827", background: "#fff", cursor: "pointer", outline: "none", maxWidth: 220 }}
               >
                 <option value="">All Clients</option>
                 {clients.map(c => (
@@ -450,6 +460,7 @@ export default function FatturatoDashboard({ isHR }) {
                 ))}
               </select>
             </div>
+
           </div>
 
           <div style={{ fontSize: 13, fontWeight: 600, color: "#6B7280" }}>
@@ -940,7 +951,7 @@ export default function FatturatoDashboard({ isHR }) {
                                       const realIdx = newData.findIndex(x => x === s);
                                       if (realIdx >= 0) { newData[realIdx].year = parseInt(e.target.value); setSalMonthlyData(newData); }
                                     }} style={{ ...inpStyle, width: 65, padding: "4px", fontSize: 10 }}>
-                                      {YEAR_OPTIONS.filter(y => y !== "all").map(y => <option key={y} value={y}>{y}</option>)}
+                                      {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
                                     </select>
                                     <select value={s.month} onChange={e => {
                                       const newData = [...salMonthlyData];

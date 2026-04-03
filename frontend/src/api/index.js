@@ -56,10 +56,12 @@ export const updatePhase = (taskId, id, data) => req(`/tasks/${taskId}/phases/${
 });
 
 export const getSettings   = () => req("/settings");
+export const getAvailableYears = () => req("/settings/years");
 export const updateSetting = (key, value) => req(`/settings/${key}`, {
   method: "PATCH",
   body: JSON.stringify({ value })
 });
+
 
 export const getMonthlyWorkload = (year, month) => {
   return req(`/kpi/workload-monthly?year=${year}&month=${month}`);

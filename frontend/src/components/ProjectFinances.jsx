@@ -4,8 +4,10 @@ import { GENERAL_COST_FIELDS } from "../constants/costConstants.js";
 
 export default function ProjectFinances({ isHR }) {
   const currentYear = new Date().getFullYear();
-  const YEAR_OPTIONS = ["all", ...Array.from({ length: currentYear - 2024 + 4 }, (_, i) => 2024 + i)];
+  const [availableYears, setAvailableYears] = useState([]);
   const [selectedYear, setSelectedYear] = useState("all");
+
+
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -39,6 +41,13 @@ export default function ProjectFinances({ isHR }) {
   const [savingGeneralCost, setSavingGeneralCost] = useState({});
 
   useEffect(() => {
+    if (isHR) {
+      api.getAvailableYears().then(setAvailableYears).catch(console.error);
+    }
+  }, [isHR]);
+
+  useEffect(() => {
+
     if (!isHR) return;
     setLoading(true);
     // Load general costs
@@ -202,7 +211,8 @@ export default function ProjectFinances({ isHR }) {
               onChange={e => setSelectedYear(e.target.value === "all" ? "all" : parseInt(e.target.value))}
               style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #D1D5DB", fontSize: 14, fontWeight: 700, color: "#2563EB", background: "#EFF6FF", outline: "none", cursor: (startDate || endDate) ? "not-allowed" : "pointer", opacity: (startDate || endDate) ? 0.6 : 1 }}
             >
-              {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y === "all" ? "All Time" : y}</option>)}
+              <option value="all">All Time</option>
+              {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
             <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #D1D5DB", padding: "2px 8px", borderRadius: 6 }}>
               <input 

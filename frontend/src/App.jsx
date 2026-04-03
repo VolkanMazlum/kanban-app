@@ -23,7 +23,9 @@ export default function App() {
   const [modal, setModal]         = useState(null);
   const [dragOver, setDragOver]   = useState(null);
   const [toasts, setToasts]       = useState([]);
+  const [availableYears, setAvailableYears] = useState([]);
   const [boardYear, setBoardYear] = useState(new Date().getFullYear());
+
   const dragId = useRef(null);
 
   const navigate = useNavigate();
@@ -36,6 +38,13 @@ export default function App() {
   const isAuthenticated = !!userName && (userName !== "User" || !!localStorage.getItem("role"));
   
   const user = { role, employeeId, name: userName };
+ 
+  useEffect(() => {
+    if (isAuthenticated) {
+      api.getAvailableYears().then(setAvailableYears).catch(console.error);
+    }
+  }, [isAuthenticated]);
+
  
   useEffect(() => {
     // Redirect to login if not authenticated and not already on login page
@@ -270,7 +279,8 @@ export default function App() {
                 <select value={boardYear} onChange={e => setBoardYear(e.target.value === "all" ? "all" : parseInt(e.target.value))}
                   style={{background:"#fff",border:"1px solid #E5E7EB",borderRadius:6,padding:"5px 8px",color:"#374151",fontSize:11,fontFamily:"'Inter',sans-serif",cursor:"pointer",fontWeight:500}}>
                   <option value="all">All Years</option>
-                  {[2024, 2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{y}</option>)}
+                  {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+
                 </select>
                 <select value={filterEmpId} onChange={e=>setFilter(e.target.value)}
                   style={{background:"#fff",border:"1px solid #E5E7EB",borderRadius:6,padding:"5px 8px",color:"#374151",fontSize:11,fontFamily:"'Inter',sans-serif",cursor:"pointer",fontWeight:500,maxWidth:110}}>

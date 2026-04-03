@@ -8,9 +8,9 @@ export default function CostDashboard({ employees, user }) {
   const isHR = user.role === 'hr';
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
-  const YEAR_OPTIONS = Array.from({ length: currentYear - 2024 + 4 }, (_, i) => 2024 + i);
-
+  const [availableYears, setAvailableYears] = useState([]);
   const [selectedYear, setSelectedYear] = useState(currentYear);
+
   const [costs, setCosts] = useState([]);
   const [allTasks, setAllTasks] = useState([]);
   const [loadingCosts, setLoadingCosts] = useState(false);
@@ -29,6 +29,13 @@ export default function CostDashboard({ employees, user }) {
   const [loadingExtra, setLoadingExtra] = useState(false);
 
   useEffect(() => {
+    if (user.role === 'hr') {
+      api.getAvailableYears().then(setAvailableYears).catch(console.error);
+    }
+  }, [user.role]);
+
+  useEffect(() => {
+
     if (!isHR) return;
     setLoadingCosts(true);
     Promise.all([
@@ -133,10 +140,11 @@ export default function CostDashboard({ employees, user }) {
             <h2 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>Employee Costs & Timesheet</h2>
             <select
               value={selectedYear}
-              onChange={e => setSelectedYear(parseInt(e.target.value))}
+              onChange={e => setSelectedYear(e.target.value === "all" ? "all" : parseInt(e.target.value))}
               style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #D1D5DB", fontSize: 14, fontWeight: 700, color: "#2563EB", background: "#EFF6FF", outline: "none", cursor: "pointer" }}
             >
-              {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+              <option value="all">All Years</option>
+              {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
           <p style={{ color: "#6B7280", margin: 0, fontSize: 14 }}>
