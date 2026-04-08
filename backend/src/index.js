@@ -80,6 +80,7 @@ require("./routes/settings")(app, query, authenticate);
 require("./routes/costs")(app, query, authenticate, authenticateHR);
 require("./routes/fatturato")(app, query, authenticate, authenticateHR);
 require("./routes/users")(app, query, authenticateHR);
+require("./routes/offerte")(app, query, authenticate, authenticateHR);
 
 // Reports
 app.use('/api/reports', authenticate, reportRoutes);

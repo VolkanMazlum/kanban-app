@@ -5,7 +5,7 @@ async function req(path, options = {}) {
     "Content-Type": "application/json",
     ...(options.headers || {}),
   };
- 
+
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers,
@@ -22,16 +22,16 @@ async function req(path, options = {}) {
 export const login = (data) => req("/login", { method: "POST", body: JSON.stringify(data) });
 export const logout = () => req("/logout", { method: "POST" });
 
-export const getTasks        = (params = {}) => req(`/tasks${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""}`);
-export const getTask         = (id) => req(`/tasks/${id}`);
-export const createTask      = (data) => req("/tasks",       { method: "POST",   body: JSON.stringify(data) });
-export const updateTask      = (id, data) => req(`/tasks/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const getTasks = (params = {}) => req(`/tasks${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""}`);
+export const getTask = (id) => req(`/tasks/${id}`);
+export const createTask = (data) => req("/tasks", { method: "POST", body: JSON.stringify(data) });
+export const updateTask = (id, data) => req(`/tasks/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const patchTaskStatus = (id, status) => req(`/tasks/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
-export const deleteTask      = (id) => req(`/tasks/${id}`,  { method: "DELETE" });
+export const deleteTask = (id) => req(`/tasks/${id}`, { method: "DELETE" });
 
-export const getEmployees    = ()           => req(`/employees?t=${Date.now()}`);
-export const createEmployee  = (name, position, category = "internal") => req("/employees", { method: "POST", body: JSON.stringify({ name, position, category }) });
-export const deleteEmployee  = (id)         => req(`/employees/${id}`, { method: "DELETE" });
+export const getEmployees = () => req(`/employees?t=${Date.now()}`);
+export const createEmployee = (name, position, category = "internal") => req("/employees", { method: "POST", body: JSON.stringify({ name, position, category }) });
+export const deleteEmployee = (id) => req(`/employees/${id}`, { method: "DELETE" });
 
 export const getKPI = (year, month) => {
   const params = new URLSearchParams();
@@ -42,11 +42,11 @@ export const getKPI = (year, month) => {
 };
 
 export const getTimeLogs = (params = {}) => req(`/time-logs${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""}`);
-export const logTime     = (data) => req("/time-logs", { method: "POST", body: JSON.stringify(data) });
+export const logTime = (data) => req("/time-logs", { method: "POST", body: JSON.stringify(data) });
 
 export const getPhaseTemplates = () => req("/phase-templates");
-export const getTaskPhases     = (taskId) => req(`/tasks/${taskId}/phases`);
-export const saveTaskPhases    = (taskId, phases) => req(`/tasks/${taskId}/phases`, {
+export const getTaskPhases = (taskId) => req(`/tasks/${taskId}/phases`);
+export const saveTaskPhases = (taskId, phases) => req(`/tasks/${taskId}/phases`, {
   method: "POST",
   body: JSON.stringify({ phases })
 });
@@ -55,7 +55,7 @@ export const updatePhase = (taskId, id, data) => req(`/tasks/${taskId}/phases/${
   body: JSON.stringify(data)
 });
 
-export const getSettings   = () => req("/settings");
+export const getSettings = () => req("/settings");
 export const getAvailableYears = () => req("/settings/years");
 export const updateSetting = (key, value) => req(`/settings/${key}`, {
   method: "PATCH",
@@ -80,7 +80,7 @@ export const addEmployeeCost = (employeeId, data) => {
 };
 
 export const saveWorkHours = (data) => req("/work-hours", { method: "POST", body: JSON.stringify(data) });
-export const getWorkHours  = (employeeId, year, month) => req(`/work-hours/${employeeId}?year=${year}&month=${month}`);
+export const getWorkHours = (employeeId, year, month) => req(`/work-hours/${employeeId}?year=${year}&month=${month}`);
 
 export const getOvertimeCosts = (employeeId, year) => {
   return req(`/costs/${employeeId}/overtime?year=${year}`);
@@ -168,10 +168,10 @@ export const deleteFatturato = (id) => {
 };
 
 // ── FATTURATO ORDINI (percentage-based installments per attivita) ──
-export const getLineOrdini  = (lineId)       => req(`/fatturato-lines/${lineId}/ordini`);
-export const createOrdine   = (lineId, data) => req(`/fatturato-lines/${lineId}/ordini`, { method: "POST",   body: JSON.stringify(data) });
-export const updateOrdine   = (id, data)     => req(`/fatturato-ordini/${id}`,           { method: "PUT",    body: JSON.stringify(data) });
-export const deleteOrdine   = (id)           => req(`/fatturato-ordini/${id}`,           { method: "DELETE" });
+export const getLineOrdini = (lineId) => req(`/fatturato-lines/${lineId}/ordini`);
+export const createOrdine = (lineId, data) => req(`/fatturato-lines/${lineId}/ordini`, { method: "POST", body: JSON.stringify(data) });
+export const updateOrdine = (id, data) => req(`/fatturato-ordini/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteOrdine = (id) => req(`/fatturato-ordini/${id}`, { method: "DELETE" });
 
 
 
@@ -223,6 +223,20 @@ export const deleteMonthlySAL = (id) => req(`/fatturato-sal/${id}`, { method: "D
 export const getProjectObiettivi = (commId) => req(`/commesse/${commId}/obiettivi`);
 export const updateProjectObiettivi = (commId, data) => req(`/commesse/${commId}/obiettivi`, { method: "POST", body: JSON.stringify(data) });
 export const updateLineObiettiviBulk = (lineId, data) => req(`/fatturato-lines/${lineId}/obiettivi/bulk`, { method: "POST", body: JSON.stringify(data) });
+
+// ── OFFERTE ──
+export const getOfferteSummary = () => req("/offerte/summary");
+export const getPreventiviEsistenti = () => req("/offerte/preventivi-esistenti");
+export const getOfferte = (anno, status) => {
+  const query = [];
+  if (anno && anno !== 'all') query.push(`anno=${anno}`);
+  if (status && status !== 'all') query.push(`status=${status}`);
+  return req(`/offerte${query.length ? '?' + query.join('&') : ''}`);
+};
+export const createOfferta = (data) => req("/offerte", { method: "POST", body: JSON.stringify(data) });
+export const updateOfferta = (id, data) => req(`/offerte/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteOfferta = (id) => req(`/offerte/${id}`, { method: "DELETE" });
+export const acceptOfferta = (id) => req(`/offerte/${id}/accept`, { method: "POST" });
 
 // ── AUDIT LOGS ──
 export const getAuditLogs = (limit = 100) => req(`/audit-logs?limit=${limit}`);

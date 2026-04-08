@@ -535,3 +535,53 @@ INSERT INTO employees (name, position) VALUES
   ('Standard User', 'Developer')
 ON CONFLICT (name) DO NOTHING;
 
+-- Migration: Create Offerte tables
+
+CREATE TABLE IF NOT EXISTS offerte (
+  id SERIAL PRIMARY KEY,
+  anno INTEGER NOT NULL,                           -- Year (e.g., 2024, 2025)
+  preventivo_number VARCHAR(50),                       -- PR number (e.g., 76 or PR-84)
+  revision INTEGER DEFAULT 0,                      -- Revision number
+  is_final_revision BOOLEAN DEFAULT FALSE,         -- "Rev. Final" marker
+  tipo VARCHAR(20) DEFAULT 'P' CHECK (tipo IN ('P', 'G')),  -- P=Preventivo, G=Gara
+  oggetto TEXT,                                    -- Project description/object
+  committente VARCHAR(255),                        -- Intermediary/referring party
+  cliente VARCHAR(255),                            -- End client name
+  client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+  superficie TEXT,                                 -- Building surface area
+  destinazione_uso VARCHAR(255),                   -- Building use type
+  specifiche TEXT,                                 -- Additional specs  
+  valore_totale NUMERIC(12,2) DEFAULT 0,           -- Total offer value (k€)
+  importo_opere NUMERIC(15,2) DEFAULT 0,           -- Value of works
+  periodo_inizio DATE,                             -- Expected start
+  periodo_fine DATE,                               -- Expected end
+  criticita_ante TEXT,                             -- Pre-offer criticality
+  criticita_risoluzione TEXT,                      -- Criticality resolution
+  criticita_post TEXT,                             -- Post-offer criticality
+  note TEXT,
+  status VARCHAR(20) DEFAULT 'aperta' CHECK (status IN ('aperta', 'revisione', 'accettata', 'non_accettata', 'parziale')),
+  -- Links to system entities (populated when accepted)
+  task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+  commessa_id INTEGER REFERENCES commesse(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_offerte_anno ON offerte(anno);
+CREATE INDEX IF NOT EXISTS idx_offerte_status ON offerte(status);
+CREATE INDEX IF NOT EXISTS idx_offerte_client ON offerte(client_id);
+
+CREATE TABLE IF NOT EXISTS offerta_lines (
+  id SERIAL PRIMARY KEY,
+  offerta_id INTEGER NOT NULL REFERENCES offerte(id) ON DELETE CASCADE,
+  category VARCHAR(50) NOT NULL,          -- 'PROG_CAD', 'PROG_BIM', 'CANTIERE', 'ENERGIA', 'SOSTENIBILITA', etc.
+  attivita VARCHAR(255) NOT NULL,         -- Must match fatturato_lines.attivita values
+  valore NUMERIC(12,2) DEFAULT 0,         -- Value in k€ (offer amount for this activity)
+  included BOOLEAN DEFAULT TRUE,          -- Whether this activity is included in the offer
+  note TEXT,
+  status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected', 'revised')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_offerta_lines_offerta ON offerta_lines(offerta_id);
+

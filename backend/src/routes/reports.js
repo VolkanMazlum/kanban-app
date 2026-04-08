@@ -16,6 +16,49 @@ async function sendWorkbook(res, workbook, filename) {
 }
 
 /**
+ * Helper to sanitize worksheet names to meet Excel requirements:
+ * 1. Max 31 characters
+ * 2. Cannot contain: \ / ? * [ ] :
+ * 3. Cannot start or end with a single quote (')
+ * 4. Must be non-empty
+ */
+function sanitizeSheetName(name, usedNames = new Set()) {
+  if (!name) name = 'Sheet';
+  
+  // Remove invalid characters: \ / ? * [ ] :
+  let sanitized = name.replace(/[\\\/\?\*\[\]\:]/g, '');
+  
+  // Remove leading/trailing single quotes
+  sanitized = sanitized.trim();
+  while (sanitized.startsWith("'")) sanitized = sanitized.slice(1);
+  while (sanitized.endsWith("'")) sanitized = sanitized.slice(0, -1);
+  
+  // If empty after cleaning
+  if (!sanitized) sanitized = 'Sheet';
+  
+  // Truncate to 31 chars
+  let finalName = sanitized.slice(0, 31).trim();
+  
+  // Handle duplicates
+  if (usedNames.has(finalName.toLowerCase())) {
+    let counter = 1;
+    let suffix = ` (${counter})`;
+    let base = finalName.slice(0, 31 - suffix.length);
+    finalName = base + suffix;
+    
+    while (usedNames.has(finalName.toLowerCase())) {
+      counter++;
+      suffix = ` (${counter})`;
+      base = sanitized.slice(0, 31 - suffix.length);
+      finalName = base + suffix;
+    }
+  }
+  
+  usedNames.add(finalName.toLowerCase());
+  return finalName;
+}
+
+/**
  * EXPORT TASKS
  * HR Only
  */
@@ -1026,24 +1069,25 @@ router.get('/clients', authenticateHR, async (req, res) => {
       { header: 'Rimanente (€)', key: 'residuo', width: 18 },
     ];
 
+    const usedSheetNames = new Set(['lista clienti']); // Pre-populate with main sheet names
     clientsResult.rows.forEach(client => {
-      const cLines = linesByClient[client.id] || [];
-      const tVal = cLines.reduce((sum, l) => sum + Number(l.valore_ordine || 0), 0);
-      const tFatt = cLines.reduce((sum, l) => sum + Number(l.fatturato_amount || 0), 0);
-      const tProf = cLines.reduce((sum, l) => sum + Number(l.proforma || 0), 0);
+        const cLines = linesByClient[client.id] || [];
+        const tVal = cLines.reduce((sum, l) => sum + Number(l.valore_ordine || 0), 0);
+        const tFatt = cLines.reduce((sum, l) => sum + Number(l.fatturato_amount || 0), 0);
+        const tProf = cLines.reduce((sum, l) => sum + Number(l.proforma || 0), 0);
 
-      // Add to Main Sheet
-      mainSheet.addRow({
-        ...client,
-        total_val: tVal,
-        total_fatt: tFatt,
-        total_prof: tProf,
-        total_res: tVal - tFatt - tProf
-      });
+        // Add to Main Sheet
+        mainSheet.addRow({
+          ...client,
+          total_val: tVal,
+          total_fatt: tFatt,
+          total_prof: tProf,
+          total_res: tVal - tFatt - tProf
+        });
 
-      // Create Individual Sheet
-      const sheetName = client.name.replace(/[\[\]\*\?\/\\]/g, '').slice(0, 31);
-      const ws = workbook.addWorksheet(sheetName);
+        // Create Individual Sheet
+        const sheetName = sanitizeSheetName(client.name, usedSheetNames);
+        const ws = workbook.addWorksheet(sheetName);
       
       // Header Client UI - Detailed Profile
       ws.addRow([`DATI CLIENTE: ${client.name} (ID: ${client.id})`]).font = { bold: true, size: 14 };
@@ -1129,8 +1173,9 @@ router.get('/timesheet-labor', authenticateHR, async (req, res) => {
     const workbook = new ExcelJS.Workbook();
     const MONTH_NAMES = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 
+    const usedSheetNames = new Set();
     empRes.rows.forEach(emp => {
-      const sheetName = emp.name.replace(/[\[\]\*\?\/\\]/g, '').slice(0, 31);
+      const sheetName = sanitizeSheetName(emp.name, usedSheetNames);
       const sheet = workbook.addWorksheet(sheetName);
 
       // Setup Columns: Month, Day 1...Day 31, Total
