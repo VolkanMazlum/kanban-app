@@ -42,7 +42,14 @@ module.exports = function(app, query, authenticate, authenticateHR) {
       const filters = [];
       const values = [];
       let sql = `
-        SELECT o.*, c.name as client_name 
+        SELECT o.*, c.name as client_name,
+        (
+          SELECT COALESCE(SUM(fl.valore_ordine), 0) / 1000.0
+          FROM fatturato_lines fl
+          JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
+          WHERE cc.commessa_id = o.commessa_id
+            AND (o.client_id IS NULL OR cc.client_id = o.client_id)
+        ) as valore_acquisito
         FROM offerte o
         LEFT JOIN clients c ON o.client_id = c.id
       `;
@@ -307,6 +314,39 @@ module.exports = function(app, query, authenticate, authenticateHR) {
       await query('ROLLBACK');
       console.error('Error accepting offerta:', err);
       res.status(500).json({ error: 'Failed to accept offerta: ' + err.message });
+    }
+  });
+
+  // ---- PATCH LINE STATUS ----
+  app.patch('/api/offerte/:id/lines/status', authenticateHR, async (req, res) => {
+    const { id } = req.params;
+    const { category, attivita, status, offerStatus } = req.body;
+    try {
+      await query('BEGIN');
+      
+      // Update specific line
+      const lineUpdate = await query(`
+        UPDATE offerta_lines 
+        SET status = $1 
+        WHERE offerta_id = $2 AND category = $3 AND attivita = $4
+        RETURNING *
+      `, [status, id, category, attivita]);
+
+      if (lineUpdate.rowCount === 0) {
+        throw new Error("Line not found or no change made");
+      }
+
+      // Update offer status if provided
+      if (offerStatus) {
+        await query(`UPDATE offerte SET status = $1 WHERE id = $2`, [offerStatus, id]);
+      }
+
+      await query('COMMIT');
+      res.json({ success: true, line: lineUpdate.rows[0], offerStatus });
+    } catch (err) {
+      await query('ROLLBACK');
+      console.error('Error patching line status:', err);
+      res.status(500).json({ error: 'Failed to update status: ' + err.message });
     }
   });
 

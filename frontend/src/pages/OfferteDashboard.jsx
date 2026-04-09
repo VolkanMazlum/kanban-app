@@ -211,13 +211,14 @@ export default function OfferteDashboard({ isHR }) {
     });
   };
 
-  const handleLineStatusChange = (offerId, catId, actKey, newStatus) => {
+  const handleLineStatusChange = async (offerId, catId, actKey, newStatus) => {
+    let newOfferStatus = null;
     setOffers(prev => prev.map(o => {
       if (o.id !== offerId) return o;
       const lines = { ...o.lines };
       if (!lines[catId]) return o;
       lines[catId] = { ...lines[catId], [actKey]: { ...lines[catId][actKey], status: newStatus } };
-      // Check if all lines have a final status to auto-update offer status
+      
       const allLines = [];
       Object.values(lines).forEach(cat => {
         Object.values(cat).forEach(act => { if (act.included) allLines.push(act); });
@@ -225,12 +226,28 @@ export default function OfferteDashboard({ isHR }) {
       const allAccepted = allLines.every(l => l.status === "accepted");
       const allRejected = allLines.every(l => l.status === "rejected");
       const hasMixed = allLines.some(l => l.status === "accepted") && allLines.some(l => l.status === "rejected");
+      
       let status = o.status;
       if (allAccepted) status = "accettata";
       else if (allRejected) status = "non_accettata";
       else if (hasMixed) status = "parziale";
+      
+      newOfferStatus = status;
       return { ...o, lines, status };
     }));
+
+    try {
+      await api.patchLineStatus(offerId, {
+        category: catId,
+        attivita: actKey,
+        status: newStatus,
+        offerStatus: newOfferStatus
+      });
+    } catch (err) {
+      console.error("Failed to update line status:", err);
+      alert("Errore durante l'aggiornamento dello stato: " + err.message);
+      loadData(); // Revert state from server
+    }
   };
 
   if (!isHR) {
@@ -365,7 +382,7 @@ export default function OfferteDashboard({ isHR }) {
           <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1100 }}>
             <thead>
               <tr style={{ background: "#F9FAFB" }}>
-                {["", "CODICE", "TIPO", "OGGETTO", "CLIENTE", "DEST. D'USO", "ATTIVITÀ", "VALORE (k€)", "STATO", "AZIONI"].map(h => (
+                {["", "CODICE", "TIPO", "OGGETTO", "CLIENTE", "DEST. D'USO", "ATTIVITÀ", "VALORE (k€)", "ACQUISITO (k€)", "STATO", "AZIONI"].map(h => (
                   <th key={h} style={{
                     padding: "11px 14px", fontSize: 10, fontWeight: 700, color: "#6B7280",
                     textAlign: "left", whiteSpace: "nowrap", borderBottom: "2px solid #E5E7EB",
@@ -430,6 +447,15 @@ export default function OfferteDashboard({ isHR }) {
                       <td style={{ padding: "12px 14px", maxWidth: 280 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", lineHeight: 1.3 }}>{offer.oggetto || "—"}</div>
                         {offer.committente && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>via {offer.committente}</div>}
+                        {offer.note && (
+                          <div style={{ 
+                            fontSize: 11, color: "#6B7280", marginTop: 4, 
+                            fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", 
+                            textOverflow: "ellipsis", borderLeft: "2px solid #E5E7EB", paddingLeft: 6
+                          }}>
+                            {offer.note}
+                          </div>
+                        )}
                       </td>
                       {/* Client */}
                       <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 600, color: "#374151" }}>{offer.cliente || "—"}</td>
@@ -454,6 +480,27 @@ export default function OfferteDashboard({ isHR }) {
                       {/* Value */}
                       <td style={{ padding: "12px 14px", fontSize: 13, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>
                         {offer.valore_totale > 0 ? fmtK(offer.valore_totale) : "—"}
+                      </td>
+                      {/* Value (Acquired) */}
+                      <td style={{ padding: "12px 14px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", minWidth: 80 }}>
+                          <span style={{ 
+                            fontSize: 13, fontWeight: 800, 
+                            color: offer.valore_acquisito >= offer.valore_totale && offer.valore_totale > 0 ? "#059669" : "#374151"
+                          }}>
+                            {offer.valore_acquisito > 0 ? fmtK(offer.valore_acquisito) : "0,0"}
+                          </span>
+                          {offer.valore_totale > 0 && (
+                            <div style={{ width: "100%", height: 3, background: "#E5E7EB", borderRadius: 2, marginTop: 4 }}>
+                              <div style={{ 
+                                width: `${Math.min(100, (offer.valore_acquisito / offer.valore_totale) * 100)}%`, 
+                                height: "100%", 
+                                background: (offer.valore_acquisito >= offer.valore_totale) ? "#10B981" : "#6366F1",
+                                borderRadius: 2 
+                               }} />
+                            </div>
+                          )}
+                        </div>
                       </td>
                       {/* Status */}
                       <td style={{ padding: "12px 14px" }}>
@@ -517,6 +564,13 @@ export default function OfferteDashboard({ isHR }) {
                                   <div style={{ fontSize: 12, color: "#374151" }}>{fmtEu(offer.importo_opere)}</div>
                                 </div>
                               )}
+                              <div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", marginBottom: 2 }}>VALORE ACQUISITO</div>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: offer.valore_acquisito >= offer.valore_totale ? "#059669" : "#111827" }}>
+                                  {fmtK(offer.valore_acquisito)} k€ 
+                                  {offer.valore_totale > 0 && ` (${Math.round((offer.valore_acquisito / offer.valore_totale) * 100)}%)`}
+                                </div>
+                              </div>
                               {(offer.periodo_inizio || offer.periodo_fine) && (
                                 <div>
                                   <div style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", marginBottom: 2 }}>PERIODO</div>
@@ -859,11 +913,19 @@ export default function OfferteDashboard({ isHR }) {
                         </select>
                       </div>
                     </div>
-                    <div>
-                      <label style={{ fontSize: 10, fontWeight: 700, color: "#374151" }}>Note / Specifiche</label>
-                      <textarea value={form.note}
-                        onChange={e => setForm({ ...form, note: e.target.value })}
-                        style={{ ...inpStyle, height: 60, resize: "vertical" }} placeholder="Note interne, requisiti particolari..." />
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                      <div>
+                        <label style={{ fontSize: 10, fontWeight: 700, color: "#374151" }}>Specifiche Tecniche</label>
+                        <textarea value={form.specifiche}
+                          onChange={e => setForm({ ...form, specifiche: e.target.value })}
+                          style={{ ...inpStyle, height: 60, resize: "vertical" }} placeholder="Requisiti, dettagli tecnici..." />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 10, fontWeight: 700, color: "#374151" }}>Note Interne</label>
+                        <textarea value={form.note}
+                          onChange={e => setForm({ ...form, note: e.target.value })}
+                          style={{ ...inpStyle, height: 60, resize: "vertical" }} placeholder="Commenti interni, promemoria..." />
+                      </div>
                     </div>
                   </div>
 

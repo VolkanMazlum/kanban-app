@@ -237,6 +237,7 @@ export const createOfferta = (data) => req("/offerte", { method: "POST", body: J
 export const updateOfferta = (id, data) => req(`/offerte/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteOfferta = (id) => req(`/offerte/${id}`, { method: "DELETE" });
 export const acceptOfferta = (id) => req(`/offerte/${id}/accept`, { method: "POST" });
+export const patchLineStatus = (id, payload) => req(`/offerte/${id}/lines/status`, { method: "PATCH", body: JSON.stringify(payload) });
 
 // ── AUDIT LOGS ──
 export const getAuditLogs = (limit = 100) => req(`/audit-logs?limit=${limit}`);
