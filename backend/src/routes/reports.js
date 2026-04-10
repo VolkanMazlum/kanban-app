@@ -1032,6 +1032,7 @@ router.get('/clients', authenticateHR, async (req, res) => {
       { header: 'ID', key: 'id', width: 10 },
       { header: 'Nome Cliente', key: 'name', width: 25 },
       { header: 'Ragione Sociale', key: 'ragione_sociale', width: 30 },
+      { header: 'Forma Giuridica', key: 'forma_giuridica', width: 20 },
       { header: 'Valore Totale (€)', key: 'total_val', width: 18 },
       { header: 'Totale Fatturato (€)', key: 'total_fatt', width: 18 },
       { header: 'Totale Proforma (€)', key: 'total_prof', width: 18 },
@@ -1041,14 +1042,34 @@ router.get('/clients', authenticateHR, async (req, res) => {
       { header: 'Codice SDI', key: 'codice_univoco', width: 15 },
       { header: 'Codice ATECO', key: 'codice_ateco', width: 15 },
       { header: 'Codice Inarcassa', key: 'codice_inarcassa', width: 15 },
+      { header: 'Contributo', key: 'contributo', width: 15 },
+      { header: 'Pagamento', key: 'pagamento', width: 30 },
+      { header: 'Codice IVA', key: 'codice_iva', width: 20 },
+      { header: 'Split Payment', key: 'split_payment', width: 12 },
+      { header: 'Conto', key: 'conto', width: 20 },
+      { header: 'Listino', key: 'listino', width: 15 },
+      { header: 'Banca', key: 'banca', width: 20 },
+      { header: 'IBAN', key: 'iban', width: 30 },
+      { header: 'SWIFT', key: 'swift', width: 15 },
+      { header: 'PEC FE', key: 'pec_fe', width: 25 },
+      { header: 'Estero', key: 'estero', width: 10 },
+      { header: 'Lingua', key: 'lingua', width: 12 },
       { header: 'Email Contatto', key: 'contact_email', width: 25 },
+      { header: 'Email PEC', key: 'email_pec', width: 25 },
       { header: 'Telefono', key: 'phone', width: 15 },
+      { header: 'Telefono 2', key: 'telefono_2', width: 15 },
+      { header: 'Telefono 3', key: 'telefono_3', width: 15 },
       { header: 'Fax', key: 'fax', width: 15 },
+      { header: 'Indirizzo Web', key: 'indirizzo_web', width: 25 },
       { header: 'Indirizzo', key: 'address', width: 30 },
+      { header: 'N°', key: 'indirizzo_numero', width: 10 },
       { header: 'Località', key: 'localita', width: 20 },
       { header: 'CAP', key: 'cap', width: 10 },
       { header: 'Provincia', key: 'province', width: 15 },
-      { header: 'Stato', key: 'stato', width: 15 },
+      { header: 'Nazione', key: 'stato', width: 15 },
+      { header: 'Tipo Sede', key: 'sede_tipo', width: 12 },
+      { header: 'Sede Principale', key: 'sede_principale', width: 12 },
+      { header: 'Obsoleto', key: 'obsoleto', width: 10 },
       { header: 'Contabilità (Rif)', key: 'contabilita_name', width: 25 },
       { header: 'Contabilità (Email)', key: 'contabilita_email', width: 25 },
       { header: 'Contabilità (Tel)', key: 'contabilita_phone', width: 15 },
@@ -1091,17 +1112,21 @@ router.get('/clients', authenticateHR, async (req, res) => {
       
       // Header Client UI - Detailed Profile
       ws.addRow([`DATI CLIENTE: ${client.name} (ID: ${client.id})`]).font = { bold: true, size: 14 };
-      ws.addRow([`Ragione Sociale: ${client.ragione_sociale || '-'} | P.IVA: ${client.vat_number || '-'} | CF: ${client.codice_fiscale || '-'} | SDI: ${client.codice_univoco || '-'}`]);
-      ws.addRow([`ATECO: ${client.codice_ateco || '-'} | Inarcassa: ${client.codice_inarcassa || '-'}`]);
-      ws.addRow([`Email: ${client.contact_email || '-'} | Tel: ${client.phone || '-'} | Fax: ${client.fax || '-'}`]);
-      ws.addRow([`Indirizzo: ${client.address || '-'}, ${client.localita || '-'} (${client.cap || '-'}) - ${client.province || '-'}, ${client.stato || '-'}`]);
+      ws.addRow([`Forma Giuridica: ${client.forma_giuridica || '-'} | Ragione Sociale: ${client.ragione_sociale || '-'} | Obsoleto: ${client.obsoleto ? 'SÌ' : 'NO'}`]);
+      ws.addRow([`P.IVA: ${client.vat_number || '-'} | CF: ${client.codice_fiscale || '-'} | SDI: ${client.codice_univoco || '-'} | ATECO: ${client.codice_ateco || '-'} | Inarcassa: ${client.codice_inarcassa || '-'}`]);
+      ws.addRow([`Contributo: ${client.contributo || '-'} | Pagamento: ${client.pagamento || '-'} | Codice IVA: ${client.codice_iva || '-'} | Split Payment: ${client.split_payment ? 'SÌ' : 'NO'}`]);
+      ws.addRow([`Conto: ${client.conto || '-'} | Banca: ${client.banca || '-'} | IBAN: ${client.iban || '-'} | SWIFT: ${client.swift || '-'} | Listino: ${client.listino || '-'}`]);
+      ws.addRow([`PEC FE: ${client.pec_fe || '-'} | Estero: ${client.estero ? 'SÌ' : 'NO'} | Lingua: ${client.lingua || '-'}`]);
+      ws.addRow([`Indirizzo: ${client.address || '-'} ${client.indirizzo_numero || ''}, ${client.localita || '-'} (${client.cap || '-'}) - ${client.province || '-'}, ${client.stato || '-'} | Sede: ${client.sede_tipo || '-'} ${client.sede_principale ? '(Principale)' : ''}`]);
+      ws.addRow([`Tel: ${client.phone || '-'} | Tel 2: ${client.telefono_2 || '-'} | Tel 3: ${client.telefono_3 || '-'} | Fax: ${client.fax || '-'}`]);
+      ws.addRow([`Email: ${client.contact_email || '-'} | PEC: ${client.email_pec || '-'} | Web: ${client.indirizzo_web || '-'}`]);
       ws.addRow([`Rif. Contabilità: ${client.contabilita_name || '-'} | Email: ${client.contabilita_email || '-'} | Tel: ${client.contabilita_phone || '-'}`]);
       ws.addRow([`Note: ${client.notes || '-'}`]);
       ws.addRow([]);
 
       ws.columns = detailCols;
-      ws.getRow(9).font = { bold: true };
-      ws.getRow(9).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+      ws.getRow(13).font = { bold: true };
+      ws.getRow(13).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
 
       cLines.forEach(l => {
         const vO = Number(l.valore_ordine || 0);

@@ -628,20 +628,29 @@ module.exports = (app, query, authenticate, authenticateHR) => {
     const {
       name, ragione_sociale, vat_number, codice_fiscale, codice_univoco, codice_ateco, codice_inarcassa,
       contact_email, phone, fax, address, localita, cap, province, stato,
-      contabilita_prefix, contabilita_name, contabilita_email, contabilita_phone, notes
+      contabilita_prefix, contabilita_name, contabilita_email, contabilita_phone, notes,
+      forma_giuridica, obsoleto, contributo, pagamento, codice_iva, split_payment,
+      conto, listino, banca, iban, swift, pec_fe, estero, lingua,
+      indirizzo_numero, sede_tipo, sede_principale, telefono_2, telefono_3, email_pec, indirizzo_web
     } = req.body;
     try {
       const { rows } = await query(`
         INSERT INTO clients (
           name, ragione_sociale, vat_number, codice_fiscale, codice_univoco, codice_ateco, codice_inarcassa,
           contact_email, phone, fax, address, localita, cap, province, stato,
-          contabilita_prefix, contabilita_name, contabilita_email, contabilita_phone, notes
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) 
+          contabilita_prefix, contabilita_name, contabilita_email, contabilita_phone, notes,
+          forma_giuridica, obsoleto, contributo, pagamento, codice_iva, split_payment,
+          conto, listino, banca, iban, swift, pec_fe, estero, lingua,
+          indirizzo_numero, sede_tipo, sede_principale, telefono_2, telefono_3, email_pec, indirizzo_web
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41) 
         RETURNING *`,
         [
           name, ragione_sociale || null, vat_number || null, codice_fiscale || null, codice_univoco || null, codice_ateco || null, codice_inarcassa || null,
           contact_email || null, phone || null, fax || null, address || null, localita || null, cap || null, province || null, stato || null,
-          contabilita_prefix || null, contabilita_name || null, contabilita_email || null, contabilita_phone || null, notes || null
+          contabilita_prefix || null, contabilita_name || null, contabilita_email || null, contabilita_phone || null, notes || null,
+          forma_giuridica || null, obsoleto || false, contributo || null, pagamento || null, codice_iva || null, split_payment || false,
+          conto || null, listino || null, banca || null, iban || null, swift || null, pec_fe || null, estero || false, lingua || 'Italiano',
+          indirizzo_numero || null, sede_tipo || null, sede_principale !== undefined ? sede_principale : true, telefono_2 || null, telefono_3 || null, email_pec || null, indirizzo_web || null
         ]
       );
       const client = rows[0];
@@ -649,26 +658,35 @@ module.exports = (app, query, authenticate, authenticateHR) => {
       logAudit(query, { ...ctx, action: 'CREATE', entityType: 'client', entityId: client.id, details: { name } });
       res.status(201).json(client);
     }
-    catch (err) { res.status(500).json({ error: "Database error" }); }
+    catch (err) { console.error("POST /api/clients error:", err); res.status(500).json({ error: "Database error" }); }
   });
 
   app.put("/api/clients/:id", authenticateHR, async (req, res) => {
     const {
       name, ragione_sociale, vat_number, codice_fiscale, codice_univoco, codice_ateco, codice_inarcassa,
       contact_email, phone, fax, address, localita, cap, province, stato,
-      contabilita_prefix, contabilita_name, contabilita_email, contabilita_phone, notes
+      contabilita_prefix, contabilita_name, contabilita_email, contabilita_phone, notes,
+      forma_giuridica, obsoleto, contributo, pagamento, codice_iva, split_payment,
+      conto, listino, banca, iban, swift, pec_fe, estero, lingua,
+      indirizzo_numero, sede_tipo, sede_principale, telefono_2, telefono_3, email_pec, indirizzo_web
     } = req.body;
     try {
       const { rows } = await query(
         `UPDATE clients SET 
           name = $1, ragione_sociale = $2, vat_number = $3, codice_fiscale = $4, codice_univoco = $5, codice_ateco = $6, codice_inarcassa = $7,
           contact_email = $8, phone = $9, fax = $10, address = $11, localita = $12, cap = $13, province = $14, stato = $15,
-          contabilita_prefix = $16, contabilita_name = $17, contabilita_email = $18, contabilita_phone = $19, notes = $20
-         WHERE id = $21 RETURNING *`,
+          contabilita_prefix = $16, contabilita_name = $17, contabilita_email = $18, contabilita_phone = $19, notes = $20,
+          forma_giuridica = $21, obsoleto = $22, contributo = $23, pagamento = $24, codice_iva = $25, split_payment = $26,
+          conto = $27, listino = $28, banca = $29, iban = $30, swift = $31, pec_fe = $32, estero = $33, lingua = $34,
+          indirizzo_numero = $35, sede_tipo = $36, sede_principale = $37, telefono_2 = $38, telefono_3 = $39, email_pec = $40, indirizzo_web = $41
+         WHERE id = $42 RETURNING *`,
         [
           name, ragione_sociale || null, vat_number || null, codice_fiscale || null, codice_univoco || null, codice_ateco || null, codice_inarcassa || null,
           contact_email || null, phone || null, fax || null, address || null, localita || null, cap || null, province || null, stato || null,
           contabilita_prefix || null, contabilita_name || null, contabilita_email || null, contabilita_phone || null, notes || null,
+          forma_giuridica || null, obsoleto || false, contributo || null, pagamento || null, codice_iva || null, split_payment || false,
+          conto || null, listino || null, banca || null, iban || null, swift || null, pec_fe || null, estero || false, lingua || 'Italiano',
+          indirizzo_numero || null, sede_tipo || null, sede_principale !== undefined ? sede_principale : true, telefono_2 || null, telefono_3 || null, email_pec || null, indirizzo_web || null,
           req.params.id
         ]
       );
@@ -679,6 +697,7 @@ module.exports = (app, query, authenticate, authenticateHR) => {
 
       res.json(rows[0]);
     } catch (err) {
+      console.error("PUT /api/clients/:id error:", err);
       res.status(500).json({ error: "Database error" });
     }
   });

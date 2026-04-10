@@ -214,6 +214,33 @@ CREATE TABLE IF NOT EXISTS clients (
   contabilita_email VARCHAR(255),
   contabilita_phone VARCHAR(100),
   notes TEXT,
+  -- Anagrafica
+  forma_giuridica VARCHAR(100),   -- Privato / Ditta Individuale / Azienda / Lavoratore Autonomo/Professionista / Ente Pubblico
+  obsoleto BOOLEAN DEFAULT FALSE,
+  -- Fiscale & Pagamento
+  contributo VARCHAR(50),         -- Non gestito / ENASARCO / INPS / ENPAM / Altro
+  pagamento VARCHAR(255),         -- e.g. "BONIFICO BANCARIO 60 gg. f.m."
+  codice_iva VARCHAR(100),        -- e.g. "22 - Aliquota 22%"
+  split_payment BOOLEAN DEFAULT FALSE,
+  -- Banca
+  conto VARCHAR(255),             -- Account name (e.g. "INTESA SAN PAOLO")
+  listino VARCHAR(255),
+  banca VARCHAR(255),
+  iban VARCHAR(50),
+  swift VARCHAR(20),
+  -- Fatturazione Elettronica
+  pec_fe VARCHAR(255),            -- Indirizzo PEC FE
+  estero BOOLEAN DEFAULT FALSE,
+  lingua VARCHAR(50) DEFAULT 'Italiano',
+  -- Sede
+  indirizzo_numero VARCHAR(20),   -- N° (Civico)
+  sede_tipo VARCHAR(50),          -- Legale / Operativa
+  sede_principale BOOLEAN DEFAULT TRUE,
+  -- Contatti Extra
+  telefono_2 VARCHAR(50),
+  telefono_3 VARCHAR(50),
+  email_pec VARCHAR(255),         -- e@Mail PEC
+  indirizzo_web VARCHAR(255),     -- Website
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
