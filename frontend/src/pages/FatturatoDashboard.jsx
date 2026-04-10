@@ -163,21 +163,23 @@ export default function FatturatoDashboard({ isHR }) {
   };
 
   const filteredFatturatoList = fatturatoList.map(comm => {
-    // 1. First, apply client filter if active
     let clients = comm.clients;
+    let keep = true;
+
+    // 1. Client filter
     if (fattFilterClient) {
       clients = clients.filter(c => String(c.client_id) === String(fattFilterClient));
+      if (clients.length === 0) keep = false;
     }
 
-    // 2. Second, apply search term filter if active
-    if (searchTerm) {
+    // 2. Search term
+    if (searchTerm && keep) {
       const s = searchTerm.toLowerCase();
       const matchesComm =
         (comm.comm_number || "").toLowerCase().includes(s) ||
         (comm.name || "").toLowerCase().includes(s) ||
         (comm.task_title || "").toLowerCase().includes(s);
 
-      // If comm itself doesn't match, check if any client or lines match
       if (!matchesComm) {
         clients = clients.filter(cl => {
           const matchesClient =
@@ -191,11 +193,13 @@ export default function FatturatoDashboard({ isHR }) {
           );
           return matchesClient || matchesAnyLine;
         });
+        
+        if (clients.length === 0) keep = false;
       }
     }
 
-    return { ...comm, clients };
-  }).filter(comm => comm.clients.length > 0);
+    return keep ? { ...comm, clients } : null;
+  }).filter(Boolean);
 
   // Form Handlers
   const addClientBlock = () => setFattForm({ ...fattForm, clients: [...fattForm.clients, getEmptyClient()] });

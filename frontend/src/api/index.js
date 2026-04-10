@@ -241,3 +241,6 @@ export const patchLineStatus = (id, payload) => req(`/offerte/${id}/lines/status
 
 // ── AUDIT LOGS ──
 export const getAuditLogs = (limit = 100) => req(`/audit-logs?limit=${limit}`);
+
+// ── AI ASSISTANT ──
+export const chatWithAI = (messages, contextDate) => req("/ai/chat", { method: "POST", body: JSON.stringify({ messages, contextDate }) });

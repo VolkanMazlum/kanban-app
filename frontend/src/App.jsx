@@ -13,6 +13,7 @@ import CostDashboard from "./components/CostDashboard.jsx";
 import HRFinanceDashboard from "./pages/HRFinanceDashboard.jsx";
 import OfferteDashboard from "./pages/OfferteDashboard.jsx";
 import Login from "./pages/Login.jsx";
+import AiAssistant from "./components/AiAssistant.jsx";
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
@@ -381,6 +382,7 @@ export default function App() {
       {modal?.type === "task" && <TaskModal task={modal.task} employees={employees} onSave={handleTaskSave} onClose={() => setModal(null)} />}
       {modal?.type === "employees" && <EmployeeManager employees={employees} isHR={isHR} onAdd={handleEmpAdd} onDelete={handleEmpDelete} onClose={() => setModal(null)} />}
 
+      <AiAssistant user={user} />
       <Toast toasts={toasts} />
     </div>
   );

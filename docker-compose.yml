@@ -51,5 +51,27 @@ services:
     depends_on:
       - backend
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: kanban_ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+
+  ollama-pull-model:
+    image: ollama/ollama:latest
+    container_name: kanban_ollama_pull
+    environment:
+      - OLLAMA_HOST=ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    entrypoint: /bin/sh
+    command: -c "until ollama list > /dev/null 2>&1; do echo 'Waiting for ollama server...'; sleep 5; done; ollama pull gemma2:2b"
+    depends_on:
+      - ollama
+
 volumes:
   postgres_data:
+  ollama_data:
