@@ -1,6 +1,6 @@
-module.exports = (app, query, authenticate) => {
+module.exports = (app, query, pool, authenticate) => {
 
-  app.get("/api/phase-templates", async (req, res) => {
+  app.get("/api/phase-templates", authenticate, async (req, res) => {
     try {
       const result = await query("SELECT * FROM phase_templates ORDER BY topic, position");
       const grouped = {};
@@ -12,7 +12,7 @@ module.exports = (app, query, authenticate) => {
     } catch (err) { res.status(500).json({ error: "Database error" }); }
   });
 
-  app.get("/api/tasks/:taskId/phases", async (req, res) => {
+  app.get("/api/tasks/:taskId/phases", authenticate, async (req, res) => {
     try {
       const result = await query(`
       SELECT tp.*,
@@ -51,15 +51,18 @@ module.exports = (app, query, authenticate) => {
   app.post("/api/tasks/:taskId/phases", authenticate, async (req, res) => {
     const { taskId } = req.params;
     const { phases } = req.body;
+    // Use a dedicated connection so DELETE + all INSERTs are atomic
+    const client = await pool.connect();
     try {
-      // await query("BEGIN");
-      await query("DELETE FROM task_phases WHERE task_id = $1", [taskId]);
+      await client.query("BEGIN");
+
+      await client.query("DELETE FROM task_phases WHERE task_id = $1", [taskId]);
       if (phases && phases.length > 0) {
         for (const ph of phases) {
           // Calculate total estimated hours from assignee hours
           const totalEstimatedHours = (ph.assignee_hours || []).reduce((sum, assignee) => sum + (parseFloat(assignee.estimated_hours) || 0), 0);
 
-          const result = await query(
+          const result = await client.query(
             `INSERT INTO task_phases (task_id, name, position, start_date, note, end_date, status, topic_source, estimated_hours)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
             [
@@ -74,7 +77,7 @@ module.exports = (app, query, authenticate) => {
 
           if (ph.assignee_hours && ph.assignee_hours.length > 0) {
             for (const a of ph.assignee_hours) {
-              await query(
+              await client.query(
                 `INSERT INTO phase_assignees (phase_id, employee_id, estimated_hours) 
                 VALUES ($1, $2, $3)
                 ON CONFLICT (phase_id, employee_id) 
@@ -83,7 +86,7 @@ module.exports = (app, query, authenticate) => {
               );
               if (a.monthly_hours && a.monthly_hours.length > 0) {
                 for (const mh of a.monthly_hours) {
-                  await query(
+                  await client.query(
                     `INSERT INTO phase_assignee_monthly_hours (phase_id, employee_id, year, month, hours)
                     VALUES ($1, $2, $3, $4, $5)
                     ON CONFLICT (phase_id, employee_id, year, month) DO UPDATE SET hours = $5`,
@@ -95,19 +98,22 @@ module.exports = (app, query, authenticate) => {
           }
         }
       }
-      // ── AUTO-SYNC WITH FATTURATO ──
+
+      await client.query("COMMIT");
+
+      // ── AUTO-SYNC WITH FATTURATO (outside the transaction — non-critical, best-effort) ──
       try {
         const commRes = await query("SELECT id FROM commesse WHERE task_id = $1", [taskId]);
         for (const comm of commRes.rows) {
           const clientRes = await query("SELECT id FROM commessa_clients WHERE commessa_id = $1", [comm.id]);
-          for (const client of clientRes.rows) {
-            const lineRes = await query("SELECT attivita FROM fatturato_lines WHERE commessa_client_id = $1", [client.id]);
+          for (const cc of clientRes.rows) {
+            const lineRes = await query("SELECT attivita FROM fatturato_lines WHERE commessa_client_id = $1", [cc.id]);
             const existingNames = new Set(lineRes.rows.map(l => l.attivita));
             for (const ph of phases) {
               if (ph.status === 'active' && !existingNames.has(ph.name)) {
                 await query(
                   "INSERT INTO fatturato_lines (commessa_client_id, attivita, valore_ordine, fatturato_amount) VALUES ($1, $2, 0, 0)",
-                  [client.id, ph.name]
+                  [cc.id, ph.name]
                 );
               }
             }
@@ -119,8 +125,11 @@ module.exports = (app, query, authenticate) => {
 
       res.status(201).json({ success: true });
     } catch (err) {
+      await client.query("ROLLBACK");
       console.error("POST /phases error:", err);
       res.status(500).json({ error: "Database error" });
+    } finally {
+      client.release();
     }
   });
 
@@ -182,7 +191,7 @@ module.exports = (app, query, authenticate) => {
   });
 
   // Aylık saatleri getir
-  app.get("/api/phases/:phaseId/monthly-hours", async (req, res) => {
+  app.get("/api/phases/:phaseId/monthly-hours", authenticate, async (req, res) => {
     const { phaseId } = req.params;
     try {
       const result = await query(

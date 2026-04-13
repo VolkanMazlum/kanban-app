@@ -1,4 +1,4 @@
-module.exports = function(app, query, authenticate, authenticateHR) {
+module.exports = function(app, query, pool, authenticate, authenticateHR) {
   
   // ---- GET SUMMARY STATS ----
   app.get('/api/offerte/summary', authenticateHR, async (req, res) => {
@@ -104,8 +104,9 @@ module.exports = function(app, query, authenticate, authenticateHR) {
 
   // ---- CREATE OFFERTA ----
   app.post('/api/offerte', authenticateHR, async (req, res) => {
+    const client = await pool.connect();
     try {
-      await query('BEGIN');
+      await client.query('BEGIN');
       const { 
         anno, preventivo_number, revision, is_final_revision, tipo, oggetto, 
         committente, cliente, client_id, superficie, destinazione_uso, specifiche, 
@@ -113,7 +114,7 @@ module.exports = function(app, query, authenticate, authenticateHR) {
         note, status, lines, commessa_id 
       } = req.body;
 
-      const offerRes = await query(`
+      const offerRes = await client.query(`
         INSERT INTO offerte (
           anno, preventivo_number, revision, is_final_revision, tipo, oggetto, 
           committente, cliente, client_id, superficie, destinazione_uso, specifiche, 
@@ -131,7 +132,7 @@ module.exports = function(app, query, authenticate, authenticateHR) {
         for (const [category, activities] of Object.entries(lines)) {
           for (const [attivita, actData] of Object.entries(activities)) {
             if (actData.included) {
-              await query(`
+              await client.query(`
                 INSERT INTO offerta_lines (offerta_id, category, attivita, valore, status)
                 VALUES ($1, $2, $3, $4, $5)
               `, [newOffer.id, category, attivita, (parseFloat(actData.valore) || 0), actData.status || 'pending']);
@@ -140,20 +141,23 @@ module.exports = function(app, query, authenticate, authenticateHR) {
         }
       }
 
-      await query('COMMIT');
+      await client.query('COMMIT');
       res.json(newOffer);
     } catch (err) {
-      await query('ROLLBACK');
+      await client.query('ROLLBACK');
       console.error('Error creating offerta:', err);
       res.status(500).json({ error: 'Failed to create offerta' });
+    } finally {
+      client.release();
     }
   });
 
   // ---- UPDATE OFFERTA ----
   app.put('/api/offerte/:id', authenticateHR, async (req, res) => {
     const { id } = req.params;
+    const client = await pool.connect();
     try {
-      await query('BEGIN');
+      await client.query('BEGIN');
       const { 
         anno, preventivo_number, revision, is_final_revision, tipo, oggetto, 
         committente, cliente, client_id, superficie, destinazione_uso, specifiche, 
@@ -161,7 +165,7 @@ module.exports = function(app, query, authenticate, authenticateHR) {
         note, status, lines, commessa_id 
       } = req.body;
 
-      const offerRes = await query(`
+      const offerRes = await client.query(`
         UPDATE offerte SET
           anno=$1, preventivo_number=$2, revision=$3, is_final_revision=$4, tipo=$5, oggetto=$6, 
           committente=$7, cliente=$8, client_id=$9, superficie=$10, destinazione_uso=$11, specifiche=$12, 
@@ -177,12 +181,12 @@ module.exports = function(app, query, authenticate, authenticateHR) {
 
       if (offerRes.rowCount === 0) throw new Error("Offerta not found");
 
-      await query(`DELETE FROM offerta_lines WHERE offerta_id=$1`, [id]);
+      await client.query(`DELETE FROM offerta_lines WHERE offerta_id=$1`, [id]);
       if (lines) {
         for (const [category, activities] of Object.entries(lines)) {
           for (const [attivita, actData] of Object.entries(activities)) {
             if (actData.included) {
-              await query(`
+              await client.query(`
                 INSERT INTO offerta_lines (offerta_id, category, attivita, valore, status)
                 VALUES ($1, $2, $3, $4, $5)
               `, [id, category, attivita, (parseFloat(actData.valore) || 0), actData.status || 'pending']);
@@ -191,12 +195,14 @@ module.exports = function(app, query, authenticate, authenticateHR) {
         }
       }
 
-      await query('COMMIT');
+      await client.query('COMMIT');
       res.json(offerRes.rows[0]);
     } catch (err) {
-      await query('ROLLBACK');
+      await client.query('ROLLBACK');
       console.error('Error updating offerta:', err);
       res.status(500).json({ error: 'Failed to update offerta' });
+    } finally {
+      client.release();
     }
   });
 
@@ -214,10 +220,11 @@ module.exports = function(app, query, authenticate, authenticateHR) {
   // ---- ACCEPT OFFERTA (AUTO CREATE OR MERGE TASK/COMMESSA) ----
   app.post('/api/offerte/:id/accept', authenticateHR, async (req, res) => {
     const { id } = req.params;
+    const client = await pool.connect();
     try {
-      await query('BEGIN');
+      await client.query('BEGIN');
       
-      const { rows: offers } = await query(`SELECT * FROM offerte WHERE id=$1`, [id]);
+      const { rows: offers } = await client.query(`SELECT * FROM offerte WHERE id=$1`, [id]);
       if (offers.length === 0) throw new Error("Offerta not found");
       const offerta = offers[0];
       
@@ -225,12 +232,12 @@ module.exports = function(app, query, authenticate, authenticateHR) {
       // NOTE: Manual linking (old data) sets commessa_id initially but task_id is only 
       // synced to the offer record AFTER the 'accept' merge logic runs.
       if (offerta.status === 'accettata' && offerta.task_id) {
-        await query('ROLLBACK');
+        await client.query('ROLLBACK');
         console.warn(`[Offerte] Attempted to re-accept an already processed offer (ID: ${id})`);
         return res.status(400).json({ error: 'This offer has already been converted and processed.' });
       }
 
-      const { rows: offerLines } = await query(`
+      const { rows: offerLines } = await client.query(`
         SELECT * FROM offerta_lines WHERE offerta_id=$1 AND status='accepted' AND included=true
       `, [id]);
 
@@ -249,7 +256,7 @@ module.exports = function(app, query, authenticate, authenticateHR) {
 
       if (commessaId) {
         // It's linked to an EXISTING system project. We find the commessa_clients row to add lines to.
-        const { rows: ccRows } = await query(`
+        const { rows: ccRows } = await client.query(`
           SELECT * FROM commessa_clients WHERE commessa_id=$1 ORDER BY id DESC LIMIT 1
         `, [commessaId]);
 
@@ -257,7 +264,7 @@ module.exports = function(app, query, authenticate, authenticateHR) {
           ccId = ccRows[0].id;
         } else {
           // Fallback: If commessa exists but no client is mapped, just create the cc mapping
-          const ccRes = await query(`
+          const ccRes = await client.query(`
             INSERT INTO commessa_clients (commessa_id, client_id, preventivo, voce_bilancio)
             VALUES ($1, $2, $3, $4) RETURNING *
           `, [commessaId, offerta.client_id || null, preventivoStr, 'R.04 - PREVENTIVO EX']);
@@ -265,25 +272,25 @@ module.exports = function(app, query, authenticate, authenticateHR) {
         }
 
         // Get its task id
-        const { rows: commRows } = await query(`SELECT task_id FROM commesse WHERE id=$1`, [commessaId]);
+        const { rows: commRows } = await client.query(`SELECT task_id FROM commesse WHERE id=$1`, [commessaId]);
         if (commRows.length > 0) taskId = commRows[0].task_id;
 
       } else {
         // ---- CREATE BRAND NEW PROJECT ----
-        const taskRes = await query(`
+        const taskRes = await client.query(`
           INSERT INTO tasks (title, description, status) 
           VALUES ($1, $2, 'new') RETURNING *
         `, [taskTitle, offerta.specifiche]);
         taskId = taskRes.rows[0].id;
 
         const commessaNum = offerta.anno ? `${offerta.anno}-${String(offerta.preventivo_number || 0).padStart(3, '0')}` : null;
-        const commRes = await query(`
+        const commRes = await client.query(`
           INSERT INTO commesse (task_id, name, comm_number) 
           VALUES ($1, $2, $3) RETURNING *
         `, [taskId, offerta.oggetto, commessaNum]);
         commessaId = commRes.rows[0].id;
 
-        const ccRes = await query(`
+        const ccRes = await client.query(`
           INSERT INTO commessa_clients (commessa_id, client_id, preventivo, voce_bilancio)
           VALUES ($1, $2, $3, $4) RETURNING *
         `, [
@@ -297,23 +304,25 @@ module.exports = function(app, query, authenticate, authenticateHR) {
 
       // Add the accepted lines to fatturato_lines for this ccId
       for (const l of offerLines) {
-        await query(`
+        await client.query(`
           INSERT INTO fatturato_lines (commessa_client_id, attivita, valore_ordine)
           VALUES ($1, $2, $3)
         `, [ccId, l.attivita, l.valore * 1000]); 
       }
 
       // Finalize offer status
-      await query(`
+      await client.query(`
         UPDATE offerte SET task_id=$1, commessa_id=$2, status='accettata' WHERE id=$3
       `, [taskId, commessaId, id]);
 
-      await query('COMMIT');
+      await client.query('COMMIT');
       res.json({ message: 'Offer processed', taskId, commessaId });
     } catch (err) {
-      await query('ROLLBACK');
+      await client.query('ROLLBACK');
       console.error('Error accepting offerta:', err);
       res.status(500).json({ error: 'Failed to accept offerta: ' + err.message });
+    } finally {
+      client.release();
     }
   });
 
@@ -321,11 +330,12 @@ module.exports = function(app, query, authenticate, authenticateHR) {
   app.patch('/api/offerte/:id/lines/status', authenticateHR, async (req, res) => {
     const { id } = req.params;
     const { category, attivita, status, offerStatus } = req.body;
+    const client = await pool.connect();
     try {
-      await query('BEGIN');
+      await client.query('BEGIN');
       
       // Update specific line
-      const lineUpdate = await query(`
+      const lineUpdate = await client.query(`
         UPDATE offerta_lines 
         SET status = $1 
         WHERE offerta_id = $2 AND category = $3 AND attivita = $4
@@ -338,15 +348,17 @@ module.exports = function(app, query, authenticate, authenticateHR) {
 
       // Update offer status if provided
       if (offerStatus) {
-        await query(`UPDATE offerte SET status = $1 WHERE id = $2`, [offerStatus, id]);
+        await client.query(`UPDATE offerte SET status = $1 WHERE id = $2`, [offerStatus, id]);
       }
 
-      await query('COMMIT');
+      await client.query('COMMIT');
       res.json({ success: true, line: lineUpdate.rows[0], offerStatus });
     } catch (err) {
-      await query('ROLLBACK');
+      await client.query('ROLLBACK');
       console.error('Error patching line status:', err);
       res.status(500).json({ error: 'Failed to update status: ' + err.message });
+    } finally {
+      client.release();
     }
   });
 

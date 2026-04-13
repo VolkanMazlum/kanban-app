@@ -11,7 +11,7 @@ const timeLogSchema = z.object({
 
 module.exports = (app, query, authenticate) => {
   // Get all time logs
-  app.get("/api/time-logs", async (req, res) => {
+  app.get("/api/time-logs", authenticate, async (req, res) => {
     try {
       const sql = `
         SELECT ttl.*, t.title as task_title, e.name as employee_name
@@ -29,7 +29,7 @@ module.exports = (app, query, authenticate) => {
   });
 
   // Get time logs for a specific task
-  app.get("/api/tasks/:taskId/time-logs", async (req, res) => {
+  app.get("/api/tasks/:taskId/time-logs", authenticate, async (req, res) => {
     try {
       const sql = `
         SELECT ttl.*, e.name as employee_name
@@ -47,7 +47,7 @@ module.exports = (app, query, authenticate) => {
   });
 
   // Get time logs for a specific employee
-  app.get("/api/employees/:employeeId/time-logs", async (req, res) => {
+  app.get("/api/employees/:employeeId/time-logs", authenticate, async (req, res) => {
     try {
       const sql = `
         SELECT ttl.*, t.title as task_title

@@ -90,8 +90,20 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         }
       }
 
+      // 3. Fetch specific Client data if a Client Name is found in the message
+      const allClientsRes = await query(`SELECT id, name, vat_number, codice_univoco as sdi_code, email_pec as pec, contact_email as email, phone, address FROM clients`);
+      const upperUserMsg = lastUserMsg.toUpperCase();
+      const foundClients = allClientsRes.rows.filter(c => c.name && c.name.trim().length > 2 && upperUserMsg.includes(c.name.trim().toUpperCase()));
+
+      if (foundClients.length > 0) {
+        const clientDataStr = foundClients.map(c => 
+          `- Cliente: ${c.name}\n  Email: ${c.email || 'N/A'}\n  Telefono: ${c.phone || 'N/A'}\n  PEC: ${c.pec || 'N/A'}\n  P.IVA: ${c.vat_number || 'N/A'}\n  Indirizzo: ${c.address || 'N/A'}\n  Codice SDI: ${c.sdi_code || 'N/A'}`
+        ).join('\n\n');
+        financialContext += `\n\n--- Dati Anagrafici Clienti Nominati ---\n${clientDataStr}\nUsa questi dati ESATTAMENTE come scritti per rispondere all'utente.`;
+      }
+
       if (!financialContext) {
-        financialContext = "Nessun dato finanziario fornito per questa richiesta. L'utente non ha chiesto un mese specifico né un numero di commessa valido (es. 25-015). Limitati a rispondere alle sue domande.";
+        financialContext = "Nessun dato finanziario o cliente fornito per questa richiesta. L'utente non ha chiesto un mese specifico, né un numero di commessa, né un cliente valido. Limitati a rispondere alle sue domande sulla base delle tue conoscenze generali.";
       }
 
       const systemPrompt = {

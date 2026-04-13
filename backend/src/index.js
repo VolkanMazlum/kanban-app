@@ -75,12 +75,12 @@ require('./routes/tasks')(app, query, pool, authenticate);
 require('./routes/employees')(app, query, authenticate, authenticateHR);
 require('./routes/kpi')(app, query, authenticate);
 require('./routes/timeLogs')(app, query, authenticate);
-require('./routes/phases')(app, query, authenticate);
+require('./routes/phases')(app, query, pool, authenticate);
 require("./routes/settings")(app, query, authenticate);
 require("./routes/costs")(app, query, authenticate, authenticateHR);
-require("./routes/fatturato")(app, query, authenticate, authenticateHR);
+require("./routes/fatturato")(app, query, pool, authenticate, authenticateHR);
 require("./routes/users")(app, query, authenticateHR);
-require("./routes/offerte")(app, query, authenticate, authenticateHR);
+require("./routes/offerte")(app, query, pool, authenticate, authenticateHR);
 require("./routes/ai")(app, query, authenticate, authenticateHR);
 
 // Reports

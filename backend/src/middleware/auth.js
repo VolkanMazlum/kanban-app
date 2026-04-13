@@ -8,9 +8,9 @@ const authenticate = (req, res, next) => {
     token = authHeader.replace('Bearer ', '');
   } else if (req.cookies && req.cookies.token) {
     token = req.cookies.token;
-  } else if (req.query.token) {
-    token = req.query.token;
   }
+  // NOTE: req.query.token intentionally removed — tokens in URLs appear in
+  // server logs, browser history, and Referer headers (security risk).
  
   if (!token) {
     return res.status(401).json({ error: 'Authentication required. Token missing.' });
@@ -33,9 +33,8 @@ const authenticateHR = (req, res, next) => {
     token = authHeader.replace('Bearer ', '');
   } else if (req.cookies && req.cookies.token) {
     token = req.cookies.token;
-  } else if (req.query.token) {
-    token = req.query.token;
   }
+  // NOTE: req.query.token intentionally removed — see authenticate above.
  
   if (!token) {
     return res.status(401).json({ error: 'Authentication required. Token missing.' });

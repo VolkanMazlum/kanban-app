@@ -1,6 +1,6 @@
 const { logAudit, getAuditContext } = require("../middleware/auditLog");
 
-module.exports = (app, query, authenticate, authenticateHR) => {
+module.exports = (app, query, pool, authenticate, authenticateHR) => {
 
   app.get("/api/fatturato", authenticateHR, async (req, res) => {
     try {
@@ -240,86 +240,101 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           }
         }
       }
-      if (task_id) {
-        const existing = await query("SELECT id FROM commesse WHERE task_id = $1", [task_id]);
-        if (existing.rows.length > 0) {
-          return res.status(400).json({ error: "This task is already linked to another commessa." });
+
+      // Use a dedicated connection so BEGIN/COMMIT stay on the same socket
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        // Check task uniqueness inside the transaction with a row-level lock
+        // to prevent two concurrent requests from both passing this guard
+        if (task_id) {
+          const existing = await client.query(
+            "SELECT id FROM commesse WHERE task_id = $1 FOR UPDATE",
+            [task_id]
+          );
+          if (existing.rows.length > 0) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({ error: "This task is already linked to another commessa." });
+          }
         }
-      }
 
-      await query("BEGIN");
+        const commRes = await client.query(
+          `INSERT INTO commesse (task_id, comm_number, name, notes) VALUES ($1, $2, $3, $4) RETURNING id`,
+          [task_id || null, comm_number || null, name || null, req.body.notes || null]
+        );
+        const commId = commRes.rows[0].id;
 
-      const commRes = await query(
-        `INSERT INTO commesse (task_id, comm_number, name, notes) VALUES ($1, $2, $3, $4) RETURNING id`,
-        [task_id || null, comm_number || null, name || null, req.body.notes || null]
-      );
-      const commId = commRes.rows[0].id;
+        if (clients && clients.length > 0) {
+          for (const c of clients) {
+            const ccRes = await client.query(`
+              INSERT INTO commessa_clients (commessa_id, client_id,  n_cliente, n_ordine, preventivo, ordine, n_ordine_zucchetti, voce_bilancio)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
+            `, [commId, c.client_id || null, c.n_cliente || null, c.n_ordine || null, c.preventivo || null, c.ordine || null, c.n_ordine_zucchetti || null, c.voce_bilancio || null]);
 
-      if (clients && clients.length > 0) {
-        for (const c of clients) {
-          const ccRes = await query(`
-            INSERT INTO commessa_clients (commessa_id, client_id,  n_cliente, n_ordine, preventivo, ordine, n_ordine_zucchetti, voce_bilancio)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
-          `, [commId, c.client_id || null, c.n_cliente || null, c.n_ordine || null, c.preventivo || null, c.ordine || null, c.n_ordine_zucchetti || null, c.voce_bilancio || null]);
+            const ccId = ccRes.rows[0].id;
 
-          const ccId = ccRes.rows[0].id;
+            if (c.lines && c.lines.length > 0) {
+              for (const l of c.lines) {
+                const flRes = await client.query(`
+                  INSERT INTO fatturato_lines (commessa_client_id, attivita, descrizione, valore_ordine, fatturato_amount, proforma)
+                  VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+                `, [ccId, l.attivita || null, l.descrizione || null, parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0, parseFloat(l.proforma) || 0]);
 
-          if (c.lines && c.lines.length > 0) {
-            for (const l of c.lines) {
-              const flRes = await query(`
-                INSERT INTO fatturato_lines (commessa_client_id, attivita, descrizione, valore_ordine, fatturato_amount, proforma)
-                VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
-              `, [ccId, l.attivita || null, l.descrizione || null, parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0, parseFloat(l.proforma) || 0]);
+                const lineId = flRes.rows[0].id;
 
-              const lineId = flRes.rows[0].id;
-
-              if (l.ordini && l.ordini.length > 0) {
-                for (const o of l.ordini) {
-                  await query(`
-                    INSERT INTO fatturato_ordini (fatturato_line_id, label, percentage, expected_date, note)
-                    VALUES ($1, $2, $3, $4, $5)
-                  `, [lineId, o.label || null, parseFloat(o.percentage) || 0, o.expected_date || null, o.note || null]);
+                if (l.ordini && l.ordini.length > 0) {
+                  for (const o of l.ordini) {
+                    await client.query(`
+                      INSERT INTO fatturato_ordini (fatturato_line_id, label, percentage, expected_date, note)
+                      VALUES ($1, $2, $3, $4, $5)
+                    `, [lineId, o.label || null, parseFloat(o.percentage) || 0, o.expected_date || null, o.note || null]);
+                  }
                 }
-              }
 
-              if (l.realized && l.realized.length > 0) {
-                for (const r of l.realized) {
-                  await query(`
-                    INSERT INTO fatturato_realized (fatturato_line_id, amount, registration_date, note)
-                    VALUES ($1, $2, $3, $4)
-                  `, [lineId, parseFloat(r.amount) || 0, r.registration_date || null, r.note || null]);
+                if (l.realized && l.realized.length > 0) {
+                  for (const r of l.realized) {
+                    await client.query(`
+                      INSERT INTO fatturato_realized (fatturato_line_id, amount, registration_date, note)
+                      VALUES ($1, $2, $3, $4)
+                    `, [lineId, parseFloat(r.amount) || 0, r.registration_date || null, r.note || null]);
+                  }
                 }
-              }
 
-              if (l.proforma_entries && l.proforma_entries.length > 0) {
-                for (const p of l.proforma_entries) {
-                  await query(`
-                    INSERT INTO fatturato_proforma (fatturato_line_id, amount, date, note)
-                    VALUES ($1, $2, $3, $4)
-                  `, [lineId, parseFloat(p.amount) || 0, p.date || null, p.note || null]);
+                if (l.proforma_entries && l.proforma_entries.length > 0) {
+                  for (const p of l.proforma_entries) {
+                    await client.query(`
+                      INSERT INTO fatturato_proforma (fatturato_line_id, amount, date, note)
+                      VALUES ($1, $2, $3, $4)
+                    `, [lineId, parseFloat(p.amount) || 0, p.date || null, p.note || null]);
+                  }
                 }
               }
             }
           }
         }
-      }
 
-      if (extra_costs && extra_costs.length > 0) {
-        for (const ec of extra_costs) {
-          await query(`
-            INSERT INTO employee_extra_costs (employee_id, task_id, description, amount, date)
-            VALUES ($1, $2, $3, $4, $5)
-          `, [1, task_id, ec.description || '', parseFloat(ec.amount) || 0, ec.date || null]);
+        if (extra_costs && extra_costs.length > 0) {
+          for (const ec of extra_costs) {
+            await client.query(`
+              INSERT INTO employee_extra_costs (employee_id, task_id, description, amount, date)
+              VALUES ($1, $2, $3, $4, $5)
+            `, [req.user.userId, task_id, ec.description || '', parseFloat(ec.amount) || 0, ec.date || null]);
+          }
         }
+
+        await client.query("COMMIT");
+
+        const ctx = getAuditContext(req);
+        logAudit(query, { ...ctx, action: 'CREATE', entityType: 'commessa', entityId: commId, details: { comm_number, name } });
+        res.status(201).json({ success: true });
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
       }
-
-      await query("COMMIT");
-
-      const ctx = getAuditContext(req);
-      logAudit(query, { ...ctx, action: 'CREATE', entityType: 'commessa', entityId: commId, details: { comm_number, name } });
-      res.status(201).json({ success: true });
     } catch (err) {
-      await query("ROLLBACK");
       console.error("POST /fatturato error:", err);
       res.status(500).json({ error: "Database error" });
     }
@@ -343,156 +358,171 @@ module.exports = (app, query, authenticate, authenticateHR) => {
         }
       }
 
-      if (task_id) {
-        const existing = await query("SELECT id FROM commesse WHERE task_id = $1 AND id <> $2", [task_id, commId]);
-        if (existing.rows.length > 0) {
-          return res.status(400).json({ error: "This task is already linked to another commessa." });
+      // Use a dedicated connection so BEGIN/COMMIT stay on the same socket
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        // Check task uniqueness inside the transaction with a row-level lock
+        if (task_id) {
+          const existing = await client.query(
+            "SELECT id FROM commesse WHERE task_id = $1 AND id <> $2 FOR UPDATE",
+            [task_id, commId]
+          );
+          if (existing.rows.length > 0) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({ error: "This task is already linked to another commessa." });
+          }
         }
-      }
 
-      await query("BEGIN");
-      await query(`UPDATE commesse SET task_id = $1, comm_number = $2, name = $3, notes = $4 WHERE id = $5`, [task_id || null, comm_number || null, name || null, req.body.notes || null, commId]);
+        await client.query(`UPDATE commesse SET task_id = $1, comm_number = $2, name = $3, notes = $4 WHERE id = $5`, [task_id || null, comm_number || null, name || null, req.body.notes || null, commId]);
 
-      // Upsert clients & lines (preserve existing IDs to keep fatturato_sal / fatturato_obiettivi intact)
-      const incomingClientIds = [];
+        // Upsert clients & lines (preserve existing IDs to keep fatturato_sal / fatturato_obiettivi intact)
+        const incomingClientIds = [];
 
-      if (clients && clients.length > 0) {
-        for (const c of clients) {
-          let ccId;
+        if (clients && clients.length > 0) {
+          for (const c of clients) {
+            let ccId;
 
-          if (c.id) {
-            // Existing client block — update in place
-            await query(`
-              UPDATE commessa_clients
-              SET client_id = $1, n_cliente = $2, n_ordine = $3, preventivo = $4, ordine = $5,
-                  n_ordine_zucchetti = $6, voce_bilancio = $7
-              WHERE id = $8
-            `, [c.client_id || null, c.n_cliente || null, c.n_ordine || null,
-            c.preventivo || null, c.ordine || null,
-            c.n_ordine_zucchetti || null, c.voce_bilancio || null, c.id]);
-            ccId = c.id;
-          } else {
-            // New client block — insert
-            const ccRes = await query(`
-              INSERT INTO commessa_clients (commessa_id, client_id, n_cliente, n_ordine, preventivo, ordine, n_ordine_zucchetti, voce_bilancio)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
-            `, [commId, c.client_id || null, c.n_cliente || null, c.n_ordine || null,
+            if (c.id) {
+              // Existing client block — update in place
+              await client.query(`
+                UPDATE commessa_clients
+                SET client_id = $1, n_cliente = $2, n_ordine = $3, preventivo = $4, ordine = $5,
+                    n_ordine_zucchetti = $6, voce_bilancio = $7
+                WHERE id = $8
+              `, [c.client_id || null, c.n_cliente || null, c.n_ordine || null,
               c.preventivo || null, c.ordine || null,
-              c.n_ordine_zucchetti || null, c.voce_bilancio || null]);
-            ccId = ccRes.rows[0].id;
-          }
-          incomingClientIds.push(ccId);
-
-          // Upsert lines (preserves existing IDs so SAL & Obiettivi rows are never cascade-deleted)
-          const incomingLineIds = [];
-          if (c.lines && c.lines.length > 0) {
-            for (const l of c.lines) {
-              let lineId;
-
-              if (l.id) {
-                // Existing line — update in place
-                await query(`
-                  UPDATE fatturato_lines
-                  SET commessa_client_id = $1, attivita = $2, descrizione = $3,
-                      valore_ordine = $4, fatturato_amount = $5, proforma = $6,
-                      voce_bilancio = $7
-                  WHERE id = $8
-                `, [ccId, l.attivita || null, l.descrizione || null,
-                  parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0,
-                  parseFloat(l.proforma) || 0, l.voce_bilancio || null, l.id]);
-                lineId = l.id;
-              } else {
-                // New line — insert
-                const flRes = await query(`
-                  INSERT INTO fatturato_lines (commessa_client_id, attivita, descrizione, valore_ordine, fatturato_amount, proforma, voce_bilancio)
-                  VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
-                `, [ccId, l.attivita || null, l.descrizione || null,
-                  parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0,
-                  parseFloat(l.proforma) || 0, l.voce_bilancio || null]);
-                lineId = flRes.rows[0].id;
-              }
-              incomingLineIds.push(lineId);
-
-              // Ordini: replace wholesale for this line (no SAL/Obiettivi dependency here)
-              await query(`DELETE FROM fatturato_ordini WHERE fatturato_line_id = $1`, [lineId]);
-              if (l.ordini && l.ordini.length > 0) {
-                for (const o of l.ordini) {
-                  await query(`
-                    INSERT INTO fatturato_ordini (fatturato_line_id, label, percentage, expected_date, note)
-                    VALUES ($1, $2, $3, $4, $5)
-                  `, [lineId, o.label || null, parseFloat(o.percentage) || 0, o.expected_date || null, o.note || null]);
-                }
-              }
-
-              // Realized: replace wholesale for this line
-              await query(`DELETE FROM fatturato_realized WHERE fatturato_line_id = $1`, [lineId]);
-              if (l.realized && l.realized.length > 0) {
-                for (const r of l.realized) {
-                  await query(`
-                    INSERT INTO fatturato_realized (fatturato_line_id, amount, registration_date, note)
-                    VALUES ($1, $2, $3, $4)
-                  `, [lineId, parseFloat(r.amount) || 0, r.registration_date || null, r.note || null]);
-                }
-              }
-
-              // Proforma entries: replace wholesale for this line
-              await query(`DELETE FROM fatturato_proforma WHERE fatturato_line_id = $1`, [lineId]);
-              if (l.proforma_entries && l.proforma_entries.length > 0) {
-                for (const p of l.proforma_entries) {
-                  await query(`
-                    INSERT INTO fatturato_proforma (fatturato_line_id, amount, date, note)
-                    VALUES ($1, $2, $3, $4)
-                  `, [lineId, parseFloat(p.amount) || 0, p.date || null, p.note || null]);
-                }
-              }
-            }
-          }
-
-          // Remove lines that the user deleted (only for existing client blocks)
-          if (c.id) {
-            if (incomingLineIds.length > 0) {
-              const placeholders = incomingLineIds.map((_, i) => `$${i + 2}`).join(',');
-              await query(
-                `DELETE FROM fatturato_lines WHERE commessa_client_id = $1 AND id NOT IN (${placeholders})`,
-                [ccId, ...incomingLineIds]
-              );
+              c.n_ordine_zucchetti || null, c.voce_bilancio || null, c.id]);
+              ccId = c.id;
             } else {
-              await query(`DELETE FROM fatturato_lines WHERE commessa_client_id = $1`, [ccId]);
+              // New client block — insert
+              const ccRes = await client.query(`
+                INSERT INTO commessa_clients (commessa_id, client_id, n_cliente, n_ordine, preventivo, ordine, n_ordine_zucchetti, voce_bilancio)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
+              `, [commId, c.client_id || null, c.n_cliente || null, c.n_ordine || null,
+                c.preventivo || null, c.ordine || null,
+                c.n_ordine_zucchetti || null, c.voce_bilancio || null]);
+              ccId = ccRes.rows[0].id;
+            }
+            incomingClientIds.push(ccId);
+
+            // Upsert lines (preserves existing IDs so SAL & Obiettivi rows are never cascade-deleted)
+            const incomingLineIds = [];
+            if (c.lines && c.lines.length > 0) {
+              for (const l of c.lines) {
+                let lineId;
+
+                if (l.id) {
+                  // Existing line — update in place
+                  await client.query(`
+                    UPDATE fatturato_lines
+                    SET commessa_client_id = $1, attivita = $2, descrizione = $3,
+                        valore_ordine = $4, fatturato_amount = $5, proforma = $6,
+                        voce_bilancio = $7
+                    WHERE id = $8
+                  `, [ccId, l.attivita || null, l.descrizione || null,
+                    parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0,
+                    parseFloat(l.proforma) || 0, l.voce_bilancio || null, l.id]);
+                  lineId = l.id;
+                } else {
+                  // New line — insert
+                  const flRes = await client.query(`
+                    INSERT INTO fatturato_lines (commessa_client_id, attivita, descrizione, valore_ordine, fatturato_amount, proforma, voce_bilancio)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
+                  `, [ccId, l.attivita || null, l.descrizione || null,
+                    parseFloat(l.valore_ordine) || 0, parseFloat(l.fatturato_amount) || 0,
+                    parseFloat(l.proforma) || 0, l.voce_bilancio || null]);
+                  lineId = flRes.rows[0].id;
+                }
+                incomingLineIds.push(lineId);
+
+                // Ordini: replace wholesale for this line (no SAL/Obiettivi dependency here)
+                await client.query(`DELETE FROM fatturato_ordini WHERE fatturato_line_id = $1`, [lineId]);
+                if (l.ordini && l.ordini.length > 0) {
+                  for (const o of l.ordini) {
+                    await client.query(`
+                      INSERT INTO fatturato_ordini (fatturato_line_id, label, percentage, expected_date, note)
+                      VALUES ($1, $2, $3, $4, $5)
+                    `, [lineId, o.label || null, parseFloat(o.percentage) || 0, o.expected_date || null, o.note || null]);
+                  }
+                }
+
+                // Realized: replace wholesale for this line
+                await client.query(`DELETE FROM fatturato_realized WHERE fatturato_line_id = $1`, [lineId]);
+                if (l.realized && l.realized.length > 0) {
+                  for (const r of l.realized) {
+                    await client.query(`
+                      INSERT INTO fatturato_realized (fatturato_line_id, amount, registration_date, note)
+                      VALUES ($1, $2, $3, $4)
+                    `, [lineId, parseFloat(r.amount) || 0, r.registration_date || null, r.note || null]);
+                  }
+                }
+
+                // Proforma entries: replace wholesale for this line
+                await client.query(`DELETE FROM fatturato_proforma WHERE fatturato_line_id = $1`, [lineId]);
+                if (l.proforma_entries && l.proforma_entries.length > 0) {
+                  for (const p of l.proforma_entries) {
+                    await client.query(`
+                      INSERT INTO fatturato_proforma (fatturato_line_id, amount, date, note)
+                      VALUES ($1, $2, $3, $4)
+                    `, [lineId, parseFloat(p.amount) || 0, p.date || null, p.note || null]);
+                  }
+                }
+              }
+            }
+
+            // Remove lines that the user deleted (only for existing client blocks)
+            if (c.id) {
+              if (incomingLineIds.length > 0) {
+                const placeholders = incomingLineIds.map((_, i) => `$${i + 2}`).join(',');
+                await client.query(
+                  `DELETE FROM fatturato_lines WHERE commessa_client_id = $1 AND id NOT IN (${placeholders})`,
+                  [ccId, ...incomingLineIds]
+                );
+              } else {
+                await client.query(`DELETE FROM fatturato_lines WHERE commessa_client_id = $1`, [ccId]);
+              }
             }
           }
         }
-      }
 
-      // Remove client blocks that the user deleted
-      if (incomingClientIds.length > 0) {
-        const placeholders = incomingClientIds.map((_, i) => `$${i + 2}`).join(',');
-        await query(
-          `DELETE FROM commessa_clients WHERE commessa_id = $1 AND id NOT IN (${placeholders})`,
-          [commId, ...incomingClientIds]
-        );
-      } else {
-        await query(`DELETE FROM commessa_clients WHERE commessa_id = $1`, [commId]);
-      }
-
-      // employee_extra_costs are managed separately now.
-      // Wholesale replacement for this commessa's task:
-      await query(`DELETE FROM employee_extra_costs WHERE task_id = $1 AND employee_id = 1`, [task_id]);
-      if (extra_costs && extra_costs.length > 0) {
-        for (const ec of extra_costs) {
-          await query(`
-            INSERT INTO employee_extra_costs (employee_id, task_id, description, amount, date)
-            VALUES ($1, $2, $3, $4, $5)
-          `, [1, task_id, ec.description || '', parseFloat(ec.amount) || 0, ec.date || null]);
+        // Remove client blocks that the user deleted
+        if (incomingClientIds.length > 0) {
+          const placeholders = incomingClientIds.map((_, i) => `$${i + 2}`).join(',');
+          await client.query(
+            `DELETE FROM commessa_clients WHERE commessa_id = $1 AND id NOT IN (${placeholders})`,
+            [commId, ...incomingClientIds]
+          );
+        } else {
+          await client.query(`DELETE FROM commessa_clients WHERE commessa_id = $1`, [commId]);
         }
+
+        // employee_extra_costs are managed separately now.
+        // Wholesale replacement for this commessa's task:
+        // Delete ALL extra costs for this task (all users) then re-insert with current user
+        await client.query(`DELETE FROM employee_extra_costs WHERE task_id = $1`, [task_id]);
+        if (extra_costs && extra_costs.length > 0) {
+          for (const ec of extra_costs) {
+            await client.query(`
+              INSERT INTO employee_extra_costs (employee_id, task_id, description, amount, date)
+              VALUES ($1, $2, $3, $4, $5)
+            `, [req.user.userId, task_id, ec.description || '', parseFloat(ec.amount) || 0, ec.date || null]);
+          }
+        }
+
+        await client.query("COMMIT");
+
+        const ctx = getAuditContext(req);
+        logAudit(query, { ...ctx, action: 'UPDATE', entityType: 'commessa', entityId: parseInt(commId), details: { comm_number, name } });
+        res.json({ success: true });
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
       }
-
-      await query("COMMIT");
-
-      const ctx = getAuditContext(req);
-      logAudit(query, { ...ctx, action: 'UPDATE', entityType: 'commessa', entityId: parseInt(commId), details: { comm_number, name } });
-      res.json({ success: true });
     } catch (err) {
-      await query("ROLLBACK");
       console.error("PUT /fatturato error:", err);
       res.status(500).json({ error: "Database error" });
     }
@@ -534,16 +564,24 @@ module.exports = (app, query, authenticate, authenticateHR) => {
   // POST create a new ordine (percentage) for a fatturato_line
   app.post("/api/fatturato-lines/:lineId/ordini", authenticateHR, async (req, res) => {
     const { label, percentage, expected_date, note } = req.body;
+    const client = await pool.connect();
     try {
-      // Validation: Total percentage for the line must not exceed 100%
-      const existingRes = await query(`SELECT SUM(percentage) as total FROM fatturato_ordini WHERE fatturato_line_id = $1`, [req.params.lineId]);
+      await client.query("BEGIN");
+
+      // Lock all existing rows for this line to prevent concurrent inserts
+      // from bypassing the 100% cap (race condition fix)
+      const existingRes = await client.query(
+        `SELECT COALESCE(SUM(percentage), 0) as total FROM fatturato_ordini WHERE fatturato_line_id = $1 FOR UPDATE`,
+        [req.params.lineId]
+      );
       const currentTotal = parseFloat(existingRes.rows[0].total || 0);
       const newPercentage = parseFloat(percentage) || 0;
       if (currentTotal + newPercentage > 100.01) {
+        await client.query("ROLLBACK");
         return res.status(400).json({ error: `Adding this installment would exceed 100% for this activity (current: ${currentTotal}%)` });
       }
 
-      const { rows } = await query(
+      const { rows } = await client.query(
         `INSERT INTO fatturato_ordini (fatturato_line_id, label, percentage, expected_date, note)
          VALUES ($1, $2, $3, $4, $5) RETURNING *`,
         [
@@ -554,30 +592,48 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           note || null
         ]
       );
+      await client.query("COMMIT");
       res.status(201).json(rows[0]);
     } catch (err) {
+      await client.query("ROLLBACK");
       console.error("POST /fatturato-lines/:lineId/ordini error:", err);
       res.status(500).json({ error: "Database error" });
+    } finally {
+      client.release();
     }
   });
 
   // PUT update an existing ordine
   app.put("/api/fatturato-ordini/:id", authenticateHR, async (req, res) => {
     const { label, percentage, expected_date, note } = req.body;
+    const client = await pool.connect();
     try {
-      // Validation: Total percentage for the line must not exceed 100%
-      const lineRes = await query(`SELECT fatturato_line_id FROM fatturato_ordini WHERE id = $1`, [req.params.id]);
-      if (lineRes.rows.length === 0) return res.status(404).json({ error: "Not found" });
+      await client.query("BEGIN");
+
+      // Lock this row first, then check the aggregate to prevent race conditions
+      const lineRes = await client.query(
+        `SELECT fatturato_line_id FROM fatturato_ordini WHERE id = $1 FOR UPDATE`,
+        [req.params.id]
+      );
+      if (lineRes.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Not found" });
+      }
       const lineId = lineRes.rows[0].fatturato_line_id;
 
-      const existingOtherRes = await query(`SELECT SUM(percentage) as total FROM fatturato_ordini WHERE fatturato_line_id = $1 AND id <> $2`, [lineId, req.params.id]);
+      // Also lock sibling rows to get a consistent total
+      const existingOtherRes = await client.query(
+        `SELECT COALESCE(SUM(percentage), 0) as total FROM fatturato_ordini WHERE fatturato_line_id = $1 AND id <> $2 FOR UPDATE`,
+        [lineId, req.params.id]
+      );
       const otherTotal = parseFloat(existingOtherRes.rows[0].total || 0);
       const newPercentage = parseFloat(percentage) || 0;
       if (otherTotal + newPercentage > 100.01) {
+        await client.query("ROLLBACK");
         return res.status(400).json({ error: `Updating this installment would exceed 100% for this activity (others total: ${otherTotal}%)` });
       }
 
-      const { rows } = await query(
+      const { rows } = await client.query(
         `UPDATE fatturato_ordini
          SET label = $1, percentage = $2, expected_date = $3, note = $4
          WHERE id = $5 RETURNING *`,
@@ -589,11 +645,18 @@ module.exports = (app, query, authenticate, authenticateHR) => {
           req.params.id
         ]
       );
-      if (rows.length === 0) return res.status(404).json({ error: "Not found" });
+      if (rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Not found" });
+      }
+      await client.query("COMMIT");
       res.json(rows[0]);
     } catch (err) {
+      await client.query("ROLLBACK");
       console.error("PUT /fatturato-ordini/:id error:", err);
       res.status(500).json({ error: "Database error" });
+    } finally {
+      client.release();
     }
   });
 
@@ -734,28 +797,31 @@ module.exports = (app, query, authenticate, authenticateHR) => {
 
   app.post("/api/fatturato-sal/bulk", authenticateHR, async (req, res) => {
     const { year, month, entries } = req.body; // entries: [{ line_id, percentage, status }]
+    const client = await pool.connect();
     try {
-      await query("BEGIN");
+      await client.query("BEGIN");
       for (const entry of entries) {
         if (entry.id) {
-          await query(`
+          await client.query(`
             UPDATE fatturato_sal 
             SET value = $1, status = $2, year = $3, month = $4
             WHERE id = $5
           `, [entry.value, entry.status || 'in_progress', year, month, entry.id]);
         } else {
-          await query(`
+          await client.query(`
             INSERT INTO fatturato_sal (fatturato_line_id, year, month, value, status)
             VALUES ($1, $2, $3, $4, $5)
           `, [entry.line_id, year, month, entry.value, entry.status || 'in_progress']);
         }
       }
-      await query("COMMIT");
+      await client.query("COMMIT");
       res.json({ success: true });
     } catch (err) {
-      await query("ROLLBACK");
+      await client.query("ROLLBACK");
       console.error("POST /api/fatturato-sal/bulk error:", err);
       res.status(500).json({ error: "Database error" });
+    } finally {
+      client.release();
     }
   });
 
@@ -791,10 +857,11 @@ module.exports = (app, query, authenticate, authenticateHR) => {
   app.post("/api/fatturato-lines/:id/obiettivi/bulk", authenticateHR, async (req, res) => {
     const { id } = req.params;
     const { year, entries } = req.body; // entries: [{ period, ordinante_val, acquisizioni_val }]
+    const client = await pool.connect();
     try {
-      await query('BEGIN');
+      await client.query('BEGIN');
       for (const entry of entries) {
-        await query(`
+        await client.query(`
           INSERT INTO fatturato_obiettivi (fatturato_line_id, year, period, ordinante_val, acquisizioni_val)
           VALUES ($1, $2, $3, $4, $5)
           ON CONFLICT (fatturato_line_id, year, period)
@@ -803,12 +870,14 @@ module.exports = (app, query, authenticate, authenticateHR) => {
             acquisizioni_val = EXCLUDED.acquisizioni_val
         `, [id, year, entry.period, entry.ordinante_val || 0, entry.acquisizioni_val || 0]);
       }
-      await query('COMMIT');
+      await client.query('COMMIT');
       res.json({ message: "Obiettivi updated" });
     } catch (err) {
-      await query('ROLLBACK');
+      await client.query('ROLLBACK');
       console.error("POST /api/fatturato-lines/:id/obiettivi/bulk error:", err);
       res.status(500).json({ error: "Database error" });
+    } finally {
+      client.release();
     }
   });
 };
