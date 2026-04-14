@@ -90,10 +90,15 @@ export default function FatturatoDashboard({ isHR }) {
   const openNewFatt = () => { setEditingFatt(null); setFattForm(getEmptyForm()); setShowFattModal(true); };
 
   const openEditFatt = (row) => {
-    setEditingFatt(row);
-    const linkedTask = allTasks.find(t => t.id === row.task_id);
+    // BUG FIX: Never use the visually 'filtered' row for editing. 
+    // Always find the complete original commessa from fatturatoList so that
+    // clients filtered out of the view aren't permanently deleted on Save.
+    const originalRow = fatturatoList.find(c => c.id === row.id) || row;
+    
+    setEditingFatt(originalRow);
+    const linkedTask = allTasks.find(t => t.id === originalRow.task_id);
 
-    let initialClients = row.clients && row.clients.length > 0 ? row.clients.map(c => ({
+    let initialClients = originalRow.clients && originalRow.clients.length > 0 ? originalRow.clients.map(c => ({
       ...c, lines: c.lines && c.lines.length > 0 ? c.lines : [{ ...getEmptyLine() }]
     })) : [{ ...getEmptyClient() }];
 
