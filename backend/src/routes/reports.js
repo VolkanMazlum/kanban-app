@@ -1272,4 +1272,109 @@ router.get('/timesheet-labor', authenticateHR, async (req, res) => {
   }
 });
 
+
+/**
+ * EXPORT OFFERTE
+ * HR Only
+ */
+router.get('/offerte', authenticateHR, async (req, res) => {
+  try {
+    const { rows: offerte } = await query(`
+      SELECT o.*, c.name as client_name,
+      (
+        SELECT COALESCE(SUM(fl.valore_ordine), 0) / 1000.0
+        FROM fatturato_lines fl
+        JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
+        WHERE cc.commessa_id = o.commessa_id
+          AND (o.client_id IS NULL OR cc.client_id = o.client_id)
+      ) as valore_acquisito
+      FROM offerte o
+      LEFT JOIN clients c ON o.client_id = c.id
+      ORDER BY o.anno DESC, o.preventivo_number DESC, o.revision DESC
+    `);
+
+    const { rows: lines } = await query(`
+      SELECT ol.*, o.anno, o.preventivo_number, o.revision, o.tipo
+      FROM offerta_lines ol
+      JOIN offerte o ON ol.offerta_id = o.id
+      WHERE ol.included = true
+      ORDER BY o.id DESC, ol.category ASC
+    `);
+
+    const workbook = new ExcelJS.Workbook();
+    
+    // SHEET 1: Summary
+    const sheet1 = workbook.addWorksheet('Elenco Offerte');
+    sheet1.columns = [
+      { header: 'Codice', key: 'codice', width: 20 },
+      { header: 'Tipo', key: 'tipo_label', width: 10 },
+      { header: 'Oggetto', key: 'oggetto', width: 35 },
+      { header: 'Cliente', key: 'client_name', width: 25 },
+      { header: 'Committente', key: 'committente', width: 25 },
+      { header: 'Dest. Uso', key: 'destinazione_uso', width: 20 },
+      { header: 'Superficie', key: 'superficie', width: 15 },
+      { header: 'Valore Totale (k€)', key: 'valore_totale', width: 18 },
+      { header: 'Valore Acquisito (k€)', key: 'valore_acquisito', width: 18 },
+      { header: 'Stato', key: 'status', width: 15 },
+      { header: 'Inizio', key: 'periodo_inizio', width: 15 },
+      { header: 'Fine', key: 'periodo_fine', width: 15 },
+      { header: 'Note', key: 'note', width: 40 },
+    ];
+
+    sheet1.getRow(1).font = { bold: true };
+    sheet1.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
+
+    offerte.forEach(o => {
+      const parts = [];
+      if (o.anno) parts.push(String(o.anno).padStart(2, '0'));
+      if (o.tipo) parts.push(o.tipo);
+      if (o.preventivo_number) parts.push(String(o.preventivo_number).padStart(2, '0'));
+      if (o.revision > 0) parts.push(`R${o.revision}`);
+      const codice = parts.join('-') || '—';
+      
+      sheet1.addRow({
+        ...o,
+        codice,
+        tipo_label: o.tipo === 'G' ? 'GARA' : 'PREV',
+        valore_totale: Number(o.valore_totale || 0),
+        valore_acquisito: Number(o.valore_acquisito || 0),
+        periodo_inizio: o.periodo_inizio ? o.periodo_inizio.toISOString().split('T')[0] : '',
+        periodo_fine: o.periodo_fine ? o.periodo_fine.toISOString().split('T')[0] : '',
+      });
+    });
+
+    // SHEET 2: Detailed Lines
+    const sheet2 = workbook.addWorksheet('Dettaglio Attività');
+    sheet2.columns = [
+      { header: 'Offerta', key: 'codice', width: 20 },
+      { header: 'Categoria', key: 'category', width: 20 },
+      { header: 'Attività', key: 'attivita', width: 30 },
+      { header: 'Valore (k€)', key: 'valore', width: 15 },
+      { header: 'Stato Linea', key: 'status', width: 15 },
+    ];
+    sheet2.getRow(1).font = { bold: true };
+    sheet2.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } };
+
+    lines.forEach(l => {
+      const parts = [];
+      if (l.anno) parts.push(String(l.anno).padStart(2, '0'));
+      if (l.tipo) parts.push(l.tipo);
+      if (l.preventivo_number) parts.push(String(l.preventivo_number).padStart(2, '0'));
+      if (l.revision > 0) parts.push(`R${l.revision}`);
+      const codice = parts.join('-') || '—';
+
+      sheet2.addRow({
+        ...l,
+        codice,
+        valore: Number(l.valore || 0)
+      });
+    });
+
+    await sendWorkbook(res, workbook, `Export_Offerte_${new Date().toISOString().split('T')[0]}.xlsx`);
+  } catch (err) {
+    console.error('Export offerte error:', err);
+    res.status(500).json({ error: 'Failed to export offerte' });
+  }
+});
+
 module.exports = router;

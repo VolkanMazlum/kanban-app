@@ -7,6 +7,7 @@ import {
   countIncludedActivities, getStatusStyle, getLineStatusStyle
 } from "../constants/offerteConstants.js";
 import { inpStyle } from "../constants/costConstants.js";
+import { downloadAuthenticatedFile } from "../utils/downloadUtils";
 
 // ── Number formatting ──
 const fmtK = (num) => {
@@ -273,6 +274,18 @@ export default function OfferteDashboard({ isHR }) {
             </p>
           </div>
           <div style={{ display: "flex", gap: 10 }}>
+            <button
+              onClick={() => downloadAuthenticatedFile("/reports/offerte", `Export_Offerte_${new Date().toISOString().split('T')[0]}.xlsx`)}
+              style={{
+                background: "#fff", color: "#374151", border: "1.5px solid #E5E7EB", borderRadius: 10, padding: "11px 20px",
+                fontWeight: 700, fontSize: 13, cursor: "pointer", transition: "all 0.2s",
+                fontFamily: "'Inter',sans-serif"
+              }}
+              onMouseOver={e => e.currentTarget.style.background = "#F9FAFB"}
+              onMouseOut={e => e.currentTarget.style.background = "#fff"}
+            >
+              📥 Esporta Excel
+            </button>
             <button
               onClick={openNewOffer}
               style={{
