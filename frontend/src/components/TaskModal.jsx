@@ -22,6 +22,7 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
   // Keeping the active phase
   const [activeTopicTab, setActiveTopicTab] = useState(form.topics[0] || "");
   const [searchTerms, setSearchTerms] = useState({}); // To store search query per phase index
+  const [teamFilters, setTeamFilters] = useState({}); // To store selected team filter per phase index
   useEffect(() => {
     if (form.topics.length > 0 && !form.topics.includes(activeTopicTab)) {
       setActiveTopicTab(form.topics[0]);
@@ -376,47 +377,123 @@ export default function TaskModal({ task, employees, onSave, onClose }) {
                             </div>
 
                             {/* Search and Add new assignee */}
-                            <div style={{ position: "relative", marginBottom: (searchTerms[idx] || "").length > 0 ? 120 : 0 }}>
-                              <input 
-                                type="text"
-                                placeholder="+ Add member to this phase..."
-                                value={searchTerms[idx] || ""}
-                                onChange={e => setSearchTerms(prev => ({ ...prev, [idx]: e.target.value }))}
-                                style={{ ...inp, padding: "8px 12px", fontSize: 12, borderRadius: 8, background: "#fff", borderColor: "#D1D5DB" }}
-                              />
-                              {(searchTerms[idx] || "").length > 0 && (
-                                <div style={{ 
-                                  position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50,
-                                  background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, 
-                                  boxShadow: "0 10px 25px rgba(0,0,0,0.1)", marginTop: 4, maxHeight: 200, overflowY: "auto"
-                                }}>
-                                  {employees
-                                    .filter(e => e.name.toLowerCase().includes(searchTerms[idx].toLowerCase()))
-                                    .filter(e => !(ph.assignee_hours || []).some(a => a.id === e.id))
-                                    .map(emp => (
-                                      <div 
-                                        key={emp.id}
-                                        onClick={() => {
-                                          const current = ph.assignee_hours || [];
-                                          const updated = [...current, { id: emp.id, name: emp.name, estimated_hours: 0, monthly_hours: [] }];
-                                          updatePhase(idx, "assignee_hours", updated);
-                                          setSearchTerms(prev => ({ ...prev, [idx]: "" }));
+                            {(() => {
+                              const searchVal = searchTerms[idx] || "";
+                              const activeTeam = teamFilters[idx] || "";
+                              const isDropdownOpen = searchVal.length > 0 || activeTeam.length > 0;
+
+                              // All teams present in employees list
+                              const allTeams = [...new Set(
+                                employees
+                                  .map(e => e.hr_details?.team)
+                                  .filter(Boolean)
+                              )].sort();
+
+                              // Filtered candidates
+                              const candidates = employees
+                                .filter(e => !activeTeam || (e.hr_details?.team || "") === activeTeam)
+                                .filter(e => e.name.toLowerCase().includes(searchVal.toLowerCase()))
+                                .filter(e => !(ph.assignee_hours || []).some(a => a.id === e.id));
+
+                              // Group by team for display
+                              const grouped = candidates.reduce((acc, emp) => {
+                                const t = emp.hr_details?.team || "No Team";
+                                if (!acc[t]) acc[t] = [];
+                                acc[t].push(emp);
+                                return acc;
+                              }, {});
+
+                              return (
+                                <div>
+                                  {/* Team filter chips — always visible above the search box */}
+                                  {allTeams.length > 0 && (
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", marginBottom: 6 }}>
+                                      <span style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 600, marginRight: 2 }}>TEAM:</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setTeamFilters(prev => ({ ...prev, [idx]: "" }))}
+                                        style={{
+                                          padding: "2px 8px", borderRadius: 12, fontSize: 10, fontWeight: 600, cursor: "pointer", border: "1.5px solid",
+                                          background: !activeTeam ? "#EFF6FF" : "#F9FAFB",
+                                          color: !activeTeam ? "#2563EB" : "#6B7280",
+                                          borderColor: !activeTeam ? "#2563EB" : "#E5E7EB",
+                                          transition: "all 0.15s"
                                         }}
-                                        style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", transition: "all 0.15s" }}
-                                        onMouseEnter={e => e.target.style.background = "#F3F4F6"}
-                                        onMouseLeave={e => e.target.style.background = "transparent"}
-                                      >
-                                        <Avatar name={emp.name} size={24} idx={employees.indexOf(emp)} />
-                                        <div style={{ fontSize: 12, color: "#374151", fontWeight: 500 }}>{emp.name}</div>
-                                      </div>
-                                    ))
-                                  }
-                                  {employees.filter(e => e.name.toLowerCase().includes(searchTerms[idx].toLowerCase())).filter(e => !(ph.assignee_hours || []).some(a => a.id === e.id)).length === 0 && (
-                                    <div style={{ padding: "12px", fontSize: 11, color: "#9CA3AF", textAlign: "center" }}>No matches found</div>
+                                      >All</button>
+                                      {allTeams.map(team => (
+                                        <button
+                                          key={team}
+                                          type="button"
+                                          onClick={() => setTeamFilters(prev => ({ ...prev, [idx]: prev[idx] === team ? "" : team }))}
+                                          style={{
+                                            padding: "2px 8px", borderRadius: 12, fontSize: 10, fontWeight: 600, cursor: "pointer", border: "1.5px solid",
+                                            background: activeTeam === team ? "#EFF6FF" : "#F9FAFB",
+                                            color: activeTeam === team ? "#2563EB" : "#6B7280",
+                                            borderColor: activeTeam === team ? "#2563EB" : "#E5E7EB",
+                                            transition: "all 0.15s"
+                                          }}
+                                        >{team}</button>
+                                      ))}
+                                    </div>
                                   )}
+
+                                  {/* Search input + dropdown */}
+                                  <div style={{ position: "relative", marginBottom: isDropdownOpen ? 8 : 0 }}>
+                                    <input
+                                      type="text"
+                                      placeholder="+ Add member to this phase..."
+                                      value={searchVal}
+                                      onChange={e => setSearchTerms(prev => ({ ...prev, [idx]: e.target.value }))}
+                                      style={{ ...inp, padding: "8px 12px", fontSize: 12, borderRadius: 8, background: "#fff", borderColor: "#D1D5DB" }}
+                                    />
+                                    {isDropdownOpen && (
+                                      <div style={{
+                                        position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50,
+                                        background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8,
+                                        boxShadow: "0 10px 25px rgba(0,0,0,0.12)", marginTop: 4, maxHeight: 220, overflowY: "auto"
+                                      }}>
+                                        {Object.keys(grouped).length > 0 ? (
+                                          Object.entries(grouped).map(([team, members]) => (
+                                            <div key={team}>
+                                              {Object.keys(grouped).length > 1 && (
+                                                <div style={{ padding: "5px 12px 3px", fontSize: 10, fontWeight: 700, color: "#9CA3AF", letterSpacing: "0.06em", background: "#F9FAFB" }}>
+                                                  {team.toUpperCase()}
+                                                </div>
+                                              )}
+                                              {members.map(emp => (
+                                                <div
+                                                  key={emp.id}
+                                                  onClick={() => {
+                                                    const current = ph.assignee_hours || [];
+                                                    const updated = [...current, { id: emp.id, name: emp.name, estimated_hours: 0, monthly_hours: [] }];
+                                                    updatePhase(idx, "assignee_hours", updated);
+                                                    setSearchTerms(prev => ({ ...prev, [idx]: "" }));
+                                                    setTeamFilters(prev => ({ ...prev, [idx]: "" }));
+                                                  }}
+                                                  style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", transition: "background 0.15s" }}
+                                                  onMouseEnter={e => e.currentTarget.style.background = "#F3F4F6"}
+                                                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                                >
+                                                  <Avatar name={emp.name} size={24} idx={employees.indexOf(emp)} />
+                                                  <div style={{ flex: 1 }}>
+                                                    <div style={{ fontSize: 12, color: "#374151", fontWeight: 500 }}>{emp.name}</div>
+                                                    {emp.hr_details?.team && !activeTeam && (
+                                                      <div style={{ fontSize: 10, color: "#9CA3AF" }}>{emp.hr_details.team}</div>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <div style={{ padding: "12px", fontSize: 11, color: "#9CA3AF", textAlign: "center" }}>No matches found</div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                              )}
-                            </div>
+                              );
+                            })()}
                           </div>
 
                         </div>
