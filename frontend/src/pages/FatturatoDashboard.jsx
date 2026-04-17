@@ -821,13 +821,24 @@ export default function FatturatoDashboard({ isHR }) {
                               </div>
                               <button onClick={() => addOrdineToLine(cIdx, lIdx)} style={{ background: "#EEF2FF", color: "#4F46E5", border: "1px solid #C7D2FE", padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>+ Add %</button>
                             </div>
-                            {(line.ordini || []).map((ord, oIdx) => (
-                              <div key={oIdx} style={{ display: "flex", gap: 4, marginBottom: 4 }}>
-                                <input placeholder="SAL 1" value={ord.label} onChange={e => handleOrdineChange(cIdx, lIdx, oIdx, "label", e.target.value)} style={{ ...inpStyle, flex: 2, padding: "4px", fontSize: 11 }} />
-                                <input type="number" placeholder="%" value={ord.percentage} onChange={e => handleOrdineChange(cIdx, lIdx, oIdx, "percentage", e.target.value)} style={{ ...inpStyle, flex: 1, padding: "4px", fontSize: 11 }} />
-                                <button onClick={() => removeOrdineFromLine(cIdx, lIdx, oIdx)} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 12 }}>✕</button>
-                              </div>
-                            ))}
+                            {(line.ordini || []).map((ord, oIdx) => {
+                              const valOrdineNum = parseEuNum(line.valore_ordine);
+                              const calculatedAmount = valOrdineNum * ((parseFloat(ord.percentage) || 0) / 100);
+                              return (
+                                <div key={oIdx} style={{ display: "flex", gap: 4, marginBottom: 8, alignItems: "flex-start" }}>
+                                  <input placeholder="SAL 1" value={ord.label} onChange={e => handleOrdineChange(cIdx, lIdx, oIdx, "label", e.target.value)} style={{ ...inpStyle, flex: 2, padding: "4px", fontSize: 11 }} />
+                                  <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                                    <input type="number" placeholder="%" value={ord.percentage} onChange={e => handleOrdineChange(cIdx, lIdx, oIdx, "percentage", e.target.value)} style={{ ...inpStyle, padding: "4px", fontSize: 11, width: "100%", boxSizing: "border-box" }} />
+                                    {ord.percentage && !isNaN(calculatedAmount) && (
+                                      <span style={{ fontSize: 9, color: "#9CA3AF", marginTop: 2, paddingLeft: 4, fontStyle: "italic", whiteSpace: "nowrap" }}>
+                                        €{fmtEu(calculatedAmount)}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <button onClick={() => removeOrdineFromLine(cIdx, lIdx, oIdx)} style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 12, padding: "4px" }}>✕</button>
+                                </div>
+                              );
+                            })}
                           </div>
 
                           {/* Nested Proforma Entries */}
