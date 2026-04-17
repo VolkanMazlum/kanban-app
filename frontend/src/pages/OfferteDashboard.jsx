@@ -219,7 +219,7 @@ export default function OfferteDashboard({ isHR }) {
       const lines = { ...o.lines };
       if (!lines[catId]) return o;
       lines[catId] = { ...lines[catId], [actKey]: { ...lines[catId][actKey], status: newStatus } };
-      
+
       const allLines = [];
       Object.values(lines).forEach(cat => {
         Object.values(cat).forEach(act => { if (act.included) allLines.push(act); });
@@ -227,12 +227,12 @@ export default function OfferteDashboard({ isHR }) {
       const allAccepted = allLines.every(l => l.status === "accepted");
       const allRejected = allLines.every(l => l.status === "rejected");
       const hasMixed = allLines.some(l => l.status === "accepted") && allLines.some(l => l.status === "rejected");
-      
+
       let status = o.status;
       if (allAccepted) status = "accettata";
       else if (allRejected) status = "non_accettata";
       else if (hasMixed) status = "parziale";
-      
+
       newOfferStatus = status;
       return { ...o, lines, status };
     }));
@@ -461,9 +461,9 @@ export default function OfferteDashboard({ isHR }) {
                         <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", lineHeight: 1.3 }}>{offer.oggetto || "—"}</div>
                         {offer.committente && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>via {offer.committente}</div>}
                         {offer.note && (
-                          <div style={{ 
-                            fontSize: 11, color: "#6B7280", marginTop: 4, 
-                            fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", 
+                          <div style={{
+                            fontSize: 11, color: "#6B7280", marginTop: 4,
+                            fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden",
                             textOverflow: "ellipsis", borderLeft: "2px solid #E5E7EB", paddingLeft: 6
                           }}>
                             {offer.note}
@@ -497,20 +497,20 @@ export default function OfferteDashboard({ isHR }) {
                       {/* Value (Acquired) */}
                       <td style={{ padding: "12px 14px" }}>
                         <div style={{ display: "flex", flexDirection: "column", minWidth: 80 }}>
-                          <span style={{ 
-                            fontSize: 13, fontWeight: 800, 
+                          <span style={{
+                            fontSize: 13, fontWeight: 800,
                             color: offer.valore_acquisito >= offer.valore_totale && offer.valore_totale > 0 ? "#059669" : "#374151"
                           }}>
                             {offer.valore_acquisito > 0 ? fmtK(offer.valore_acquisito) : "0,0"}
                           </span>
                           {offer.valore_totale > 0 && (
                             <div style={{ width: "100%", height: 3, background: "#E5E7EB", borderRadius: 2, marginTop: 4 }}>
-                              <div style={{ 
-                                width: `${Math.min(100, (offer.valore_acquisito / offer.valore_totale) * 100)}%`, 
-                                height: "100%", 
+                              <div style={{
+                                width: `${Math.min(100, (offer.valore_acquisito / offer.valore_totale) * 100)}%`,
+                                height: "100%",
                                 background: (offer.valore_acquisito >= offer.valore_totale) ? "#10B981" : "#6366F1",
-                                borderRadius: 2 
-                               }} />
+                                borderRadius: 2
+                              }} />
                             </div>
                           )}
                         </div>
@@ -526,9 +526,9 @@ export default function OfferteDashboard({ isHR }) {
                       {/* Actions */}
                       <td style={{ padding: "12px 14px", textAlign: "center" }} onClick={e => e.stopPropagation()}>
                         <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
-                          {offer.status !== "accettata" && (
+                          {offer.status === "accettata" && !offer.task_id && (
                             <button onClick={() => handleAccept(offer.id)}
-                              title="Accetta e converti in Commessa"
+                              title="Converti in Progetto (Board)"
                               style={{ background: "#ECFDF5", color: "#059669", border: "1px solid #A7F3D0", borderRadius: 6, padding: "5px 8px", fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.15s" }}
                               onMouseOver={e => e.currentTarget.style.background = "#D1FAE5"}
                               onMouseOut={e => e.currentTarget.style.background = "#ECFDF5"}
@@ -580,7 +580,7 @@ export default function OfferteDashboard({ isHR }) {
                               <div>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", marginBottom: 2 }}>VALORE ACQUISITO</div>
                                 <div style={{ fontSize: 12, fontWeight: 700, color: offer.valore_acquisito >= offer.valore_totale ? "#059669" : "#111827" }}>
-                                  {fmtK(offer.valore_acquisito)} k€ 
+                                  {fmtK(offer.valore_acquisito)} k€
                                   {offer.valore_totale > 0 && ` (${Math.round((offer.valore_acquisito / offer.valore_totale) * 100)}%)`}
                                 </div>
                               </div>
@@ -686,7 +686,18 @@ export default function OfferteDashboard({ isHR }) {
               <tr style={{ fontWeight: 800, color: "#111827", fontSize: 12 }}>
                 <td colSpan={7} style={{ padding: "14px", textAlign: "right" }}>TOTALE:</td>
                 <td style={{ padding: "14px", fontWeight: 800, color: "#4F46E5" }}>
-                  {fmtK(filteredOffers.reduce((s, o) => s + (parseFloat(o.valore_totale) || 0), 0))} k€
+                  {fmtK(filteredOffers.reduce((rowSum, o) => {
+                    let offerContribution = 0;
+                    Object.values(o.lines).forEach(cat => {
+                      Object.values(cat).forEach(line => {
+                        // Include accepted, rejected, and pending states in the 69,237 match
+                        if (["accepted", "rejected", "pending", "revised"].includes(line.status)) {
+                          offerContribution += (parseFloat(line.valore) || 0);
+                        }
+                      });
+                    });
+                    return rowSum + offerContribution;
+                  }, 0))} k€
                 </td>
                 <td colSpan={2} />
               </tr>

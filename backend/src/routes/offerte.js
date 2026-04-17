@@ -19,6 +19,94 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
     }
   });
 
+  // ---- GET KPI / STATISTICS ----
+  app.get('/api/offerte/kpi', authenticateHR, async (req, res) => {
+    try {
+      const { year } = req.query;
+      const filters = [];
+      const values = [];
+      
+      // Handle year conversion (4-digit from frontend -> 2-digit in DB)
+      if (year && year !== 'all') {
+        const y = parseInt(year);
+        const y2 = y > 2000 ? y % 100 : y;
+        filters.push(`o.anno = $1`);
+        values.push(y2);
+      }
+      
+      const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+
+      // 1. Annual Trend (Always show all years)
+      const { rows: trend } = await query(`
+        SELECT anno, 
+               COUNT(*) as count, 
+               SUM(valore_totale) as total_val,
+               SUM(CASE WHEN status='accettata' THEN valore_totale ELSE 0 END) as accepted_val
+        FROM offerte o
+        GROUP BY anno
+        ORDER BY anno ASC
+      `);
+
+      // 2. Status Distribution
+      const { rows: statusDist } = await query(`
+        SELECT status, COUNT(*) as count, SUM(valore_totale) as total
+        FROM offerte o
+        ${whereClause}
+        GROUP BY status
+      `, values);
+
+      // 3. Type Distribution
+      const { rows: typeDist } = await query(`
+        SELECT tipo, COUNT(*) as count, SUM(valore_totale) as total
+        FROM offerte o
+        ${whereClause}
+        GROUP BY tipo
+      `, values);
+
+      // 4. Category Breakdown
+      const sqlCategory = `
+        SELECT ol.category, SUM(ol.valore) as total
+        FROM offerta_lines ol
+        JOIN offerte o ON ol.offerta_id = o.id
+        ${whereClause ? whereClause + ' AND' : 'WHERE'} ol.included = true
+        GROUP BY ol.category
+      `;
+      const { rows: categoryDist } = await query(sqlCategory, values);
+
+      // 5. Top 10 Clients
+      const { rows: topClients } = await query(`
+        SELECT o.cliente, SUM(o.valore_totale) as total, COUNT(*) as count
+        FROM offerte o
+        ${whereClause}
+        GROUP BY o.cliente
+        ORDER BY total DESC
+        LIMIT 10
+      `, values);
+
+      // 6. Overall Stats
+      const { rows: overall } = await query(`
+        SELECT COUNT(*) as total_count, 
+               SUM(valore_totale) as total_value,
+               SUM(CASE WHEN status='accettata' OR status='parziale' THEN 1 ELSE 0 END) as accepted_count,
+               SUM(CASE WHEN status='accettata' THEN valore_totale ELSE 0 END) as accepted_value
+        FROM offerte o
+        ${whereClause}
+      `, values);
+
+      res.json({
+        trend,
+        statusDist,
+        typeDist,
+        categoryDist,
+        topClients,
+        overall: overall[0]
+      });
+    } catch (err) {
+      console.error('Error fetching offerte KPIs:', err);
+      res.status(500).json({ error: 'Failed to fetch KPIs' });
+    }
+  });
+
   // ---- GET EXISTING PREVENTIVI (for linking) ----
   app.get('/api/offerte/preventivi-esistenti', authenticateHR, async (req, res) => {
     try {

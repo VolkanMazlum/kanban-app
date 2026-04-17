@@ -12,6 +12,7 @@ import KPIDashboard from "./pages/KPIDashboard.jsx";
 import CostDashboard from "./components/CostDashboard.jsx";
 import HRFinanceDashboard from "./pages/HRFinanceDashboard.jsx";
 import OfferteDashboard from "./pages/OfferteDashboard.jsx";
+import OfferteKPI from "./pages/OfferteKPI.jsx";
 import Login from "./pages/Login.jsx";
 import AiAssistant from "./components/AiAssistant.jsx";
 
@@ -210,6 +211,7 @@ export default function App() {
   const TABS = [
     ...(isHR ? [
       { id: "/offerte", label: "📨 Offerte" },
+      { id: "/offerte-kpi", label: "📊 Offerte KPI" },
       { id: "/", label: "📋 Board" },
       { id: "/costs", label: "⏳ Timesheet & Labor" }
     ] : []),
@@ -362,6 +364,7 @@ export default function App() {
               )
             } />
             <Route path="/offerte" element={<OfferteDashboard isHR={isHR} />} />
+            <Route path="/offerte-kpi" element={<OfferteKPI />} />
             <Route path="/gantt" element={<GanttChart tasks={tasks} employees={employees} user={user} />} />
             <Route path="/costs" element={<CostDashboard employees={employees} user={user} />} />
 
