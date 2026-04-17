@@ -75,7 +75,10 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
 
       // 5. Top 10 Clients
       const { rows: topClients } = await query(`
-        SELECT o.cliente, SUM(o.valore_totale) as total, COUNT(*) as count
+        SELECT o.cliente, 
+               SUM(o.valore_totale) as total, 
+               COUNT(*) as count,
+               SUM(CASE WHEN o.status='accettata' THEN o.valore_totale ELSE 0 END) as accepted_val
         FROM offerte o
         ${whereClause}
         GROUP BY o.cliente

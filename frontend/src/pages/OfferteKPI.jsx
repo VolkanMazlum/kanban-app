@@ -202,17 +202,26 @@ export default function OfferteKPI() {
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {data.topClients.map((c, idx) => {
               const maxClient = data.topClients[0]?.total || 1;
-              const pct = (parseFloat(c.total) / maxClient) * 100;
+              const totalPct = (parseFloat(c.total) / maxClient) * 100;
+              const acceptedPctRelToMax = (parseFloat(c.accepted_val || 0) / maxClient) * 100;
+              const acceptedPctRelToTotal = c.total > 0 ? ((parseFloat(c.accepted_val || 0) / parseFloat(c.total)) * 100).toFixed(0) : 0;
               return (
                 <div key={idx} style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#F3F4F6", color: "#6B7280", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800 }}>{idx + 1}</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 11, fontWeight: 700 }}>
-                      <span style={{ color: "#111827" }}>{c.cliente || "Sconosciuto"}</span>
-                      <span style={{ color: "#2563EB" }}>{fmtK(c.total)}</span>
+                      <span style={{ color: "#111827", display: "flex", alignItems: "center", gap: 6 }}>
+                        {c.cliente || "Sconosciuto"}
+                        {acceptedPctRelToTotal > 0 && <span style={{ fontSize: 9, color: "#D97706", background: "#FEF3C7", padding: "1px 4px", borderRadius: 4 }}>{acceptedPctRelToTotal}%</span>}
+                      </span>
+                      <span style={{ color: "#6B7280" }}>
+                         {c.accepted_val > 0 && <span style={{ color: "#D97706" }}>{fmtK(c.accepted_val)} / </span>}
+                         <span style={{ color: "#2563EB" }}>{fmtK(c.total)}</span>
+                      </span>
                     </div>
-                    <div style={{ height: 4, background: "#F3F4F6", borderRadius: 2, overflow: "hidden" }}>
-                      <div style={{ width: `${pct}%`, height: "100%", background: "#2563EB", borderRadius: 2 }} />
+                    <div style={{ height: 6, background: "#F3F4F6", borderRadius: 3, overflow: "hidden", position: "relative" }}>
+                      <div style={{ width: `${totalPct}%`, height: "100%", background: "#BFDBFE", borderRadius: 3, position: "absolute", left: 0, top: 0 }} />
+                      <div style={{ width: `${acceptedPctRelToMax}%`, height: "100%", background: "#F59E0B", borderRadius: 3, position: "absolute", left: 0, top: 0 }} />
                     </div>
                   </div>
                 </div>
