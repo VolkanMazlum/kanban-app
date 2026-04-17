@@ -39,8 +39,8 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
       // 1. Annual Trend (Always show all years)
       const { rows: trend } = await query(`
         SELECT anno, 
-               COUNT(*) as count, 
-               SUM(valore_totale) as total_val,
+               COUNT(CASE WHEN status NOT IN ('revisione', 'info_only') THEN 1 END) as count, 
+               SUM(CASE WHEN status NOT IN ('revisione', 'info_only') THEN valore_totale ELSE 0 END) as total_val,
                SUM(CASE WHEN status='accettata' THEN valore_totale ELSE 0 END) as accepted_val
         FROM offerte o
         GROUP BY anno
@@ -85,8 +85,8 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
 
       // 6. Overall Stats
       const { rows: overall } = await query(`
-        SELECT COUNT(*) as total_count, 
-               SUM(valore_totale) as total_value,
+        SELECT COUNT(CASE WHEN status NOT IN ('revisione', 'info_only') THEN 1 END) as total_count, 
+               SUM(CASE WHEN status NOT IN ('revisione', 'info_only') THEN valore_totale ELSE 0 END) as total_value,
                SUM(CASE WHEN status='accettata' OR status='parziale' THEN 1 ELSE 0 END) as accepted_count,
                SUM(CASE WHEN status='accettata' THEN valore_totale ELSE 0 END) as accepted_value
         FROM offerte o
@@ -137,6 +137,11 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
           JOIN commessa_clients cc ON fl.commessa_client_id = cc.id
           WHERE cc.commessa_id = o.commessa_id
             AND (o.client_id IS NULL OR cc.client_id = o.client_id)
+            AND (
+              cc.preventivo ILIKE '%' || o.preventivo_number || '-' || LPAD(o.anno::text, 2, '0') || '%'
+              OR cc.preventivo ILIKE '%' || LPAD(o.preventivo_number, 2, '0') || '-' || LPAD(o.anno::text, 2, '0') || '%'
+              OR cc.preventivo ILIKE '%' || o.preventivo_number || '/' || LPAD(o.anno::text, 2, '0') || '%'
+            )
         ) as valore_acquisito
         FROM offerte o
         LEFT JOIN clients c ON o.client_id = c.id

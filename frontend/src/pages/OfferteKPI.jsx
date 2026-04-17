@@ -41,7 +41,10 @@ export default function OfferteKPI() {
   const stats = useMemo(() => {
     if (!data || !data.overall) return {};
     const { total_count, total_value, accepted_count, accepted_value } = data.overall;
-    const convRate = total_count > 0 ? Math.round((accepted_count / total_count) * 100) : 0;
+    
+    // Changing from count-based to value-based conversion as requested
+    const convRate = total_value > 0 ? Math.round((accepted_value / total_value) * 100) : 0;
+    
     return {
       total_count: parseInt(total_count) || 0,
       total_value: parseFloat(total_value) || 0,
