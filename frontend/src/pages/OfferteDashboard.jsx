@@ -688,10 +688,10 @@ export default function OfferteDashboard({ isHR }) {
                 <td style={{ padding: "14px", fontWeight: 800, color: "#4F46E5" }}>
                   {fmtK(filteredOffers.reduce((rowSum, o) => {
                     let offerContribution = 0;
-                    Object.values(o.lines).forEach(cat => {
-                      Object.values(cat).forEach(line => {
-                        // Include accepted, rejected, and pending states in the 69,237 match
-                        if (["accepted", "rejected", "pending", "revised"].includes(line.status)) {
+                    Object.values(o.lines || {}).forEach(cat => {
+                      Object.values(cat || {}).forEach(line => {
+                        // IMPORTANT: Only include lines marked as 'included'
+                        if (line.included && ["accepted", "rejected", "pending", "revised"].includes(line.status)) {
                           offerContribution += (parseFloat(line.valore) || 0);
                         }
                       });

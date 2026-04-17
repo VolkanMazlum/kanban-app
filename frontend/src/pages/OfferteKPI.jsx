@@ -196,18 +196,22 @@ export default function OfferteKPI() {
           </div>
         </div>
 
-        {/* TOP CLIENTS */}
-        <div style={{ background: "#fff", borderRadius: 16, padding: 24, border: "1.5px solid #E5E7EB" }}>
-          <h3 style={{ fontSize: 14, fontWeight: 800, color: "#111827", marginBottom: 20 }}>Top 10 Clienti (per Valore)</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {/* CLIENT STATISTICS (Scrollable) */}
+        <div style={{ background: "#fff", borderRadius: 16, padding: 24, border: "1.5px solid #E5E7EB", display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 800, color: "#111827", margin: 0 }}>Statistiche Clienti (Valore)</h3>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF" }}>{data.topClients.length} Clienti</span>
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", maxHeight: 400, paddingRight: 8, display: "flex", flexDirection: "column", gap: 14 }}>
             {data.topClients.map((c, idx) => {
               const maxClient = data.topClients[0]?.total || 1;
               const totalPct = (parseFloat(c.total) / maxClient) * 100;
               const acceptedPctRelToMax = (parseFloat(c.accepted_val || 0) / maxClient) * 100;
               const acceptedPctRelToTotal = c.total > 0 ? ((parseFloat(c.accepted_val || 0) / parseFloat(c.total)) * 100).toFixed(0) : 0;
+              
               return (
                 <div key={idx} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#F3F4F6", color: "#6B7280", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800 }}>{idx + 1}</div>
+                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#F3F4F6", color: "#6B7280", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800 }}>{idx + 1}</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 11, fontWeight: 700 }}>
                       <span style={{ color: "#111827", display: "flex", alignItems: "center", gap: 6 }}>

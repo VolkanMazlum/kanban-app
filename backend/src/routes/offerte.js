@@ -4,9 +4,10 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
   app.get('/api/offerte/summary', authenticateHR, async (req, res) => {
     try {
       const { rows } = await query(`
-        SELECT status, COUNT(*) as count, SUM(valore_totale) as total
-        FROM offerte
-        GROUP BY status
+        SELECT o.status, COUNT(DISTINCT o.id) as count, SUM(ol.valore) as total
+        FROM offerte o
+        LEFT JOIN offerta_lines ol ON o.id = ol.offerta_id AND ol.included = true
+        GROUP BY o.status
       `);
       const summary = rows.reduce((acc, row) => {
         acc[row.status] = { count: parseInt(row.count) || 0, total: parseFloat(row.total) || 0 };
@@ -38,34 +39,37 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
 
       // 1. Annual Trend (Always show all years)
       const { rows: trend } = await query(`
-        SELECT anno, 
-               COUNT(CASE WHEN status NOT IN ('revisione', 'info_only') THEN 1 END) as count, 
-               SUM(CASE WHEN status NOT IN ('revisione', 'info_only') THEN valore_totale ELSE 0 END) as total_val,
-               SUM(CASE WHEN status='accettata' THEN valore_totale ELSE 0 END) as accepted_val
+        SELECT o.anno, 
+               COUNT(DISTINCT CASE WHEN o.status NOT IN ('revisione', 'info_only') THEN o.id END) as count, 
+               COALESCE(SUM(CASE WHEN o.status NOT IN ('revisione', 'info_only') THEN ol.valore ELSE 0 END), 0) as total_val,
+               COALESCE(SUM(CASE WHEN o.status='accettata' THEN ol.valore ELSE 0 END), 0) as accepted_val
         FROM offerte o
-        GROUP BY anno
-        ORDER BY anno ASC
+        LEFT JOIN offerta_lines ol ON o.id = ol.offerta_id AND ol.included = true
+        GROUP BY o.anno
+        ORDER BY o.anno ASC
       `);
 
       // 2. Status Distribution
       const { rows: statusDist } = await query(`
-        SELECT status, COUNT(*) as count, SUM(valore_totale) as total
+        SELECT o.status, COUNT(DISTINCT o.id) as count, COALESCE(SUM(ol.valore), 0) as total
         FROM offerte o
+        LEFT JOIN offerta_lines ol ON o.id = ol.offerta_id AND ol.included = true
         ${whereClause}
-        GROUP BY status
+        GROUP BY o.status
       `, values);
 
       // 3. Type Distribution
       const { rows: typeDist } = await query(`
-        SELECT tipo, COUNT(*) as count, SUM(valore_totale) as total
+        SELECT o.tipo, COUNT(DISTINCT o.id) as count, COALESCE(SUM(ol.valore), 0) as total
         FROM offerte o
+        LEFT JOIN offerta_lines ol ON o.id = ol.offerta_id AND ol.included = true
         ${whereClause}
-        GROUP BY tipo
+        GROUP BY o.tipo
       `, values);
 
       // 4. Category Breakdown
       const sqlCategory = `
-        SELECT ol.category, SUM(ol.valore) as total
+        SELECT ol.category, COALESCE(SUM(ol.valore), 0) as total
         FROM offerta_lines ol
         JOIN offerte o ON ol.offerta_id = o.id
         ${whereClause ? whereClause + ' AND' : 'WHERE'} ol.included = true
@@ -73,26 +77,27 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
       `;
       const { rows: categoryDist } = await query(sqlCategory, values);
 
-      // 5. Top 10 Clients
+      // 5. Client Statistics (All)
       const { rows: topClients } = await query(`
         SELECT o.cliente, 
-               SUM(o.valore_totale) as total, 
-               COUNT(*) as count,
-               SUM(CASE WHEN o.status='accettata' THEN o.valore_totale ELSE 0 END) as accepted_val
+               COALESCE(SUM(ol.valore), 0) as total, 
+               COUNT(DISTINCT o.id) as count,
+               COALESCE(SUM(CASE WHEN o.status='accettata' THEN ol.valore ELSE 0 END), 0) as accepted_val
         FROM offerte o
-        ${whereClause}
+        LEFT JOIN offerta_lines ol ON o.id = ol.offerta_id AND ol.included = true
+        ${whereClause ? whereClause + ' AND o.cliente IS NOT NULL AND o.cliente != \'\'' : 'WHERE o.cliente IS NOT NULL AND o.cliente != \'\''}
         GROUP BY o.cliente
         ORDER BY total DESC
-        LIMIT 10
       `, values);
 
       // 6. Overall Stats
       const { rows: overall } = await query(`
-        SELECT COUNT(CASE WHEN status NOT IN ('revisione', 'info_only') THEN 1 END) as total_count, 
-               SUM(CASE WHEN status NOT IN ('revisione', 'info_only') THEN valore_totale ELSE 0 END) as total_value,
-               SUM(CASE WHEN status='accettata' OR status='parziale' THEN 1 ELSE 0 END) as accepted_count,
-               SUM(CASE WHEN status='accettata' THEN valore_totale ELSE 0 END) as accepted_value
+        SELECT COUNT(DISTINCT CASE WHEN o.status NOT IN ('revisione', 'info_only') THEN o.id END) as total_count, 
+               COALESCE(SUM(CASE WHEN o.status NOT IN ('revisione', 'info_only') THEN ol.valore ELSE 0 END), 0) as total_value,
+               COUNT(DISTINCT CASE WHEN o.status='accettata' OR o.status='parziale' THEN o.id END) as accepted_count,
+               COALESCE(SUM(CASE WHEN o.status='accettata' THEN ol.valore ELSE 0 END), 0) as accepted_value
         FROM offerte o
+        LEFT JOIN offerta_lines ol ON o.id = ol.offerta_id AND ol.included = true
         ${whereClause}
       `, values);
 
