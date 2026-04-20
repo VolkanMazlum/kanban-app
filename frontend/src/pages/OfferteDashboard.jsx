@@ -68,16 +68,27 @@ export default function OfferteDashboard({ isHR }) {
     }
   }, [isHR]);
 
-  // ── Available years from offers ──
-  const availableYears = useMemo(() => {
-    const years = [...new Set(offers.map(o => o.anno))].sort((a, b) => b - a);
-    return years;
+  const [availableYears, setAvailableYears] = useState([]);
+
+  useEffect(() => {
+    if (offers && offers.length > 0) {
+      setAvailableYears(prev => {
+        const yearsSet = new Set([...prev, ...offers.map(o => o.anno)]);
+        return [...yearsSet].sort((a, b) => b - a);
+      });
+    }
   }, [offers]);
 
-  // ── Available clients from offers ──
-  const availableClients = useMemo(() => {
-    const clientsSet = new Set(offers.map(o => o.cliente).filter(c => c && c.trim() !== ""));
-    return [...clientsSet].sort((a, b) => a.localeCompare(b));
+  const [availableClients, setAvailableClients] = useState([]);
+
+  useEffect(() => {
+    if (offers && offers.length > 0) {
+      setAvailableClients(prev => {
+        const currentClients = offers.map(o => o.cliente).filter(c => c && c.trim() !== "");
+        const clientsSet = new Set([...prev, ...currentClients]);
+        return [...clientsSet].sort((a, b) => a.localeCompare(b));
+      });
+    }
   }, [offers]);
 
   // ── DYNAMIC SUMMARY STATS ──

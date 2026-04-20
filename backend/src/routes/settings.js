@@ -30,6 +30,9 @@ module.exports = (app, query, authenticate) => {
                     UNION
                     -- Years from all tasks (creation)
                     SELECT DISTINCT EXTRACT(YEAR FROM created_at)::int as yr FROM tasks
+                    UNION
+                    -- Years from offerte
+                    SELECT DISTINCT (2000 + anno) as yr FROM offerte WHERE anno IS NOT NULL
                 )
                 SELECT DISTINCT yr FROM all_years WHERE yr IS NOT NULL AND yr > 2000 ORDER BY yr DESC
             `);

@@ -192,7 +192,7 @@ module.exports = function (app, query, pool, authenticate, authenticateHR) {
         LEFT JOIN clients c ON o.client_id = c.id
       `;
 
-      if (req.query.anno) {
+      if (req.query.anno && req.query.anno !== 'all') {
         filters.push(`o.anno = $${filters.length + 1}`);
         values.push(req.query.anno);
       }
