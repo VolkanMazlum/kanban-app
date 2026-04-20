@@ -226,6 +226,7 @@ export const updateLineObiettiviBulk = (lineId, data) => req(`/fatturato-lines/$
 
 // ── OFFERTE ──
 export const getOfferteSummary = () => req("/offerte/summary");
+export const getOfferteClients = () => req("/offerte/clients");
 export const getPreventiviEsistenti = () => req("/offerte/preventivi-esistenti");
 export const getOfferte = (anno, status) => {
   const query = [];
@@ -238,7 +239,13 @@ export const updateOfferta = (id, data) => req(`/offerte/${id}`, { method: "PUT"
 export const deleteOfferta = (id) => req(`/offerte/${id}`, { method: "DELETE" });
 export const acceptOfferta = (id) => req(`/offerte/${id}/accept`, { method: "POST" });
 export const patchLineStatus = (id, payload) => req(`/offerte/${id}/lines/status`, { method: "PATCH", body: JSON.stringify(payload) });
-export const getOfferteKPI = (year) => req(`/offerte/kpi${year && year !== 'all' ? `?year=${year}` : ""}`);
+export const getOfferteKPI = (year, client, tipo) => {
+  const query = [];
+  if (year && year !== 'all') query.push(`year=${year}`);
+  if (client) query.push(`client=${encodeURIComponent(client)}`);
+  if (tipo && tipo !== 'all') query.push(`tipo=${tipo}`);
+  return req(`/offerte/kpi${query.length ? '?' + query.join('&') : ""}`);
+};
 
 // ── AUDIT LOGS ──
 export const getAuditLogs = (limit = 100) => req(`/audit-logs?limit=${limit}`);

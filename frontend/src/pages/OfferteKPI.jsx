@@ -17,17 +17,22 @@ export default function OfferteKPI() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [filterYear, setFilterYear] = useState("all");
+  const [filterClient, setFilterClient] = useState("");
+  const [filterTipo, setFilterTipo] = useState("all");
+  
   const [availableYears, setAvailableYears] = useState([]);
+  const [offerteClients, setOfferteClients] = useState([]);
 
   useEffect(() => {
     api.getAvailableYears().then(setAvailableYears).catch(console.error);
+    api.getOfferteClients().then(setOfferteClients).catch(console.error);
   }, []);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        const res = await api.getOfferteKPI(filterYear);
+        const res = await api.getOfferteKPI(filterYear, filterClient, filterTipo);
         setData(res);
       } catch (err) {
         console.error("Failed to load Offerte KPIs", err);
@@ -36,7 +41,7 @@ export default function OfferteKPI() {
       }
     };
     load();
-  }, [filterYear]);
+  }, [filterYear, filterClient, filterTipo]);
 
   const stats = useMemo(() => {
     if (!data || !data.overall) return {};
@@ -74,16 +79,43 @@ export default function OfferteKPI() {
           <h2 style={{ fontSize: 26, fontWeight: 800, color: "#111827", margin: 0, letterSpacing: "-0.025em" }}>Offerte KPI & Statistics</h2>
           <p style={{ color: "#6B7280", margin: "4px 0 0", fontSize: 14 }}>Analisi delle performance commerciali e trend annuali</p>
         </div>
-        <div style={{ display: "flex", gap: 12, alignItems: "center", background: "#fff", padding: "6px 14px", borderRadius: 12, border: "1.5px solid #E5E7EB" }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF" }}>ANNO DI RIFERIMENTO:</span>
-          <select 
-            value={filterYear} 
-            onChange={e => setFilterYear(e.target.value)}
-            style={{ border: "none", background: "none", fontSize: 14, fontWeight: 700, outline: "none", color: "#2563EB", cursor: "pointer" }}
-          >
-            <option value="all">Tutti gli anni</option>
-            {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          
+          <div style={{ display: "flex", alignItems: "center", background: "#fff", padding: "6px 14px", borderRadius: 12, border: "1.5px solid #E5E7EB" }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginRight: 8 }}>CLIENTE:</span>
+            <select 
+              value={filterClient} 
+              onChange={e => setFilterClient(e.target.value)}
+              style={{ border: "none", background: "none", fontSize: 13, fontWeight: 700, outline: "none", color: "#2563EB", cursor: "pointer", maxWidth: 150 }}
+            >
+              <option value="">Tutti</option>
+              {offerteClients.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", background: "#fff", padding: "6px 14px", borderRadius: 12, border: "1.5px solid #E5E7EB" }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginRight: 8 }}>TIPO:</span>
+            <select 
+              value={filterTipo} 
+              onChange={e => setFilterTipo(e.target.value)}
+              style={{ border: "none", background: "none", fontSize: 13, fontWeight: 700, outline: "none", color: "#2563EB", cursor: "pointer" }}
+            >
+              <option value="all">Tutti</option>
+              {OFFER_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", background: "#fff", padding: "6px 14px", borderRadius: 12, border: "1.5px solid #E5E7EB" }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginRight: 8 }}>ANNO:</span>
+            <select 
+              value={filterYear} 
+              onChange={e => setFilterYear(e.target.value)}
+              style={{ border: "none", background: "none", fontSize: 13, fontWeight: 700, outline: "none", color: "#2563EB", cursor: "pointer" }}
+            >
+              <option value="all">Tutti gli anni</option>
+              {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -123,9 +155,9 @@ export default function OfferteKPI() {
                 <div key={t.anno} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
                   <div style={{ width: "100%", display: "flex", justifyContent: "center", alignItems: "flex-end", gap: 4, height: 200 }}>
                     {/* Potential bar */}
-                    <div title={`Potenziale: ${fmtK(t.total_val)}`} style={{ width: 14, height: hTotal, background: "#DBEAFE", borderRadius: "4px 4px 0 0", position: "relative" }}>
+                    <div title={`Potenziale: ${fmtK(t.total_val)}`} style={{ width: 14, height: hTotal, background: "#BFDBFE", borderRadius: "4px 4px 0 0", position: "relative" }}>
                       {/* Accepted bar (overlapping or side by side?) - Let's do side by side or layered */}
-                      <div title={`Accettato: ${fmtK(t.accepted_val)}`} style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: hAccepted, background: "#2563EB", borderRadius: "4px 4px 0 0" }} />
+                      <div title={`Accettato: ${fmtK(t.accepted_val)}`} style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: hAccepted, background: "#10B981", borderRadius: "4px 4px 0 0" }} />
                     </div>
                   </div>
                   <div style={{ textAlign: "center" }}>
@@ -138,11 +170,11 @@ export default function OfferteKPI() {
           </div>
           <div style={{ marginTop: 16, display: "flex", gap: 20 }}>
              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-               <div style={{ width: 10, height: 10, borderRadius: 3, background: "#DBEAFE" }} />
+               <div style={{ width: 10, height: 10, borderRadius: 3, background: "#BFDBFE" }} />
                <span style={{ fontSize: 11, color: "#6B7280", fontWeight: 600 }}>Volume Totale</span>
              </div>
              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-               <div style={{ width: 10, height: 10, borderRadius: 3, background: "#2563EB" }} />
+               <div style={{ width: 10, height: 10, borderRadius: 3, background: "#10B981" }} />
                <span style={{ fontSize: 11, color: "#6B7280", fontWeight: 600 }}>Volume Accettato</span>
              </div>
           </div>

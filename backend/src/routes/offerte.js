@@ -1,6 +1,6 @@
 module.exports = function(app, query, pool, authenticate, authenticateHR) {
   
-  // ---- GET SUMMARY STATS ----
+  // ---- GET SUMMARY STATS (Deprecated - computed client-side now) ----
   app.get('/api/offerte/summary', authenticateHR, async (req, res) => {
     try {
       const { rows } = await query(`
@@ -23,21 +23,41 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
   // ---- GET KPI / STATISTICS ----
   app.get('/api/offerte/kpi', authenticateHR, async (req, res) => {
     try {
-      const { year } = req.query;
+      const { year, client, tipo } = req.query;
       const filters = [];
       const values = [];
       
+      const trendFilters = [];
+      const trendValues = [];
+
       // Handle year conversion (4-digit from frontend -> 2-digit in DB)
       if (year && year !== 'all') {
         const y = parseInt(year);
         const y2 = y > 2000 ? y % 100 : y;
-        filters.push(`o.anno = $1`);
         values.push(y2);
+        filters.push(`o.anno = $${values.length}`);
+      }
+      
+      if (client) {
+        values.push(client);
+        filters.push(`o.cliente = $${values.length}`);
+        
+        trendValues.push(client);
+        trendFilters.push(`o.cliente = $${trendValues.length}`);
+      }
+      
+      if (tipo && tipo !== 'all') {
+        values.push(tipo);
+        filters.push(`o.tipo = $${values.length}`);
+        
+        trendValues.push(tipo);
+        trendFilters.push(`o.tipo = $${trendValues.length}`);
       }
       
       const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+      const trendWhere = trendFilters.length > 0 ? `WHERE ${trendFilters.join(' AND ')}` : '';
 
-      // 1. Annual Trend (Always show all years)
+      // 1. Annual Trend (Always show all years, but filtered by client/tipo if present)
       const { rows: trend } = await query(`
         SELECT o.anno, 
                COUNT(DISTINCT CASE WHEN o.status NOT IN ('revisione', 'info_only') THEN o.id END) as count, 
@@ -45,9 +65,10 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
                COALESCE(SUM(CASE WHEN o.status='accettata' THEN ol.valore ELSE 0 END), 0) as accepted_val
         FROM offerte o
         LEFT JOIN offerta_lines ol ON o.id = ol.offerta_id AND ol.included = true
+        ${trendWhere}
         GROUP BY o.anno
         ORDER BY o.anno ASC
-      `);
+      `, trendValues);
 
       // 2. Status Distribution
       const { rows: statusDist } = await query(`
@@ -112,6 +133,22 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
     } catch (err) {
       console.error('Error fetching offerte KPIs:', err);
       res.status(500).json({ error: 'Failed to fetch KPIs' });
+    }
+  });
+
+  // ---- GET UNIQUE OFFERTE CLIENTS ----
+  app.get('/api/offerte/clients', authenticateHR, async (req, res) => {
+    try {
+      const { rows } = await query(`
+        SELECT DISTINCT cliente 
+        FROM offerte 
+        WHERE cliente IS NOT NULL AND cliente != ''
+        ORDER BY cliente ASC
+      `);
+      res.json(rows.map(r => r.cliente));
+    } catch (err) {
+      console.error('Error fetching offerte clients:', err);
+      res.status(500).json({ error: 'Failed to fetch clients' });
     }
   });
 

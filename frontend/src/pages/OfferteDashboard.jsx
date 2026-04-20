@@ -31,8 +31,7 @@ export default function OfferteDashboard({ isHR }) {
   const [filterYear, setFilterYear] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterClient, setFilterClient] = useState("");
-
-  const [summaryStats, setSummaryStats] = useState({});
+  const [filterTipo, setFilterTipo] = useState("all");
 
   const [showModal, setShowModal] = useState(false);
   const [editingOffer, setEditingOffer] = useState(null);
@@ -47,18 +46,17 @@ export default function OfferteDashboard({ isHR }) {
   const loadData = useCallback(async () => {
     if (!isHR) return;
     try {
-      const [offData, sumData, extPrev] = await Promise.all([
-        api.getOfferte(filterYear, filterStatus),
-        api.getOfferteSummary(),
+      // Fetch ALL offers for the year to compute dynamic stats accurately without losing other statuses
+      const [offData, extPrev] = await Promise.all([
+        api.getOfferte(filterYear, "all"),
         api.getPreventiviEsistenti()
       ]);
       setOffers(offData || []);
-      setSummaryStats(sumData || {});
       setExistingPreventivi(extPrev || []);
     } catch (err) {
       console.error("Failed to load offerte", err);
     }
-  }, [isHR, filterYear, filterStatus]);
+  }, [isHR, filterYear]);
 
   useEffect(() => {
     loadData();
@@ -76,11 +74,58 @@ export default function OfferteDashboard({ isHR }) {
     return years;
   }, [offers]);
 
+  // ── Available clients from offers ──
+  const availableClients = useMemo(() => {
+    const clientsSet = new Set(offers.map(o => o.cliente).filter(c => c && c.trim() !== ""));
+    return [...clientsSet].sort((a, b) => a.localeCompare(b));
+  }, [offers]);
+
+  // ── DYNAMIC SUMMARY STATS ──
+  // Calculate summary stats based on all filters EXCEPT status filter
+  const summaryStats = useMemo(() => {
+    const stats = {};
+    OFFER_STATUSES.forEach(s => { stats[s.id] = { count: 0, total: 0 }; });
+    
+    offers.forEach(o => {
+      // Apply filters (client, tipo, and search)
+      if (filterClient && o.cliente !== filterClient) return;
+      if (filterTipo !== "all" && o.tipo !== filterTipo) return;
+      if (searchTerm) {
+        const s = searchTerm.toLowerCase();
+        const code = formatOfferCode(o.anno, o.tipo, o.preventivo_number, o.revision);
+        if (!(
+          code.toLowerCase().includes(s) ||
+          (o.oggetto || "").toLowerCase().includes(s) ||
+          (o.cliente || "").toLowerCase().includes(s) ||
+          (o.committente || "").toLowerCase().includes(s) ||
+          (o.destinazione_uso || "").toLowerCase().includes(s)
+        )) return;
+      }
+
+      if (stats[o.status]) {
+        stats[o.status].count += 1;
+        
+        let offerVal = 0;
+        Object.values(o.lines || {}).forEach(cat => {
+          Object.values(cat || {}).forEach(line => {
+            if (line.included && ["accepted", "rejected", "pending", "revised"].includes(line.status)) {
+              offerVal += (parseFloat(line.valore) || 0);
+            }
+          });
+        });
+        stats[o.status].total += offerVal;
+      }
+    });
+    
+    return stats;
+  }, [offers, filterClient, filterTipo, searchTerm]);
+
   // ── FILTERED OFFERS ──
   const filteredOffers = useMemo(() => {
     return offers.filter(o => {
-      // (Server is already handling some base filters, but we do client-side search here)
-      if (filterClient && o.cliente?.toLowerCase() !== filterClient.toLowerCase()) return false;
+      if (filterStatus !== "all" && o.status !== filterStatus) return false;
+      if (filterClient && o.cliente !== filterClient) return false;
+      if (filterTipo !== "all" && o.tipo !== filterTipo) return false;
       if (searchTerm) {
         const s = searchTerm.toLowerCase();
         const code = formatOfferCode(o.anno, o.tipo, o.preventivo_number, o.revision);
@@ -94,7 +139,7 @@ export default function OfferteDashboard({ isHR }) {
       }
       return true;
     });
-  }, [offers, filterClient, searchTerm]);
+  }, [offers, filterStatus, filterClient, filterTipo, searchTerm]);
 
   // ── Handlers ──
   const toggleExpand = (id) => {
@@ -363,11 +408,25 @@ export default function OfferteDashboard({ isHR }) {
 
           <div style={{ height: 24, width: 1, background: "#E5E7EB" }} />
 
+          {/* Client filter */}
+          <select value={filterClient} onChange={e => setFilterClient(e.target.value)}
+            style={{ padding: "9px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 13, fontWeight: 600, color: "#111827", background: "#fff", cursor: "pointer", outline: "none", fontFamily: "'Inter',sans-serif", maxWidth: 180 }}>
+            <option value="">Tutti i clienti</option>
+            {availableClients.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+
           {/* Year filter */}
           <select value={filterYear} onChange={e => setFilterYear(e.target.value)}
             style={{ padding: "9px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 13, fontWeight: 600, color: "#111827", background: "#fff", cursor: "pointer", outline: "none", fontFamily: "'Inter',sans-serif" }}>
             <option value="all">Tutti gli anni</option>
             {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+
+          {/* Tipo filter */}
+          <select value={filterTipo} onChange={e => setFilterTipo(e.target.value)}
+            style={{ padding: "9px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 13, fontWeight: 600, color: "#111827", background: "#fff", cursor: "pointer", outline: "none", fontFamily: "'Inter',sans-serif" }}>
+            <option value="all">Tutti i tipi</option>
+            {OFFER_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
           </select>
 
           {/* Status filter */}
