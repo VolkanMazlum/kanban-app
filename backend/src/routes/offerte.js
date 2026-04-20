@@ -1,5 +1,5 @@
-module.exports = function(app, query, pool, authenticate, authenticateHR) {
-  
+module.exports = function (app, query, pool, authenticate, authenticateHR) {
+
   // ---- GET SUMMARY STATS (Deprecated - computed client-side now) ----
   app.get('/api/offerte/summary', authenticateHR, async (req, res) => {
     try {
@@ -26,7 +26,7 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
       const { year, client, tipo } = req.query;
       const filters = [];
       const values = [];
-      
+
       const trendFilters = [];
       const trendValues = [];
 
@@ -37,23 +37,23 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
         values.push(y2);
         filters.push(`o.anno = $${values.length}`);
       }
-      
+
       if (client) {
         values.push(client);
         filters.push(`o.cliente = $${values.length}`);
-        
+
         trendValues.push(client);
         trendFilters.push(`o.cliente = $${trendValues.length}`);
       }
-      
+
       if (tipo && tipo !== 'all') {
         values.push(tipo);
         filters.push(`o.tipo = $${values.length}`);
-        
+
         trendValues.push(tipo);
         trendFilters.push(`o.tipo = $${trendValues.length}`);
       }
-      
+
       const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
       const trendWhere = trendFilters.length > 0 ? `WHERE ${trendFilters.join(' AND ')}` : '';
 
@@ -191,7 +191,7 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
         FROM offerte o
         LEFT JOIN clients c ON o.client_id = c.id
       `;
-      
+
       if (req.query.anno) {
         filters.push(`o.anno = $${filters.length + 1}`);
         values.push(req.query.anno);
@@ -204,7 +204,7 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
       if (filters.length > 0) {
         sql += ` WHERE ` + filters.join(' AND ');
       }
-      
+
       sql += ` ORDER BY o.anno DESC, o.preventivo_number DESC, o.revision DESC`;
 
       const { rows: offerte } = await query(sql, values);
@@ -245,11 +245,11 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const { 
-        anno, preventivo_number, revision, is_final_revision, tipo, oggetto, 
-        committente, cliente, client_id, superficie, destinazione_uso, specifiche, 
-        valore_totale, importo_opere, periodo_inizio, periodo_fine, 
-        note, status, lines, commessa_id 
+      const {
+        anno, preventivo_number, revision, is_final_revision, tipo, oggetto,
+        committente, cliente, client_id, superficie, destinazione_uso, specifiche,
+        valore_totale, importo_opere, periodo_inizio, periodo_fine,
+        note, status, lines, commessa_id
       } = req.body;
 
       const offerRes = await client.query(`
@@ -260,8 +260,8 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
         RETURNING *
       `, [
-        anno, preventivo_number, revision, is_final_revision, tipo, oggetto, 
-        committente, cliente, client_id || null, superficie, destinazione_uso, specifiche, 
+        anno, preventivo_number, revision, is_final_revision, tipo, oggetto,
+        committente, cliente, client_id || null, superficie, destinazione_uso, specifiche,
         valore_totale || 0, importo_opere || 0, periodo_inizio || null, periodo_fine || null, note, status, commessa_id || null
       ]);
       const newOffer = offerRes.rows[0];
@@ -296,11 +296,11 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const { 
-        anno, preventivo_number, revision, is_final_revision, tipo, oggetto, 
-        committente, cliente, client_id, superficie, destinazione_uso, specifiche, 
-        valore_totale, importo_opere, periodo_inizio, periodo_fine, 
-        note, status, lines, commessa_id 
+      const {
+        anno, preventivo_number, revision, is_final_revision, tipo, oggetto,
+        committente, cliente, client_id, superficie, destinazione_uso, specifiche,
+        valore_totale, importo_opere, periodo_inizio, periodo_fine,
+        note, status, lines, commessa_id
       } = req.body;
 
       const offerRes = await client.query(`
@@ -312,8 +312,8 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
         WHERE id=$20
         RETURNING *
       `, [
-        anno, preventivo_number, revision, is_final_revision, tipo, oggetto, 
-        committente, cliente, client_id || null, superficie, destinazione_uso, specifiche, 
+        anno, preventivo_number, revision, is_final_revision, tipo, oggetto,
+        committente, cliente, client_id || null, superficie, destinazione_uso, specifiche,
         valore_totale || 0, importo_opere || 0, periodo_inizio || null, periodo_fine || null, note, status, commessa_id || null, id
       ]);
 
@@ -361,11 +361,11 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       const { rows: offers } = await client.query(`SELECT * FROM offerte WHERE id=$1`, [id]);
       if (offers.length === 0) throw new Error("Offerta not found");
       const offerta = offers[0];
-      
+
       // If the offer is already fully processed (linked to a system task AND accepted), do nothing.
       // NOTE: Manual linking (old data) sets commessa_id initially but task_id is only 
       // synced to the offer record AFTER the 'accept' merge logic runs.
@@ -385,10 +385,10 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
 
       // Ensure a title exists for matching logic
       let taskTitle = "";
-      if(offerta.anno) taskTitle += String(offerta.anno).padStart(2, '0');
-      if(offerta.tipo) taskTitle += `-${offerta.tipo}`;
-      if(offerta.preventivo_number) taskTitle += `-${String(offerta.preventivo_number).padStart(2, '0')}`;
-      if(offerta.revision) taskTitle += `-R${offerta.revision}`;
+      if (offerta.anno) taskTitle += String(offerta.anno).padStart(2, '0');
+      if (offerta.tipo) taskTitle += `-${offerta.tipo}`;
+      if (offerta.preventivo_number) taskTitle += `-${String(offerta.preventivo_number).padStart(2, '0')}`;
+      if (offerta.revision) taskTitle += `-R${offerta.revision}`;
       taskTitle = taskTitle ? `${taskTitle} - ${offerta.oggetto}` : (offerta.oggetto || "Nuovo Progetto (Auto)");
       const preventivoStr = taskTitle.split(' - ')[0];
 
@@ -432,10 +432,10 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
           INSERT INTO commessa_clients (commessa_id, client_id, preventivo, voce_bilancio)
           VALUES ($1, $2, $3, $4) RETURNING *
         `, [
-          commessaId, 
-          offerta.client_id || null, 
-          preventivoStr, 
-          'R.04 - PREVENTIVO' 
+          commessaId,
+          offerta.client_id || null,
+          preventivoStr,
+          'R.04 - PREVENTIVO'
         ]);
         ccId = ccRes.rows[0].id;
       }
@@ -445,7 +445,7 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
         await client.query(`
           INSERT INTO fatturato_lines (commessa_client_id, attivita, valore_ordine)
           VALUES ($1, $2, $3)
-        `, [ccId, l.attivita, l.valore * 1000]); 
+        `, [ccId, l.attivita, l.valore * 1000]);
       }
 
       // Finalize offer status
@@ -471,7 +471,7 @@ module.exports = function(app, query, pool, authenticate, authenticateHR) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       // Update specific line
       const lineUpdate = await client.query(`
         UPDATE offerta_lines 
