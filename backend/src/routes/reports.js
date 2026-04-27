@@ -199,40 +199,6 @@ router.get('/finances', authenticateHR, async (req, res) => {
 
     const salMonths = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 
-    const baseCols = [
-      { header: 'N. Commessa', key: 'comm_number', width: 15 },
-      { header: 'Nome Progetto', key: 'comm_name', width: 30 },
-      { header: 'N. Cliente', key: 'n_cliente', width: 10 },
-      { header: 'Cliente', key: 'client_name', width: 25 },
-      { header: 'Rif. Ordine', key: 'n_ordine', width: 20 },
-      { header: 'Attività', key: 'attivita', width: 30 },
-      { header: 'Fatturazione', key: 'fatturazione', width: 40 },
-      { header: 'Valore Ordine (€)', key: 'valore_ordine', width: 18 },
-      { header: 'Totale Fatturato (€)', key: 'fatturato_amount', width: 18 },
-      { header: 'Rimanente (€)', key: 'residuo', width: 18 },
-      { header: 'Proforma (€)', key: 'proforma', width: 15 },
-      { header: 'Costi Extra (€)', key: 'extra_costs', width: 15 },
-      { header: 'Voce a Bilancio', key: 'voce_bilancio', width: 20 },
-      { header: 'SAL Valore Totale (€)', key: 'sal_total', width: 20 },
-    ];
-
-    // Add SAL Columns
-    salMonths.forEach((m, i) => {
-      baseCols.push({ header: `${m} SAL (€)`, key: `sal_${i + 1}`, width: 15 });
-    });
-
-    // Add Obiettivi Columns
-    ['Q1', 'Q2', 'Q3'].forEach(p => {
-      baseCols.push({ header: `Obiettivi ${p} - Ordinante`, key: `obj_ord_${p}`, width: 20 });
-      baseCols.push({ header: `Obiettivi ${p} - Acquisizioni`, key: `obj_acq_${p}`, width: 20 });
-    });
-
-    baseCols.push({ header: 'Note Progetto', key: 'comm_notes', width: 30 });
-    baseCols.push({ header: 'Note Linea', key: 'note', width: 30 });
-    sheet2.columns = baseCols;
-    sheet2.getRow(1).font = { bold: true };
-    sheet2.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
-
     const yearSuffix = (year && year !== 'all') ? year.toString().slice(-2) : null;
     const yearNum = (year && year !== 'all') ? parseInt(year) : new Date().getFullYear();
 
@@ -257,6 +223,53 @@ router.get('/finances', authenticateHR, async (req, res) => {
       ORDER BY c.comm_number ASC, cc.n_cliente ASC, fl.id ASC
     `, [year || 'all', yearSuffix]);
 
+    // Fetch Realized (Payments) for filtering and date listing
+    const realizedRes = await query(
+      (year && year !== 'all') ? 
+        `SELECT * FROM fatturato_realized WHERE EXTRACT(YEAR FROM registration_date) = $1` :
+        `SELECT * FROM fatturato_realized`,
+      (year && year !== 'all') ? [yearNum] : []
+    );
+    const realizedByLine = {};
+    realizedRes.rows.forEach(r => {
+      const lid = r.fatturato_line_id;
+      if (!realizedByLine[lid]) realizedByLine[lid] = { total: 0, entries: [] };
+      const amt = parseFloat(r.amount) || 0;
+      realizedByLine[lid].total += amt;
+      realizedByLine[lid].entries.push({
+        amount: amt,
+        date: r.registration_date ? r.registration_date.toISOString().split('T')[0] : 'N/A'
+      });
+    });
+
+    const uniqueYears = [...new Set(realizedRes.rows.map(r => r.registration_date ? new Date(r.registration_date).getFullYear() : null))].filter(y => y !== null).sort((a, b) => a - b);
+
+    const baseCols = [
+      { header: 'N. Commessa', key: 'comm_number', width: 15 },
+      { header: 'Nome Progetto', key: 'comm_name', width: 30 },
+      { header: 'N. Cliente', key: 'n_cliente', width: 10 },
+      { header: 'Cliente', key: 'client_name', width: 25 },
+      { header: 'Rif. Ordine', key: 'n_ordine', width: 20 },
+      { header: 'Attività', key: 'attivita', width: 30 },
+      { header: 'Fatturazione', key: 'fatturazione', width: 40 },
+      { header: 'Valore Ordine (€)', key: 'valore_ordine', width: 18 },
+      { header: 'Totale Fatturato (€)', key: 'fatturato_amount', width: 18 },
+    ];
+
+    // Dynamic Year Columns
+    uniqueYears.forEach(y => {
+      baseCols.push({ header: `Fatturato ${y} (€)`, key: `fatt_year_${y}`, width: 18 });
+    });
+
+    baseCols.push(
+      { header: 'Date Fatturato', key: 'fatturato_dates', width: 30 },
+      { header: 'Rimanente (€)', key: 'residuo', width: 18 },
+      { header: 'Proforma (€)', key: 'proforma', width: 15 },
+      { header: 'Costi Extra (€)', key: 'extra_costs', width: 15 },
+      { header: 'Voce a Bilancio', key: 'voce_bilancio', width: 20 },
+      { header: 'SAL Valore Totale (€)', key: 'sal_total', width: 20 },
+    );
+
     // Fetch SAL (Total across all years for that line if 'all', otherwise filtered)
     const salRes = await query(
       (year && year !== 'all') ? `SELECT * FROM fatturato_sal WHERE year = $1` : `SELECT * FROM fatturato_sal`,
@@ -275,6 +288,9 @@ router.get('/finances', authenticateHR, async (req, res) => {
       }
       salTotalByLine[lid] = (salTotalByLine[lid] || 0) + signedVal;
     });
+
+    // Fetch Realized (Payments) for filtering and date listing
+    // (Moved up)
 
     // Fetch ALL Obiettivi
     const objRes = await query(
@@ -296,40 +312,79 @@ router.get('/finances', authenticateHR, async (req, res) => {
       }
     });
 
+    // Add SAL Columns
+    salMonths.forEach((m, i) => {
+      baseCols.push({ header: `${m} SAL (€)`, key: `sal_${i + 1}`, width: 15 });
+    });
+
+    // Add Obiettivi Columns
+    ['Q1', 'Q2', 'Q3'].forEach(p => {
+      baseCols.push({ header: `Obiettivi ${p} - Ordinante`, key: `obj_ord_${p}`, width: 20 });
+      baseCols.push({ header: `Obiettivi ${p} - Acquisizioni`, key: `obj_acq_${p}`, width: 20 });
+    });
+
+    baseCols.push({ header: 'Note Progetto', key: 'comm_notes', width: 30 });
+    baseCols.push({ header: 'Note Linea', key: 'note', width: 30 });
+    sheet2.columns = baseCols;
+    sheet2.getRow(1).font = { bold: true };
+    sheet2.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+    sheet2.getColumn('fatturato_dates').alignment = { wrapText: true, vertical: 'top' };
     // Individual Project Sheets
     let currentSheet = null;
     let commTotalVal = 0;
     let commTotalFatt = 0;
     let commTotalProf = 0;
+    let commYearTotals = {}; // Track totals per year for current commessa
     let lastComm = null;
 
     const setupDetailSheet = (commNum, commName) => {
       const sheetName = `DET - ${commNum}`.slice(0, 31);
       const ws = workbook.addWorksheet(sheetName);
-      ws.columns = baseCols; // Reuse the same columns
+      ws.columns = baseCols.filter(c => c.key !== 'residuo'); 
 
       const titleRow = ws.insertRow(1, { comm_number: `COMMESSA: ${commNum} - ${commName || ''}` });
       titleRow.font = { bold: true, size: 14 };
       titleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
-      ws.mergeCells(1, 1, 1, baseCols.length);
+      ws.mergeCells(1, 1, 1, ws.columns.length);
 
       ws.getRow(2).font = { bold: true };
       ws.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+      ws.getColumn('fatturato_dates').alignment = { wrapText: true, vertical: 'top' };
       return ws;
     };
 
     ordersRes.rows.forEach((r, idx) => {
       const valOrd = Number(r.valore_ordine || 0);
-      const valFatt = Number(r.fatturato_amount || 0);
+      const lineRealized = realizedByLine[r.line_id] || { total: 0, entries: [] };
+      
+      // If year is selected, we only show that year's fatturato. Otherwise show total lifetime.
+      const valFatt = (year && year !== 'all') ? lineRealized.total : Number(r.fatturato_amount || 0);
       const valProf = Number(r.proforma || 0);
+      
+      // Format dates and amounts for the new column
+      const fattDates = lineRealized.entries
+        .map(e => `${e.amount}€ (${e.date})`)
+        .join('\n');
 
       const rowData = {
         ...r,
         valore_ordine: valOrd,
         fatturato_amount: valFatt,
+        fatturato_dates: fattDates,
         residuo: valOrd - valFatt - valProf,
         proforma: valProf
       };
+
+      // Populate year-specific columns
+      uniqueYears.forEach(y => {
+        const yearSum = lineRealized.entries
+          .filter(e => e.date.startsWith(y.toString()))
+          .reduce((sum, e) => sum + e.amount, 0);
+        rowData[`fatt_year_${y}`] = yearSum || 0;
+        
+        if (!commYearTotals[y]) commYearTotals[y] = 0;
+        commYearTotals[y] += yearSum;
+      });
 
       const lineSal = salByLine[r.line_id] || {};
       for (let i = 1; i <= 12; i++) {
@@ -356,13 +411,24 @@ router.get('/finances', authenticateHR, async (req, res) => {
       // Add to Individual Sheet
       if (lastComm !== r.comm_number) {
         if (currentSheet) {
-          const subRow = currentSheet.addRow({ attivita: 'TOTALE COMMESSA', valore_ordine: commTotalVal, fatturato_amount: commTotalFatt, proforma: commTotalProf, residuo: commTotalVal - commTotalFatt });
+          const subRowData = { 
+            attivita: 'TOTALE COMMESSA', 
+            valore_ordine: commTotalVal, 
+            fatturato_amount: commTotalFatt, 
+            proforma: commTotalProf, 
+            residuo: commTotalVal - commTotalFatt - commTotalProf 
+          };
+          uniqueYears.forEach(y => {
+            subRowData[`fatt_year_${y}`] = commYearTotals[y] || 0;
+          });
+          const subRow = currentSheet.addRow(subRowData);
           subRow.font = { bold: true };
           subRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
         }
         currentSheet = setupDetailSheet(r.comm_number, r.comm_name);
         lastComm = r.comm_number;
         commTotalVal = 0; commTotalFatt = 0; commTotalProf = 0;
+        commYearTotals = {};
       }
 
       commTotalVal += valOrd;
@@ -371,7 +437,17 @@ router.get('/finances', authenticateHR, async (req, res) => {
       currentSheet.addRow(rowData);
 
       if (idx === ordersRes.rows.length - 1 && currentSheet) {
-        const subRow = currentSheet.addRow({ attivita: 'TOTALE COMMESSA', valore_ordine: commTotalVal, fatturato_amount: commTotalFatt, proforma: commTotalProf, residuo: commTotalVal - commTotalFatt - commTotalProf });
+        const subRowData = { 
+          attivita: 'TOTALE COMMESSA', 
+          valore_ordine: commTotalVal, 
+          fatturato_amount: commTotalFatt, 
+          proforma: commTotalProf, 
+          residuo: commTotalVal - commTotalFatt - commTotalProf 
+        };
+        uniqueYears.forEach(y => {
+          subRowData[`fatt_year_${y}`] = commYearTotals[y] || 0;
+        });
+        const subRow = currentSheet.addRow(subRowData);
         subRow.font = { bold: true };
         subRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
       }
@@ -1012,12 +1088,26 @@ router.get('/clients', authenticateHR, async (req, res) => {
       SELECT 
         cc.client_id,
         c.comm_number, c.name as comm_name,
-        fl.attivita, fl.valore_ordine, fl.fatturato_amount, fl.proforma
+        fl.id as line_id, fl.attivita, fl.valore_ordine, fl.fatturato_amount, fl.proforma
       FROM commessa_clients cc
       JOIN commesse c ON cc.commessa_id = c.id
       JOIN fatturato_lines fl ON cc.id = fl.commessa_client_id
       ORDER BY cc.client_id, c.comm_number ASC
     `);
+
+    // Fetch all realized payments for date mapping
+    const realizedRes = await query(`SELECT * FROM fatturato_realized`);
+    const realizedByLine = {};
+    realizedRes.rows.forEach(r => {
+      const lid = r.fatturato_line_id;
+      if (!realizedByLine[lid]) realizedByLine[lid] = { entries: [] };
+      realizedByLine[lid].entries.push({
+        amount: parseFloat(r.amount) || 0,
+        date: r.registration_date ? r.registration_date.toISOString().split('T')[0] : 'N/A'
+      });
+    });
+
+    const uniqueYears = [...new Set(realizedRes.rows.map(r => r.registration_date ? new Date(r.registration_date).getFullYear() : null))].filter(y => y !== null).sort((a, b) => a - b);
 
     const linesByClient = {};
     allLinesRes.rows.forEach(l => {
@@ -1086,9 +1176,16 @@ router.get('/clients', authenticateHR, async (req, res) => {
       { header: 'Attività', key: 'attivita', width: 30 },
       { header: 'Valore Ordine (€)', key: 'valore_ordine', width: 18 },
       { header: 'Totale Fatturato (€)', key: 'fatturato_amount', width: 18 },
-      { header: 'Proforma (€)', key: 'proforma', width: 15 },
-      { header: 'Rimanente (€)', key: 'residuo', width: 18 },
     ];
+
+    uniqueYears.forEach(y => {
+      detailCols.push({ header: `Fatturato ${y} (€)`, key: `fatt_year_${y}`, width: 18 });
+    });
+
+    detailCols.push(
+      { header: 'Date Fatturato', key: 'fatturato_dates', width: 30 },
+      { header: 'Proforma (€)', key: 'proforma', width: 15 },
+    );
 
     const usedSheetNames = new Set(['lista clienti']); // Pre-populate with main sheet names
     clientsResult.rows.forEach(client => {
@@ -1096,6 +1193,7 @@ router.get('/clients', authenticateHR, async (req, res) => {
         const tVal = cLines.reduce((sum, l) => sum + Number(l.valore_ordine || 0), 0);
         const tFatt = cLines.reduce((sum, l) => sum + Number(l.fatturato_amount || 0), 0);
         const tProf = cLines.reduce((sum, l) => sum + Number(l.proforma || 0), 0);
+        const clientYearTotals = {};
 
         // Add to Main Sheet
         mainSheet.addRow({
@@ -1127,28 +1225,51 @@ router.get('/clients', authenticateHR, async (req, res) => {
       ws.columns = detailCols;
       ws.getRow(13).font = { bold: true };
       ws.getRow(13).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+      ws.getColumn('fatturato_dates').alignment = { wrapText: true, vertical: 'top' };
 
       cLines.forEach(l => {
         const vO = Number(l.valore_ordine || 0);
         const vF = Number(l.fatturato_amount || 0);
         const vP = Number(l.proforma || 0);
-        ws.addRow({
+        
+        const linePayments = realizedByLine[l.line_id] || { entries: [] };
+        const fattDates = linePayments.entries
+          .map(e => `${e.amount}€ (${e.date})`)
+          .join('\n');
+
+        const rowData = {
           ...l,
           valore_ordine: vO,
           fatturato_amount: vF,
+          fatturato_dates: fattDates,
           proforma: vP,
           residuo: vO - vF - vP
+        };
+
+        uniqueYears.forEach(y => {
+          const yearSum = linePayments.entries
+            .filter(e => e.date.startsWith(y.toString()))
+            .reduce((sum, e) => sum + e.amount, 0);
+          rowData[`fatt_year_${y}`] = yearSum || 0;
+          if (!clientYearTotals[y]) clientYearTotals[y] = 0;
+          clientYearTotals[y] += yearSum;
         });
+
+        ws.addRow(rowData);
       });
 
       if (cLines.length > 0) {
-        const subRow = ws.addRow({
+        const subRowData = {
           attivita: 'TOTALE CLIENTE',
           valore_ordine: tVal,
           fatturato_amount: tFatt,
           proforma: tProf,
           residuo: tVal - tFatt - tProf
+        };
+        uniqueYears.forEach(y => {
+          subRowData[`fatt_year_${y}`] = clientYearTotals[y] || 0;
         });
+        const subRow = ws.addRow(subRowData);
         subRow.font = { bold: true };
         subRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
       }
